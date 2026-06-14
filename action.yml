@@ -1,0 +1,33 @@
+name: AgentShelf
+description: Audit product-page snapshots for AI shopping-agent readiness.
+inputs:
+  path:
+    description: File, directory, or glob to scan.
+    required: true
+  min-score:
+    description: Minimum score required for every scanned page.
+    required: false
+    default: "70"
+  format:
+    description: Output format: markdown, json, or jsonl.
+    required: false
+    default: markdown
+  output:
+    description: Report output path.
+    required: false
+    default: agentshelf-report.md
+runs:
+  using: composite
+  steps:
+    - name: Install AgentShelf
+      shell: bash
+      run: python3 -m pip install "$GITHUB_ACTION_PATH"
+    - name: Run AgentShelf scan
+      shell: bash
+      run: |
+        agentshelf scan "${{ inputs.path }}" \
+          --batch \
+          --format "${{ inputs.format }}" \
+          --min-score "${{ inputs.min-score }}" \
+          --output "${{ inputs.output }}"
+

@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package
+        run: python3 -m pip install -e .
+      - name: Run tests
+        run: python3 -m unittest discover -s tests
+      - name: Smoke scan
+        run: agentshelf scan examples/sample_product_page.html --format markdown --min-score 85
+
