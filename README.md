@@ -27,16 +27,34 @@ Batch scan page snapshots:
 agentshelf scan "examples/*.html" --batch --format jsonl --output agentshelf-results.jsonl
 ```
 
+Run a repeatable CI gate from config:
+
+```bash
+agentshelf scan "examples/*.html" --batch --config examples/agentshelf.config.json
+```
+
 Emit a JSON contract for a coding agent:
 
 ```bash
 agentshelf agent-audit examples/weak_product_page.html --contract v1
 ```
 
+Emit batch remediation tasks for a coding agent:
+
+```bash
+agentshelf agent-tasks examples --batch --output agentshelf-tasks.jsonl
+```
+
 Fetch a raw HTML snapshot for later audit:
 
 ```bash
 agentshelf snapshot https://example.com/product --output snapshots/product.html
+```
+
+Fetch a URL list and write a manifest:
+
+```bash
+agentshelf snapshot --url-file product-urls.txt --output-dir snapshots --manifest snapshots/manifest.json
 ```
 
 Fetch a rendered snapshot for JS-heavy storefronts:
@@ -52,9 +70,10 @@ agentshelf snapshot https://example.com/product --rendered --output snapshots/pr
 # AgentShelf Report: TrailBottle Pro 24oz
 
 ## Summary
-- Score: 100/100
+- Score: 93/100
 - Readiness band: strong
-- Passed checks: 9/9
+- Passed checks: 12/13
+- Dimension scores: discoverability=100, offer_clarity=100, policy_clarity=100, agent_actionability=75
 ```
 
 Weak pages return prioritized fixes:
@@ -70,20 +89,45 @@ Weak pages return prioritized fixes:
 ```bash
 agentshelf scan <file-or-dir-or-glob> [options]
 agentshelf agent-audit <file-or-url> [options]
+agentshelf agent-tasks <file-or-dir-or-glob> [options]
 agentshelf snapshot <url> --output <path> [--rendered]
+agentshelf snapshot --url-file <urls.txt> --output-dir <dir> [--manifest <path>]
 ```
 
 Options:
 
 - `--batch`: allow directory or glob scanning
-- `--format markdown|json|jsonl`: choose report format
+- `--config <path>`: load repeatable scan defaults from JSON
+- `--format markdown|json|jsonl|sarif`: choose report format
 - `--output <path>`: write output to a file
 - `--min-score <0-100>`: return non-zero when any page scores below this value
 - `--fail-on weak|not_ready`: return non-zero when any page is at or below the selected band
 
 `agent-audit` emits JSON with stable fields for coding agents: `target`, `score`, `band`, `blocking_issues`, `agent_tasks`, `evidence`, `next_actions`, `confidence`, and `warnings`.
 
+`agent-tasks` emits JSONL remediation tasks across one page or a batch, so coding agents can pick up precise page areas, reasons, and acceptance checks.
+
 `snapshot` fetches raw HTML with the standard library by default. Use `--rendered` for a Playwright-backed single-page capture when product data is injected by JavaScript. Rendered mode is optional so the base CLI stays lightweight.
+
+## Production Workflows
+Use a config file when AgentShelf runs in CI or scheduled audits:
+
+```json
+{
+  "format": "sarif",
+  "min_score": 70,
+  "fail_on": "not_ready",
+  "output": "agentshelf-results.sarif"
+}
+```
+
+Use SARIF when you want GitHub code scanning annotations:
+
+```bash
+agentshelf scan "snapshots/*.html" --batch --format sarif --output agentshelf-results.sarif
+```
+
+Use `agent-tasks` when a coding agent should directly edit a product template, fixture, or generated page until blocking issues are gone.
 
 ## GitHub Action
 Use AgentShelf as a PR gate for product-page snapshots, generated storefront HTML, or theme fixture output.
@@ -103,8 +147,9 @@ jobs:
         with:
           path: "examples/*.html"
           min-score: "70"
-          format: markdown
-          output: agentshelf-report.md
+          fail-on: not_ready
+          format: sarif
+          output: agentshelf-results.sarif
 ```
 
 ## JSON Output
@@ -160,6 +205,7 @@ python3 -m pip install -e .
 python3 -m unittest discover -s tests
 agentshelf scan examples/sample_product_page.html --format markdown --min-score 85
 agentshelf agent-audit examples/weak_product_page.html --contract v1
+agentshelf agent-tasks examples --batch
 python3 -m pip install -e ".[render]"  # optional rendered snapshots
 ```
 

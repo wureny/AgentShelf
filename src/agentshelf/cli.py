@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
 import json
 from pathlib import Path
 from typing import Iterable
@@ -9,12 +10,13 @@ from urllib.error import URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from agentshelf.engine import build_agent_contract, parse_input, render_json, render_markdown, scan_readiness
+from agentshelf.engine import build_agent_contract, parse_input, render_markdown, scan_readiness
 
 
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
-USER_AGENT = "AgentShelf/0.3 (+https://github.com/wureny/AgentShelf)"
+DEFAULT_CONFIG = ".agentshelf.json"
+USER_AGENT = "AgentShelf/0.4 (+https://github.com/wureny/AgentShelf)"
 RENDER_EXTRA_MESSAGE = (
     "Rendered snapshots require the optional Playwright extra. "
     "Install it with `python3 -m pip install 'agentshelf[render]'` and then run "
@@ -45,6 +47,37 @@ def _resolve_inputs(target: str, batch: bool) -> list[Path]:
     if len(resolved) > 1 and not batch:
         raise ValueError("Multiple inputs found. Re-run with --batch.")
     return resolved
+
+
+def _load_config(config_path: Path | None) -> dict:
+    path = config_path or Path(DEFAULT_CONFIG)
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid AgentShelf config {path}: {exc.msg}.") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid AgentShelf config {path}: expected a JSON object.")
+    return data
+
+
+def _config_value(config: dict, key: str, current: object, default: object) -> object:
+    if current != default:
+        return current
+    return config.get(key, current)
+
+
+def _coerce_score(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        score = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Score thresholds must be integers between 0 and 100.") from exc
+    if not 0 <= score <= 100:
+        raise ValueError("Score thresholds must be integers between 0 and 100.")
+    return score
 
 
 def _load_scan(path: Path) -> dict:
@@ -107,6 +140,31 @@ def _fetch_rendered_url(url: str, timeout: float = 15.0, wait_until: str = "netw
     return html
 
 
+def _slug_for_url(url: str) -> str:
+    parsed = urlparse(url)
+    base = "-".join(part for part in [parsed.netloc, parsed.path.strip("/").replace("/", "-")] if part)
+    base = "".join(char.lower() if char.isalnum() else "-" for char in base).strip("-")
+    digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:8]
+    return f"{base[:80] or 'snapshot'}-{digest}.html"
+
+
+def _read_url_file(path: Path) -> list[str]:
+    urls: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        urls.append(stripped)
+    if not urls:
+        raise ValueError(f"No URLs found in {path}.")
+    return urls
+
+
+def _write_snapshot_manifest(entries: list[dict], manifest_path: Path) -> None:
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps({"snapshots": entries}, indent=2) + "\n", encoding="utf-8")
+
+
 def _load_target(target: str) -> dict:
     if _is_url(target):
         raw = _fetch_url(target)
@@ -133,6 +191,8 @@ def _render_batch_markdown(results: Iterable[dict]) -> str:
 
 
 def _render_results(results: list[dict], output_format: str, batch: bool) -> str:
+    if output_format == "sarif":
+        return json.dumps(_render_sarif(results), indent=2) + "\n"
     if output_format == "json":
         payload = results if batch else results[0]
         return json.dumps(payload, indent=2) + "\n"
@@ -141,6 +201,93 @@ def _render_results(results: list[dict], output_format: str, batch: bool) -> str
     if batch:
         return _render_batch_markdown(results)
     return render_markdown(results[0])
+
+
+def _render_sarif(results: list[dict]) -> dict:
+    rules: dict[str, dict] = {}
+    sarif_results: list[dict] = []
+    for bundle in results:
+        source = bundle["page"]["source"]
+        for check in bundle["checks"]:
+            rule_id = f"agentshelf.{check['id']}"
+            rules[rule_id] = {
+                "id": rule_id,
+                "name": check["label"],
+                "shortDescription": {"text": check["label"]},
+                "fullDescription": {"text": check["agent_impact"]},
+                "help": {"text": check["recommendation"] or check["notes"]},
+                "properties": {"dimension": check["dimension"], "weight": check["weight"]},
+            }
+            if check["passed"]:
+                continue
+            sarif_results.append(
+                {
+                    "ruleId": rule_id,
+                    "level": "error" if check["weight"] >= 12 else "warning",
+                    "message": {"text": check["recommendation"]},
+                    "locations": [{"physicalLocation": {"artifactLocation": {"uri": source}}}],
+                    "properties": {
+                        "score": bundle["score"],
+                        "band": bundle["band"],
+                        "dimension": check["dimension"],
+                        "agent_impact": check["agent_impact"],
+                    },
+                }
+            )
+        for issue in bundle["contradictions"]:
+            rule_id = f"agentshelf.{issue['id']}"
+            rules[rule_id] = {
+                "id": rule_id,
+                "name": issue["id"].replace("_", " ").title(),
+                "shortDescription": {"text": issue["id"]},
+                "fullDescription": {"text": issue["message"]},
+                "help": {"text": issue["message"]},
+            }
+            sarif_results.append(
+                {
+                    "ruleId": rule_id,
+                    "level": "error",
+                    "message": {"text": issue["message"]},
+                    "locations": [{"physicalLocation": {"artifactLocation": {"uri": source}}}],
+                    "properties": {"score": bundle["score"], "band": bundle["band"]},
+                }
+            )
+    return {
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "AgentShelf",
+                        "informationUri": "https://github.com/wureny/AgentShelf",
+                        "rules": list(rules.values()),
+                    }
+                },
+                "results": sarif_results,
+            }
+        ],
+    }
+
+
+def _render_agent_tasks(results: list[dict]) -> str:
+    lines: list[str] = []
+    for bundle in results:
+        contract = build_agent_contract(bundle)
+        for task in contract["agent_tasks"]:
+            lines.append(
+                json.dumps(
+                    {
+                        "source": contract["target"]["source"],
+                        "target_title": contract["target"]["title"],
+                        "score": contract["score"],
+                        "band": contract["band"],
+                        "task": task,
+                        "blocking_issues": contract["blocking_issues"],
+                    }
+                )
+            )
+    return "\n".join(lines) + ("\n" if lines else "")
 
 
 def _fails_threshold(result: dict, min_score: int | None, fail_on: str | None) -> bool:
@@ -159,10 +306,11 @@ def build_parser() -> argparse.ArgumentParser:
     subcommands = parser.add_subparsers(dest="command")
     scan = subcommands.add_parser("scan", help="Scan one product page or a batch of page snapshots.")
     scan.add_argument("path", help="HTML/text file, directory, or glob to scan.")
+    scan.add_argument("--config", type=Path, help=f"Optional JSON config file. Defaults to {DEFAULT_CONFIG} when present.")
     scan.add_argument("--batch", action="store_true", help="Allow directory or glob batch scanning.")
     scan.add_argument(
         "--format",
-        choices=("markdown", "json", "jsonl"),
+        choices=("markdown", "json", "jsonl", "sarif"),
         default="markdown",
         help="Output format. Use jsonl for batch-friendly machine output.",
     )
@@ -185,9 +333,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Return non-zero when high-severity blocking issues are present.",
     )
 
+    tasks = subcommands.add_parser("agent-tasks", help="Emit JSONL remediation tasks for coding agents.")
+    tasks.add_argument("path", help="HTML/text file, directory, or glob to scan.")
+    tasks.add_argument("--batch", action="store_true", help="Allow directory or glob batch scanning.")
+    tasks.add_argument("--output", type=Path, help="Optional output file path.")
+
     snapshot = subcommands.add_parser("snapshot", help="Fetch raw or rendered HTML for a product page URL.")
-    snapshot.add_argument("url", help="http(s) URL to fetch.")
-    snapshot.add_argument("--output", type=Path, required=True, help="Path to write the fetched HTML.")
+    snapshot.add_argument("url", nargs="?", help="http(s) URL to fetch.")
+    snapshot.add_argument("--url-file", type=Path, help="Text file of URLs to snapshot, one per line.")
+    snapshot.add_argument("--output", type=Path, help="Path to write a single fetched HTML file.")
+    snapshot.add_argument("--output-dir", type=Path, help="Directory for --url-file batch snapshots.")
+    snapshot.add_argument("--manifest", type=Path, help="Optional JSON manifest for batch snapshot output.")
     snapshot.add_argument("--timeout", type=float, default=10.0, help="Fetch timeout in seconds.")
     snapshot.add_argument(
         "--rendered",
@@ -212,6 +368,18 @@ def main() -> int:
 
     try:
         if args.command == "scan":
+            config = _load_config(args.config)
+            args.format = _config_value(config, "format", args.format, "markdown")
+            args.min_score = _config_value(config, "min_score", args.min_score, None)
+            args.fail_on = _config_value(config, "fail_on", args.fail_on, None)
+            args.output = _config_value(config, "output", args.output, None)
+            args.min_score = _coerce_score(args.min_score)
+            if args.format not in {"markdown", "json", "jsonl", "sarif"}:
+                raise ValueError("Config key `format` must be markdown, json, jsonl, or sarif.")
+            if args.fail_on is not None and args.fail_on not in {"weak", "not_ready"}:
+                raise ValueError("Config key `fail_on` must be weak or not_ready.")
+            if args.output is not None and not isinstance(args.output, Path):
+                args.output = Path(str(args.output))
             paths = _resolve_inputs(args.path, args.batch)
             batch = args.batch or len(paths) > 1
             results = [_load_scan(path) for path in paths]
@@ -222,7 +390,38 @@ def main() -> int:
             contract = build_agent_contract(bundle, contract=args.contract)
             rendered = json.dumps(contract, indent=2) + "\n"
             exit_code = 1 if args.fail_on_blockers and any(issue["severity"] == "high" for issue in contract["blocking_issues"]) else 0
+        elif args.command == "agent-tasks":
+            paths = _resolve_inputs(args.path, args.batch)
+            if len(paths) > 1 and not args.batch:
+                raise ValueError("Multiple inputs found. Re-run with --batch.")
+            results = [_load_scan(path) for path in paths]
+            rendered = _render_agent_tasks(results)
+            exit_code = 0
         elif args.command == "snapshot":
+            if bool(args.url) == bool(args.url_file):
+                raise ValueError("Provide exactly one of URL or --url-file.")
+            if args.url_file:
+                if args.output:
+                    raise ValueError("Use --output-dir instead of --output with --url-file.")
+                output_dir = args.output_dir or Path("snapshots")
+                output_dir.mkdir(parents=True, exist_ok=True)
+                entries = []
+                for url in _read_url_file(args.url_file):
+                    html = (
+                        _fetch_rendered_url(url, timeout=args.timeout, wait_until=args.wait_until)
+                        if args.rendered
+                        else _fetch_url(url, timeout=args.timeout)
+                    )
+                    if not html.strip():
+                        raise ValueError(f"Empty response from {url}.")
+                    output_path = output_dir / _slug_for_url(url)
+                    output_path.write_text(html, encoding="utf-8")
+                    entries.append({"url": url, "path": str(output_path), "rendered": bool(args.rendered)})
+                if args.manifest:
+                    _write_snapshot_manifest(entries, args.manifest)
+                return 0
+            if args.output is None:
+                raise ValueError("--output is required for single URL snapshots.")
             if args.rendered:
                 html = _fetch_rendered_url(args.url, timeout=args.timeout, wait_until=args.wait_until)
             else:

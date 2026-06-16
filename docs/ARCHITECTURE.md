@@ -7,7 +7,7 @@ The MVP is a lightweight Python CLI with a three-step flow:
 2. Run weighted deterministic checks for price, inventory, shipping, returns, specs, reviews, FAQ, and Product schema signals.
 3. Parse Product JSON-LD when present to extract stronger evidence for offers and availability.
 4. Compute dimension scores for discoverability, offer clarity, policy clarity, and agent actionability.
-5. Render human reports or an agent-native JSON contract with prioritized tasks.
+5. Render human reports, JSON/JSONL, SARIF, or an agent-native JSON contract with prioritized tasks.
 
 ## Components
 - `src/agentshelf/engine.py`: parser, heuristic scoring engine, JSON-LD extraction, and renderers
@@ -26,9 +26,13 @@ The MVP is a lightweight Python CLI with a three-step flow:
 - Weighted pass/fail checks keep the first version explainable and easy to extend.
 - GitHub Action wraps the CLI instead of duplicating scanning logic.
 - `agent-audit` uses stable task-oriented JSON so coding agents can act on results directly.
+- `agent-tasks` emits JSONL so coding agents can remediate batches without parsing human reports.
+- SARIF output maps failed checks into code-scanning-style findings for CI and GitHub annotations.
+- `.agentshelf.json` keeps production scan gates repeatable across local, CI, and scheduled runs.
 - Raw snapshot mode does not execute JavaScript; dynamic pages are flagged instead of silently trusted. `--rendered` handles single-page JS capture when the optional browser dependency is installed.
+- `snapshot --url-file` supports real merchant URL lists without introducing site-wide crawling behavior.
 
 ## Extension Path
 - Add deeper schema validation for variants, offers, return policy, and merchant policy metadata.
-- Add polite site-map or product-list ingestion while keeping checkout and authenticated crawling out of scope.
+- Add polite sitemap ingestion while keeping checkout and authenticated crawling out of scope.
 - Add empirical benchmark runs against real agent answer quality before claiming ranking or conversion lift.

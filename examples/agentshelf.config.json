@@ -1,0 +1,6 @@
+{
+  "format": "sarif",
+  "min_score": 70,
+  "fail_on": "not_ready",
+  "output": "agentshelf-results.sarif"
+}

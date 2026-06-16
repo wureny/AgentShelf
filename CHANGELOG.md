@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+- Added `.agentshelf.json` configuration support for repeatable CI gates.
+- Added SARIF output for GitHub code scanning and production-quality CI annotations.
+- Added `agentshelf agent-tasks` to emit remediation tasks as JSONL for coding agents.
+- Added `snapshot --url-file --output-dir --manifest` for batch URL capture pipelines.
+- Extended the GitHub Action inputs for config, SARIF, and fail-band gates.
+
 ## 0.3.0
 - Added optional Playwright-backed rendered snapshots with `agentshelf snapshot <url> --rendered`.
 - Added `agentshelf[render]` extra for users who need JS-rendered storefront capture.

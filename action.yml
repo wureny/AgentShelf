@@ -4,12 +4,20 @@ inputs:
   path:
     description: File, directory, or glob to scan.
     required: true
+  config:
+    description: Optional AgentShelf JSON config path.
+    required: false
+    default: ""
   min-score:
     description: Minimum score required for every scanned page.
     required: false
     default: "70"
+  fail-on:
+    description: "Optional readiness band gate: weak or not_ready."
+    required: false
+    default: ""
   format:
-    description: Output format: markdown, json, or jsonl.
+    description: "Output format: markdown, json, jsonl, or sarif."
     required: false
     default: markdown
   output:
@@ -25,9 +33,20 @@ runs:
     - name: Run AgentShelf scan
       shell: bash
       run: |
-        agentshelf scan "${{ inputs.path }}" \
-          --batch \
-          --format "${{ inputs.format }}" \
-          --min-score "${{ inputs.min-score }}" \
-          --output "${{ inputs.output }}"
-
+        args=(scan "${{ inputs.path }}" --batch)
+        if [ -n "${{ inputs.config }}" ]; then
+          args+=(--config "${{ inputs.config }}")
+        fi
+        if [ -z "${{ inputs.config }}" ] || [ "${{ inputs.format }}" != "markdown" ]; then
+          args+=(--format "${{ inputs.format }}")
+        fi
+        if [ -z "${{ inputs.config }}" ] || [ "${{ inputs.min-score }}" != "70" ]; then
+          args+=(--min-score "${{ inputs.min-score }}")
+        fi
+        if [ -n "${{ inputs.fail-on }}" ]; then
+          args+=(--fail-on "${{ inputs.fail-on }}")
+        fi
+        if [ -z "${{ inputs.config }}" ] || [ "${{ inputs.output }}" != "agentshelf-report.md" ]; then
+          args+=(--output "${{ inputs.output }}")
+        fi
+        agentshelf "${args[@]}"

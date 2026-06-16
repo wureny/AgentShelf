@@ -54,6 +54,28 @@ class CliTests(unittest.TestCase):
         result = _run_cli("scan", "examples/weak_product_page.html", "--min-score", "70")
         self.assertEqual(result.returncode, 1)
 
+    def test_scan_uses_json_config_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = Path(tmpdir) / "agentshelf.json"
+            report = Path(tmpdir) / "report.sarif"
+            config.write_text(
+                json.dumps({"format": "sarif", "min_score": "70", "output": str(report)}),
+                encoding="utf-8",
+            )
+            result = _run_cli("scan", "examples/weak_product_page.html", "--config", str(config))
+            self.assertEqual(result.returncode, 1)
+            payload = json.loads(report.read_text(encoding="utf-8"))
+            self.assertEqual(payload["version"], "2.1.0")
+            self.assertTrue(payload["runs"][0]["results"])
+
+    def test_sarif_output_is_parseable(self) -> None:
+        result = _run_cli("scan", "examples/weak_product_page.html", "--format", "sarif")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["version"], "2.1.0")
+        self.assertEqual(payload["runs"][0]["tool"]["driver"]["name"], "AgentShelf")
+        self.assertTrue(payload["runs"][0]["results"])
+
     def test_output_file_is_written(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "report.md"
@@ -77,6 +99,14 @@ class CliTests(unittest.TestCase):
     def test_agent_audit_fail_on_blockers(self) -> None:
         result = _run_cli("agent-audit", "examples/weak_product_page.html", "--fail-on-blockers")
         self.assertEqual(result.returncode, 1)
+
+    def test_agent_tasks_jsonl(self) -> None:
+        result = _run_cli("agent-tasks", "examples/weak_product_page.html")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertTrue(rows)
+        self.assertIn("task", rows[0])
+        self.assertIn("acceptance_check", rows[0]["task"])
 
     def test_snapshot_writes_html_from_local_server(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -102,6 +132,54 @@ class CliTests(unittest.TestCase):
                 result = _run_cli("snapshot", url, "--output", str(output))
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("Local Product", output.read_text(encoding="utf-8"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+                os.chdir(old_cwd)
+
+    def test_snapshot_url_file_writes_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            page_one = root / "one.html"
+            page_two = root / "two.html"
+            page_one.write_text("<html><title>One</title></html>", encoding="utf-8")
+            page_two.write_text("<html><title>Two</title></html>", encoding="utf-8")
+
+            class Handler(http.server.SimpleHTTPRequestHandler):
+                def log_message(self, format: str, *args: object) -> None:
+                    return
+
+            try:
+                server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            except PermissionError as exc:
+                self.skipTest(f"local socket binding unavailable in this sandbox: {exc}")
+            old_cwd = os.getcwd()
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            try:
+                os.chdir(root)
+                thread.start()
+                urls = root / "urls.txt"
+                urls.write_text(
+                    f"http://127.0.0.1:{server.server_port}/one.html\n"
+                    f"http://127.0.0.1:{server.server_port}/two.html\n",
+                    encoding="utf-8",
+                )
+                output_dir = root / "snapshots"
+                manifest = root / "manifest.json"
+                result = _run_cli(
+                    "snapshot",
+                    "--url-file",
+                    str(urls),
+                    "--output-dir",
+                    str(output_dir),
+                    "--manifest",
+                    str(manifest),
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                payload = json.loads(manifest.read_text(encoding="utf-8"))
+                self.assertEqual(len(payload["snapshots"]), 2)
+                self.assertTrue(all(Path(item["path"]).exists() for item in payload["snapshots"]))
             finally:
                 server.shutdown()
                 thread.join(timeout=5)

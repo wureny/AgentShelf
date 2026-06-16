@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Make AgentShelf more useful on real JS-heavy merchant pages without making the default CLI heavy.
+Make AgentShelf directly usable in production-like CI and coding-agent remediation workflows.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -19,6 +19,11 @@ Make AgentShelf more useful on real JS-heavy merchant pages without making the d
 - Added dimension scoring, agent-specific checks, contradiction detection, confidence levels, and benchmark fixtures.
 - Added optional Playwright-backed rendered snapshots behind `agentshelf[render]`.
 - Updated docs and package metadata for `agentshelf snapshot <url> --rendered`.
+- Added `.agentshelf.json` config support for repeatable local and CI gates.
+- Added SARIF output for GitHub code scanning and production-quality CI annotations.
+- Added `agent-tasks` JSONL output so coding agents can remediate batches.
+- Added `snapshot --url-file --output-dir --manifest` for merchant URL list capture workflows.
+- Extended the GitHub Action inputs for config files, SARIF output, and fail-band gates.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -30,9 +35,13 @@ Make AgentShelf more useful on real JS-heavy merchant pages without making the d
 - `agentshelf agent-audit examples/weak_product_page.html --contract v1`
 - `agentshelf scan benchmarks/fixtures --batch --format jsonl`
 - `python3 -m unittest tests.test_cli.CliTests.test_rendered_snapshot_uses_playwright_when_available`
+- `agentshelf scan examples/weak_product_page.html --format sarif`
+- `agentshelf agent-tasks examples --batch`
+- `agentshelf scan examples/weak_product_page.html --config examples/agentshelf.config.json`
+- `python3 -m unittest tests.test_cli.CliTests.test_snapshot_url_file_writes_manifest tests.test_cli.CliTests.test_snapshot_writes_html_from_local_server`
 
 ## Next Best Task
-Test `agentshelf snapshot --rendered` against 3-5 real Shopify/DTC product pages and add anonymized fixtures for failures raw snapshots miss.
+Add a lightweight `agentshelf compare raw.html rendered.html` command that shows which audit signals were unlocked by rendered capture.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

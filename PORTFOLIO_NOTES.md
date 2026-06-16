@@ -13,6 +13,7 @@ This project shows practical AI-commerce product thinking by turning vague "agen
 - Designed a multi-dimensional scoring engine that turns storefront HTML into evidence-backed, prioritized machine-readability fixes without relying on external APIs.
 - Added an agent-native JSON contract that converts audit failures into coding-agent tasks with reasons, page areas, acceptance checks, and priority.
 - Added optional Playwright-backed rendered snapshots so JS-heavy Shopify/DTC pages can be audited without making the default CLI heavy.
+- Added production-oriented CI and agent surfaces: SARIF output, repeatable JSON config, batch URL snapshots with manifests, and JSONL remediation tasks.
 - Packaged a professional open-source release with installable Python metadata, CI, contribution docs, benchmark fixtures, tests, and GitHub Action integration.
 
 ## Positioning Angle
