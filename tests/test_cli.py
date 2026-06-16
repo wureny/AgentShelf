@@ -216,6 +216,77 @@ class CliTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("# AgentShelf Audit Diff", output.read_text(encoding="utf-8"))
 
+    def test_audit_run_creates_history_and_later_diff(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            product = root / "product.html"
+            history = root / "runs"
+            report = root / "audit-diff.md"
+            tasks = root / "tasks.jsonl"
+            product.write_text((ROOT / "examples/sample_product_page.html").read_text(encoding="utf-8"), encoding="utf-8")
+
+            first = _run_cli(
+                "audit-run",
+                str(product),
+                "--history-dir",
+                str(history),
+                "--report",
+                str(report),
+                "--tasks-output",
+                str(tasks),
+                "--format",
+                "json",
+            )
+            self.assertEqual(first.returncode, 0, first.stderr)
+            first_payload = json.loads(first.stdout)
+            self.assertIsNone(first_payload["previous_results"])
+            self.assertTrue((history / "current-results.jsonl").exists())
+            self.assertTrue(tasks.exists())
+            self.assertIn("Baseline created", report.read_text(encoding="utf-8"))
+
+            product.write_text((ROOT / "examples/weak_product_page.html").read_text(encoding="utf-8"), encoding="utf-8")
+            second = _run_cli(
+                "audit-run",
+                str(product),
+                "--history-dir",
+                str(history),
+                "--report",
+                str(report),
+                "--format",
+                "json",
+            )
+
+            self.assertEqual(second.returncode, 0, second.stderr)
+            second_payload = json.loads(second.stdout)
+            self.assertEqual(second_payload["diff"]["regressed_count"], 1)
+            self.assertTrue((history / "previous-results.jsonl").exists())
+            self.assertGreaterEqual(len(list(history.glob("results-*.jsonl"))), 2)
+            self.assertIn("Regressions", report.read_text(encoding="utf-8"))
+
+    def test_audit_run_threshold_failure_still_writes_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            product = root / "product.html"
+            history = root / "runs"
+            product.write_text((ROOT / "examples/weak_product_page.html").read_text(encoding="utf-8"), encoding="utf-8")
+
+            result = _run_cli(
+                "audit-run",
+                str(product),
+                "--history-dir",
+                str(history),
+                "--min-score",
+                "70",
+                "--format",
+                "json",
+            )
+
+            self.assertEqual(result.returncode, 1)
+            payload = json.loads(result.stdout)
+            self.assertTrue(payload["threshold_failed"])
+            self.assertTrue((history / "current-results.jsonl").exists())
+            self.assertTrue((history / "audit-diff.md").exists())
+
     def test_discover_reads_robots_sitemap_hints(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

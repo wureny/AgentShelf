@@ -83,6 +83,12 @@ Compare two scheduled audit runs:
 agentshelf diff previous-results.jsonl current-results.jsonl --output audit-diff.md
 ```
 
+Run a local scheduled audit with previous/current history managed for you:
+
+```bash
+agentshelf audit-run "snapshots/*.html" --batch --history-dir .agentshelf/runs --tasks-output agentshelf-tasks.jsonl
+```
+
 ## Example Output
 ```text
 # AgentShelf Report: TrailBottle Pro 24oz
@@ -110,6 +116,7 @@ agentshelf agent-audit <file-or-url> [options]
 agentshelf agent-tasks <file-or-dir-or-glob> [options]
 agentshelf compare <raw.html> <rendered.html> [options]
 agentshelf diff <baseline-results.jsonl> <current-results.jsonl> [options]
+agentshelf audit-run <file-or-dir-or-glob> [options]
 agentshelf discover --site <url> [options]
 agentshelf discover --sitemap <url> [options]
 agentshelf snapshot <url> --output <path> [--rendered]
@@ -134,6 +141,8 @@ Options:
 `compare` shows whether rendered capture unlocks agent-readiness signals that raw HTML misses. It reports score deltas, dimension deltas, newly visible evidence, regressions, and an agent recommendation.
 
 `diff` compares two `agentshelf scan --format json|jsonl` outputs. It reports page-set regressions, improvements, new or resolved blocking issues, catalog additions/removals, and the next remediation tasks an agent should pick up.
+
+`audit-run` is the scheduled-job wrapper around `scan` and `diff`. It writes `<history-dir>/current-results.jsonl`, rotates the previous run into `<history-dir>/previous-results.jsonl`, archives each run as `results-<timestamp>.jsonl`, writes an `audit-diff.md` report, and can emit `agent-tasks` JSONL in the same pass.
 
 `discover` reads `robots.txt` for `Sitemap:` hints or accepts an explicit sitemap URL. It filters product-like URLs and emits a URL list for `snapshot --url-file`; it does not crawl arbitrary site links.
 
@@ -170,12 +179,14 @@ End-to-end scheduled audit:
 ```bash
 agentshelf discover --site https://example.com --limit 100 --output product-urls.txt
 agentshelf snapshot --url-file product-urls.txt --output-dir snapshots --manifest snapshots/manifest.json
-agentshelf scan "snapshots/*.html" --batch --format jsonl --output current-results.jsonl
-agentshelf diff previous-results.jsonl current-results.jsonl --output audit-diff.md
-agentshelf agent-tasks "snapshots/*.html" --batch --output agentshelf-tasks.jsonl
+agentshelf audit-run "snapshots/*.html" \
+  --batch \
+  --history-dir .agentshelf/runs \
+  --tasks-output agentshelf-tasks.jsonl \
+  --min-score 70
 ```
 
-Keep the previous `current-results.jsonl` artifact as the next run's `previous-results.jsonl`. In CI, upload both `audit-diff.md` and `agentshelf-tasks.jsonl` as review artifacts so humans see the merchant-level regression summary and agents get machine-actionable fixes.
+On the first run, `audit-run` creates a baseline. On later runs, it automatically writes `.agentshelf/runs/audit-diff.md` from the last saved result set. In CI, upload `.agentshelf/runs/audit-diff.md` and `agentshelf-tasks.jsonl` as review artifacts so humans see the merchant-level regression summary and agents get machine-actionable fixes.
 
 ## GitHub Action
 Use AgentShelf as a PR gate for product-page snapshots, generated storefront HTML, or theme fixture output.

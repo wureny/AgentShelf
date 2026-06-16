@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.0
+- Added `agentshelf audit-run` to scan page sets and maintain local scheduled-audit history.
+- Added safe previous/current result rotation, timestamped JSONL archives, generated diff reports, and optional agent-task output.
+- Preserved threshold exit behavior while still writing audit artifacts for CI review.
+
 ## 0.7.0
 - Added `agentshelf diff` to compare two JSON/JSONL scan result files across scheduled audit runs.
 - Added regression, improvement, new-page, removed-page, blocker, warning, and next-action reporting for merchant page sets.

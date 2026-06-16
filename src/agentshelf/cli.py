@@ -4,6 +4,8 @@ import argparse
 import glob
 import hashlib
 import json
+import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 from urllib.error import URLError
@@ -17,7 +19,7 @@ from agentshelf.engine import build_agent_contract, parse_input, render_markdown
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.7 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.8 (+https://github.com/wureny/AgentShelf)"
 RENDER_EXTRA_MESSAGE = (
     "Rendered snapshots require the optional Playwright extra. "
     "Install it with `python3 -m pip install 'agentshelf[render]'` and then run "
@@ -267,6 +269,13 @@ def _read_url_file(path: Path) -> list[str]:
 def _write_snapshot_manifest(entries: list[dict], manifest_path: Path) -> None:
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps({"snapshots": entries}, indent=2) + "\n", encoding="utf-8")
+
+
+def _write_text_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    tmp_path.write_text(text, encoding="utf-8")
+    tmp_path.replace(path)
 
 
 def _load_target(target: str) -> dict:
@@ -774,6 +783,131 @@ def _render_audit_diff_markdown(payload: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _utc_timestamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _unique_archive_path(history_dir: Path, timestamp: str) -> Path:
+    path = history_dir / f"results-{timestamp}.jsonl"
+    counter = 2
+    while path.exists():
+        path = history_dir / f"results-{timestamp}-{counter}.jsonl"
+        counter += 1
+    return path
+
+
+def _build_audit_run(
+    target: str,
+    batch: bool,
+    history_dir: Path,
+    report_path: Path | None,
+    tasks_path: Path | None,
+    min_score: int | None,
+    fail_on: str | None,
+    key: str,
+) -> tuple[dict, str]:
+    paths = _resolve_inputs(target, batch)
+    if len(paths) > 1 and not batch:
+        raise ValueError("Multiple inputs found. Re-run with --batch.")
+    results = [_load_scan(path) for path in paths]
+    timestamp = _utc_timestamp()
+    history_dir.mkdir(parents=True, exist_ok=True)
+
+    current_results = _render_results(results, "jsonl", batch=True)
+    current_path = history_dir / "current-results.jsonl"
+    previous_path = history_dir / "previous-results.jsonl"
+    archive_path = _unique_archive_path(history_dir, timestamp)
+    latest_report_path = report_path or history_dir / "audit-diff.md"
+    tasks_written = None
+
+    previous_rows = _load_scan_results(current_path) if current_path.exists() else None
+    diff_payload = _build_audit_diff(previous_rows, results, key=key) if previous_rows else None
+    report_text = (
+        _render_audit_diff_markdown(diff_payload)
+        if diff_payload
+        else _render_first_audit_run_markdown(results, current_path, archive_path)
+    )
+
+    _write_text_atomic(archive_path, current_results)
+    if current_path.exists():
+        previous_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(current_path, previous_path)
+    _write_text_atomic(current_path, current_results)
+    _write_text_atomic(latest_report_path, report_text)
+    if tasks_path:
+        _write_text_atomic(tasks_path, _render_agent_tasks(results))
+        tasks_written = str(tasks_path)
+
+    exit_code = 1 if any(_fails_threshold(item, min_score, fail_on) for item in results) else 0
+    payload = {
+        "contract": "agentshelf.audit_run.v1",
+        "target": target,
+        "scanned_at": timestamp,
+        "input_count": len(paths),
+        "result_count": len(results),
+        "history_dir": str(history_dir),
+        "current_results": str(current_path),
+        "previous_results": str(previous_path) if previous_path.exists() else None,
+        "archive_results": str(archive_path),
+        "diff_report": str(latest_report_path),
+        "tasks_output": tasks_written,
+        "diff": diff_payload["summary"] if diff_payload else None,
+        "threshold_failed": bool(exit_code),
+        "min_score": min_score,
+        "fail_on": fail_on,
+    }
+    return payload, _render_audit_run_markdown(payload)
+
+
+def _render_first_audit_run_markdown(results: list[dict], current_path: Path, archive_path: Path) -> str:
+    lines = [
+        "# AgentShelf Audit Run",
+        "",
+        "## Summary",
+        f"- Baseline created: {current_path}",
+        f"- Archive written: {archive_path}",
+        f"- Pages scanned: {len(results)}",
+        "- Diff report: unavailable until the next run",
+        "",
+        "## Current Scores",
+        "| Score | Band | Source |",
+        "| ---: | --- | --- |",
+    ]
+    for item in results:
+        lines.append(f"| {item['score']} | {item['band']} | `{item['page']['source']}` |")
+    return "\n".join(lines) + "\n"
+
+
+def _render_audit_run_markdown(payload: dict) -> str:
+    lines = [
+        "# AgentShelf Audit Run",
+        "",
+        f"- Target: `{payload['target']}`",
+        f"- Results: `{payload['current_results']}`",
+        f"- Previous: `{payload['previous_results'] or 'not available yet'}`",
+        f"- Archive: `{payload['archive_results']}`",
+        f"- Diff report: `{payload['diff_report']}`",
+        f"- Threshold failed: {str(payload['threshold_failed']).lower()}",
+    ]
+    if payload["tasks_output"]:
+        lines.append(f"- Agent tasks: `{payload['tasks_output']}`")
+    if payload["diff"]:
+        summary = payload["diff"]
+        lines.extend(
+            [
+                "",
+                "## Diff Summary",
+                f"- Regressed pages: {summary['regressed_count']}",
+                f"- Improved pages: {summary['improved_count']}",
+                f"- New pages: {summary['new_page_count']}",
+                f"- Removed pages: {summary['removed_page_count']}",
+            ]
+        )
+    else:
+        lines.extend(["", "## Diff Summary", "- Baseline created; run again to produce a regression diff."])
+    return "\n".join(lines) + "\n"
+
+
 def _render_discovery(payload: dict, output_format: str) -> str:
     if output_format == "json":
         return json.dumps(payload, indent=2) + "\n"
@@ -842,6 +976,27 @@ def build_parser() -> argparse.ArgumentParser:
     diff.add_argument("--key", choices=("source", "title"), default="source", help="Page field used to match audit runs.")
     diff.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
     diff.add_argument("--output", type=Path, help="Optional output file path.")
+
+    audit_run = subcommands.add_parser("audit-run", help="Run a scheduled scan and maintain local previous/current history.")
+    audit_run.add_argument("path", help="HTML/text file, directory, or glob to scan.")
+    audit_run.add_argument("--batch", action="store_true", help="Allow directory or glob scanning.")
+    audit_run.add_argument(
+        "--history-dir",
+        type=Path,
+        default=Path(".agentshelf/runs"),
+        help="Directory for current-results.jsonl, previous-results.jsonl, archives, and the diff report.",
+    )
+    audit_run.add_argument("--report", type=Path, help="Optional Markdown diff report path. Defaults to <history-dir>/audit-diff.md.")
+    audit_run.add_argument("--tasks-output", type=Path, help="Optional JSONL task output for coding agents.")
+    audit_run.add_argument("--key", choices=("source", "title"), default="source", help="Page field used to match audit runs.")
+    audit_run.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Summary output format.")
+    audit_run.add_argument("--output", type=Path, help="Optional path for the audit-run summary.")
+    audit_run.add_argument("--min-score", type=int, help="Return non-zero when any page scores below this value.")
+    audit_run.add_argument(
+        "--fail-on",
+        choices=("weak", "not_ready"),
+        help="Return non-zero when any page is at or below this readiness band.",
+    )
 
     discover = subcommands.add_parser("discover", help="Discover product-like URLs from robots.txt sitemap hints or a sitemap URL.")
     discover.add_argument("--site", help="Storefront root URL. AgentShelf reads robots.txt for Sitemap hints.")
@@ -924,6 +1079,20 @@ def main() -> int:
             payload = _build_audit_diff(baseline_rows, current_rows, key=args.key)
             rendered = json.dumps(payload, indent=2) + "\n" if args.format == "json" else _render_audit_diff_markdown(payload)
             exit_code = 0
+        elif args.command == "audit-run":
+            args.min_score = _coerce_score(args.min_score)
+            payload, markdown = _build_audit_run(
+                target=args.path,
+                batch=args.batch,
+                history_dir=args.history_dir,
+                report_path=args.report,
+                tasks_path=args.tasks_output,
+                min_score=args.min_score,
+                fail_on=args.fail_on,
+                key=args.key,
+            )
+            rendered = json.dumps(payload, indent=2) + "\n" if args.format == "json" else markdown
+            exit_code = 1 if payload["threshold_failed"] else 0
         elif args.command == "discover":
             payload = _discover_urls(
                 site=args.site,

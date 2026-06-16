@@ -11,6 +11,7 @@ The MVP is a lightweight Python CLI with a three-step flow:
 6. Render human reports, JSON/JSONL, SARIF, or an agent-native JSON contract with prioritized tasks.
 7. Compare raw and rendered snapshots to decide whether browser capture is worth the operational cost for a page class.
 8. Compare scheduled scan result files to surface product-page regressions, improvements, and catalog coverage changes.
+9. Run scheduled audits with local previous/current history, timestamped archives, diff reports, and optional agent task output.
 
 ## Components
 - `src/agentshelf/engine.py`: parser, heuristic scoring engine, JSON-LD extraction, and renderers
@@ -32,6 +33,7 @@ The MVP is a lightweight Python CLI with a three-step flow:
 - `agent-tasks` emits JSONL so coding agents can remediate batches without parsing human reports.
 - `compare` reports score deltas, dimension deltas, unlocked signals, regressions, and an agent recommendation for raw vs rendered snapshots.
 - `diff` compares stored scan artifacts instead of rescanning pages, so scheduled jobs can produce regression reports from CI artifacts.
+- `audit-run` wraps scan and diff for local scheduled jobs, rotating previous/current JSONL safely before writing current results.
 - SARIF output maps failed checks into code-scanning-style findings for CI and GitHub annotations.
 - `.agentshelf.json` keeps production scan gates repeatable across local, CI, and scheduled runs.
 - Raw snapshot mode does not execute JavaScript; dynamic pages are flagged instead of silently trusted. `--rendered` handles single-page JS capture when the optional browser dependency is installed.
@@ -40,5 +42,5 @@ The MVP is a lightweight Python CLI with a three-step flow:
 
 ## Extension Path
 - Add deeper schema validation for variants, offers, return policy, and merchant policy metadata.
-- Add run history retention helpers for teams that want AgentShelf to manage previous/current artifacts locally.
+- Add deeper Shopify/theme-specific evidence extraction while keeping the base CLI secret-free.
 - Add empirical benchmark runs against real agent answer quality before claiming ranking or conversion lift.
