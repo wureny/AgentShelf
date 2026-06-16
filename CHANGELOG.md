@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+- Added `agentshelf discover` to collect product-like URLs from robots.txt sitemap hints or explicit sitemap URLs.
+- Added include/exclude regex filters, limits, text/JSON/JSONL output, and URL-list handoff to `snapshot --url-file`.
+
 ## 0.5.0
 - Added `agentshelf compare raw.html rendered.html` to quantify signals unlocked by rendered capture.
 - Added JSON and Markdown compare output with score deltas, dimension deltas, unlocked signals, regressions, and agent recommendations.

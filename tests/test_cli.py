@@ -160,6 +160,128 @@ class CliTests(unittest.TestCase):
             payload = json.loads(output.read_text(encoding="utf-8"))
             self.assertIn("agent_recommendation", payload)
 
+    def test_discover_reads_robots_sitemap_hints(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+
+            class Handler(http.server.SimpleHTTPRequestHandler):
+                def log_message(self, format: str, *args: object) -> None:
+                    return
+
+            try:
+                server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            except PermissionError as exc:
+                self.skipTest(f"local socket binding unavailable in this sandbox: {exc}")
+
+            base = f"http://127.0.0.1:{server.server_port}"
+            (root / "robots.txt").write_text(f"Sitemap: {base}/sitemap-index.xml\n", encoding="utf-8")
+            (root / "sitemap-index.xml").write_text(
+                f"""<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap><loc>{base}/products-sitemap.xml</loc></sitemap>
+</sitemapindex>""",
+                encoding="utf-8",
+            )
+            (root / "products-sitemap.xml").write_text(
+                f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>{base}/products/hydrated-tee</loc></url>
+  <url><loc>{base}/products/hidden-sale</loc></url>
+  <url><loc>{base}/blogs/story</loc></url>
+</urlset>""",
+                encoding="utf-8",
+            )
+
+            old_cwd = os.getcwd()
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            try:
+                os.chdir(root)
+                thread.start()
+                result = _run_cli("discover", "--site", base, "--exclude", "hidden", "--format", "json")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                payload = json.loads(result.stdout)
+                self.assertEqual(payload["count"], 1)
+                self.assertEqual(payload["urls"], [f"{base}/products/hydrated-tee"])
+                self.assertIn(f"{base}/sitemap-index.xml", payload["source"]["sitemaps_checked"])
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+                os.chdir(old_cwd)
+
+    def test_discover_from_explicit_sitemap_text_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+
+            class Handler(http.server.SimpleHTTPRequestHandler):
+                def log_message(self, format: str, *args: object) -> None:
+                    return
+
+            try:
+                server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            except PermissionError as exc:
+                self.skipTest(f"local socket binding unavailable in this sandbox: {exc}")
+
+            base = f"http://127.0.0.1:{server.server_port}"
+            (root / "sitemap.xml").write_text(
+                f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>{base}/products/hydrated-tee</loc></url>
+</urlset>""",
+                encoding="utf-8",
+            )
+
+            old_cwd = os.getcwd()
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            try:
+                os.chdir(root)
+                thread.start()
+                result = _run_cli("discover", "--sitemap", f"{base}/sitemap.xml")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), f"{base}/products/hydrated-tee")
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+                os.chdir(old_cwd)
+
+    def test_discover_writes_output_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+
+            class Handler(http.server.SimpleHTTPRequestHandler):
+                def log_message(self, format: str, *args: object) -> None:
+                    return
+
+            try:
+                server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            except PermissionError as exc:
+                self.skipTest(f"local socket binding unavailable in this sandbox: {exc}")
+
+            base = f"http://127.0.0.1:{server.server_port}"
+            (root / "sitemap.xml").write_text(
+                f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>{base}/products/hydrated-tee</loc></url>
+</urlset>""",
+                encoding="utf-8",
+            )
+
+            old_cwd = os.getcwd()
+            output = root / "product-urls.txt"
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            try:
+                os.chdir(root)
+                thread.start()
+                result = _run_cli("discover", "--sitemap", f"{base}/sitemap.xml", "--output", str(output))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(output.read_text(encoding="utf-8").strip(), f"{base}/products/hydrated-tee")
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+                os.chdir(old_cwd)
+
     def test_snapshot_writes_html_from_local_server(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

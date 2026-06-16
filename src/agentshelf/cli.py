@@ -7,8 +7,9 @@ import json
 from pathlib import Path
 from typing import Iterable
 from urllib.error import URLError
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
+from xml.etree import ElementTree
 
 from agentshelf.engine import build_agent_contract, parse_input, render_markdown, scan_readiness
 
@@ -16,7 +17,7 @@ from agentshelf.engine import build_agent_contract, parse_input, render_markdown
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.5 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.6 (+https://github.com/wureny/AgentShelf)"
 RENDER_EXTRA_MESSAGE = (
     "Rendered snapshots require the optional Playwright extra. "
     "Install it with `python3 -m pip install 'agentshelf[render]'` and then run "
@@ -114,6 +115,103 @@ def _fetch_url(url: str, timeout: float = 10.0) -> str:
     if "charset=" in content_type:
         charset = content_type.split("charset=", 1)[1].split(";", 1)[0].strip()
     return raw.decode(charset or "utf-8", errors="replace")
+
+
+def _robots_url(site: str) -> str:
+    parsed = urlparse(site)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Site must be an http(s) URL.")
+    return f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+
+
+def _sitemap_urls_from_robots(robots_text: str) -> list[str]:
+    urls = []
+    for line in robots_text.splitlines():
+        key, sep, value = line.partition(":")
+        if sep and key.strip().lower() == "sitemap":
+            candidate = value.strip()
+            if candidate:
+                urls.append(candidate)
+    return urls
+
+
+def _extract_sitemap_locs(xml_text: str) -> tuple[list[str], list[str]]:
+    try:
+        root = ElementTree.fromstring(xml_text)
+    except ElementTree.ParseError as exc:
+        raise ValueError(f"Invalid sitemap XML: {exc}.") from exc
+    tag = root.tag.rsplit("}", 1)[-1].lower()
+    locs = [
+        (loc.text or "").strip()
+        for loc in root.iter()
+        if loc.tag.rsplit("}", 1)[-1].lower() == "loc" and (loc.text or "").strip()
+    ]
+    if tag == "sitemapindex":
+        return locs, []
+    return [], locs
+
+
+def _discover_urls(
+    site: str | None,
+    sitemap: str | None,
+    timeout: float,
+    include: str,
+    exclude: str | None,
+    limit: int,
+) -> dict:
+    if bool(site) == bool(sitemap):
+        raise ValueError("Provide exactly one of --site or --sitemap.")
+    if limit < 1:
+        raise ValueError("--limit must be at least 1.")
+
+    warnings = []
+    sitemap_queue: list[str]
+    robots_source = None
+    if site:
+        robots_source = _robots_url(site)
+        robots_text = _fetch_url(robots_source, timeout=timeout)
+        sitemap_queue = _sitemap_urls_from_robots(robots_text)
+        if not sitemap_queue:
+            sitemap_queue = [urljoin(robots_source, "/sitemap.xml")]
+            warnings.append("robots_missing_sitemap: falling back to /sitemap.xml")
+    else:
+        sitemap_queue = [sitemap or ""]
+
+    seen_sitemaps = set()
+    discovered: list[str] = []
+    include_re = _compile_regex(include)
+    exclude_re = _compile_regex(exclude) if exclude else None
+
+    while sitemap_queue and len(discovered) < limit:
+        current = sitemap_queue.pop(0)
+        if current in seen_sitemaps:
+            continue
+        seen_sitemaps.add(current)
+        xml_text = _fetch_url(current, timeout=timeout)
+        child_sitemaps, urls = _extract_sitemap_locs(xml_text)
+        sitemap_queue.extend(item for item in child_sitemaps if item not in seen_sitemaps)
+        for url in urls:
+            if include_re.search(url) and not (exclude_re and exclude_re.search(url)):
+                discovered.append(url)
+                if len(discovered) >= limit:
+                    break
+
+    return {
+        "source": {"site": site, "robots": robots_source, "sitemaps_checked": sorted(seen_sitemaps)},
+        "filters": {"include": include, "exclude": exclude, "limit": limit},
+        "urls": discovered,
+        "count": len(discovered),
+        "warnings": warnings,
+    }
+
+
+def _compile_regex(pattern: str):
+    import re
+
+    try:
+        return re.compile(pattern)
+    except re.error as exc:
+        raise ValueError(f"Invalid regex {pattern!r}: {exc}") from exc
 
 
 def _fetch_rendered_url(url: str, timeout: float = 15.0, wait_until: str = "networkidle") -> str:
@@ -422,6 +520,14 @@ def _render_compare_markdown(payload: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _render_discovery(payload: dict, output_format: str) -> str:
+    if output_format == "json":
+        return json.dumps(payload, indent=2) + "\n"
+    if output_format == "jsonl":
+        return "".join(json.dumps({"url": url}) + "\n" for url in payload["urls"])
+    return "\n".join(payload["urls"]) + ("\n" if payload["urls"] else "")
+
+
 def _fails_threshold(result: dict, min_score: int | None, fail_on: str | None) -> bool:
     if min_score is not None and result["score"] < min_score:
         return True
@@ -475,6 +581,16 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("rendered", type=Path, help="Rendered HTML snapshot path.")
     compare.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
     compare.add_argument("--output", type=Path, help="Optional output file path.")
+
+    discover = subcommands.add_parser("discover", help="Discover product-like URLs from robots.txt sitemap hints or a sitemap URL.")
+    discover.add_argument("--site", help="Storefront root URL. AgentShelf reads robots.txt for Sitemap hints.")
+    discover.add_argument("--sitemap", help="Explicit sitemap or sitemap index URL.")
+    discover.add_argument("--include", default=r"/products?/|/collections/.+/products?/", help="Regex URL include filter.")
+    discover.add_argument("--exclude", help="Optional regex URL exclude filter.")
+    discover.add_argument("--limit", type=int, default=100, help="Maximum URLs to emit.")
+    discover.add_argument("--timeout", type=float, default=10.0, help="Fetch timeout in seconds.")
+    discover.add_argument("--format", choices=("text", "json", "jsonl"), default="text", help="Output format.")
+    discover.add_argument("--output", type=Path, help="Optional output file path.")
 
     snapshot = subcommands.add_parser("snapshot", help="Fetch raw or rendered HTML for a product page URL.")
     snapshot.add_argument("url", nargs="?", help="http(s) URL to fetch.")
@@ -540,6 +656,17 @@ def main() -> int:
             rendered_bundle = _load_scan_as(args.rendered, "rendered")
             payload = _build_compare(raw_bundle, rendered_bundle)
             rendered = json.dumps(payload, indent=2) + "\n" if args.format == "json" else _render_compare_markdown(payload)
+            exit_code = 0
+        elif args.command == "discover":
+            payload = _discover_urls(
+                site=args.site,
+                sitemap=args.sitemap,
+                timeout=args.timeout,
+                include=args.include,
+                exclude=args.exclude,
+                limit=args.limit,
+            )
+            rendered = _render_discovery(payload, args.format)
             exit_code = 0
         elif args.command == "snapshot":
             if bool(args.url) == bool(args.url_file):

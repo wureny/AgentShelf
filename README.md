@@ -27,6 +27,12 @@ Batch scan page snapshots:
 agentshelf scan "examples/*.html" --batch --format jsonl --output agentshelf-results.jsonl
 ```
 
+Discover product URLs from sitemap hints:
+
+```bash
+agentshelf discover --site https://example.com --output product-urls.txt
+```
+
 Run a repeatable CI gate from config:
 
 ```bash
@@ -97,6 +103,8 @@ agentshelf scan <file-or-dir-or-glob> [options]
 agentshelf agent-audit <file-or-url> [options]
 agentshelf agent-tasks <file-or-dir-or-glob> [options]
 agentshelf compare <raw.html> <rendered.html> [options]
+agentshelf discover --site <url> [options]
+agentshelf discover --sitemap <url> [options]
 agentshelf snapshot <url> --output <path> [--rendered]
 agentshelf snapshot --url-file <urls.txt> --output-dir <dir> [--manifest <path>]
 ```
@@ -117,6 +125,8 @@ Options:
 `snapshot` fetches raw HTML with the standard library by default. Use `--rendered` for a Playwright-backed single-page capture when product data is injected by JavaScript. Rendered mode is optional so the base CLI stays lightweight.
 
 `compare` shows whether rendered capture unlocks agent-readiness signals that raw HTML misses. It reports score deltas, dimension deltas, newly visible evidence, regressions, and an agent recommendation.
+
+`discover` reads `robots.txt` for `Sitemap:` hints or accepts an explicit sitemap URL. It filters product-like URLs and emits a URL list for `snapshot --url-file`; it does not crawl arbitrary site links.
 
 ## Production Workflows
 Use a config file when AgentShelf runs in CI or scheduled audits:
@@ -145,6 +155,15 @@ agentshelf compare examples/js_product_raw.html examples/js_product_rendered.htm
 ```
 
 If compare says raw capture is sufficient, keep the cheaper raw workflow. If rendered unlocks price, inventory, variant, or schema signals, use `snapshot --rendered` for that page class.
+
+End-to-end scheduled audit:
+
+```bash
+agentshelf discover --site https://example.com --limit 100 --output product-urls.txt
+agentshelf snapshot --url-file product-urls.txt --output-dir snapshots --manifest snapshots/manifest.json
+agentshelf scan "snapshots/*.html" --batch --config examples/agentshelf.config.json
+agentshelf agent-tasks "snapshots/*.html" --batch --output agentshelf-tasks.jsonl
+```
 
 ## GitHub Action
 Use AgentShelf as a PR gate for product-page snapshots, generated storefront HTML, or theme fixture output.
@@ -211,7 +230,7 @@ agentshelf scan benchmarks/fixtures --batch --format jsonl
 ```
 
 ## Current Non-Goals
-- site-wide crawling
+- arbitrary site-wide crawling
 - checkout automation
 - Shopify app installation
 - paid API integrations
@@ -224,6 +243,7 @@ agentshelf scan examples/sample_product_page.html --format markdown --min-score 
 agentshelf agent-audit examples/weak_product_page.html --contract v1
 agentshelf agent-tasks examples --batch
 agentshelf compare examples/js_product_raw.html examples/js_product_rendered.html --format json
+agentshelf discover --sitemap https://example.com/sitemap.xml --limit 10
 python3 -m pip install -e ".[render]"  # optional rendered snapshots
 ```
 
