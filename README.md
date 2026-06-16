@@ -4,6 +4,8 @@ Open-source product page audits for AI shopping agents.
 
 AgentShelf checks whether product pages expose the signals AI shopping agents need for discovery, ranking, and purchase recommendations: product title, price, availability, shipping, returns, specs, reviews, FAQ, and Product structured data.
 
+It also reads storefront implementation signals that matter in real Shopify/DTC pages: embedded product JSON, variant arrays, selling plan groups, metafield-like keys, and policy snippets.
+
 ## Who It Helps
 - Shopify and DTC operators preparing storefronts for agentic commerce
 - AI commerce consultants doing quick storefront readiness audits
@@ -220,6 +222,14 @@ JSON reports include stable fields for dashboards and CI:
   "score": 100,
   "band": "strong",
   "checks": [],
+  "commerce_signals": {
+    "variant_count": 2,
+    "variants_with_price": 2,
+    "variants_with_availability": 2,
+    "option_names": ["Size", "Color"],
+    "selling_plan_group_count": 1,
+    "metafield_keys": ["custom.materials"]
+  },
   "top_fixes": [],
   "agent_risks": []
 }
@@ -237,10 +247,13 @@ JSON reports include stable fields for dashboards and CI:
 ## Rule Philosophy
 AgentShelf rules should be deterministic, explainable, and operator-actionable. Every failed check should point to a concrete storefront improvement, not just a score penalty.
 
+AgentShelf treats Shopify/theme-style embedded product data as commerce evidence, not noise. Variant JSON can satisfy price, availability, and variant-readiness checks when it includes readable options, price, and stock context; incomplete variant JSON is reported as incomplete instead of being overtrusted.
+
 ## Why This Is Not Just SEO/Schema Checking
 AgentShelf checks whether a shopping agent can make a reliable purchase recommendation, not only whether a page has rich-result metadata. The benchmark fixtures cover agent-specific failures:
 
 - variant-heavy pages where option choice matters
+- embedded storefront JSON where price, stock, subscriptions, or metafields are not visible as plain copy
 - visible price or stock contradicting JSON-LD
 - JS-rendered placeholder HTML that static scanners may overtrust
 - pages with schema but no policy or fit answers
@@ -275,6 +288,7 @@ python3 -m pip install -e ".[render]"  # optional rendered snapshots
 - [Weak sample page](examples/weak_product_page.html)
 - [JS raw sample page](examples/js_product_raw.html)
 - [JS rendered sample page](examples/js_product_rendered.html)
+- [Shopify-style variant sample page](examples/shopify_variant_product.html)
 - [Sample report](outputs/sample_report.md)
 
 ## License

@@ -19,7 +19,7 @@ from agentshelf.engine import build_agent_contract, parse_input, render_markdown
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.8 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.9 (+https://github.com/wureny/AgentShelf)"
 RENDER_EXTRA_MESSAGE = (
     "Rendered snapshots require the optional Playwright extra. "
     "Install it with `python3 -m pip install 'agentshelf[render]'` and then run "

@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Make scheduled merchant audits actionable by showing regressions and improvements between runs.
+Deepen storefront-specific evidence extraction so AgentShelf catches real Shopify/DTC commerce signals.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -28,6 +28,8 @@ Make scheduled merchant audits actionable by showing regressions and improvement
 - Added `discover` for robots.txt sitemap hints and explicit sitemap ingestion with include/exclude filters and limits.
 - Added `diff` for comparing JSON/JSONL scan artifacts across scheduled audit runs, including regressions, improvements, blocker changes, catalog changes, and agent next actions.
 - Added `audit-run` for local scheduled audits with safe previous/current result rotation, timestamped archives, generated diff reports, and optional agent task output.
+- Added embedded commerce signal extraction for Shopify/theme-style product JSON, variants, selling plan groups, metafield-like keys, and policy snippets.
+- Upgraded price, inventory, variant readiness, offer completeness, specs, policy, agent answerability, and merchant-feed checks to use storefront commerce evidence.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -47,9 +49,10 @@ Make scheduled merchant audits actionable by showing regressions and improvement
 - `agentshelf discover --sitemap <local test server>/sitemap.xml`
 - `agentshelf diff previous-results.jsonl current-results.jsonl --output audit-diff.md`
 - `agentshelf audit-run "snapshots/*.html" --batch --history-dir .agentshelf/runs --tasks-output agentshelf-tasks.jsonl`
+- `agentshelf scan examples/sample_product_page.html --format markdown`
 
 ## Next Best Task
-Add deeper Shopify/theme-specific extraction for variants, selling plans, shipping policy snippets, and product metafield-like data in static or rendered snapshots.
+Add optional storefront adapter profiles for Shopify, WooCommerce, and headless commerce exports so users can tune extraction and scoring without forking rules.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

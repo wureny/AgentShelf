@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Subscription Roast</title>
+  </head>
+  <body>
+    <main id="shopify-section-product">
+      <h1>Subscription Roast</h1>
+      <p>Ships every Monday with free shipping over $40.</p>
+      <p>Returns accepted for unopened bags within 30 days.</p>
+      <p>Rating 4.8/5 from 210 reviews.</p>
+      <section>
+        <h2>FAQ</h2>
+        <p>Choose whole bean or ground. Best for espresso, drip, and cold brew.</p>
+      </section>
+      <script type="application/json" id="ProductJson-product-template">
+        {
+          "title": "Subscription Roast",
+          "options": [{"name": "Size"}, {"name": "Grind"}],
+          "variants": [
+            {
+              "id": 1001,
+              "title": "12oz / Whole Bean",
+              "price": 1800,
+              "available": true,
+              "option1": "12oz",
+              "option2": "Whole Bean"
+            },
+            {
+              "id": 1002,
+              "title": "2lb / Ground",
+              "price": 4200,
+              "available": false,
+              "option1": "2lb",
+              "option2": "Ground"
+            }
+          ],
+          "selling_plan_groups": [{"name": "Subscribe and save"}],
+          "metafields": {
+            "custom.tasting_notes": "cocoa and citrus",
+            "custom.origin": "Colombia"
+          }
+        }
+      </script>
+    </main>
+  </body>
+</html>

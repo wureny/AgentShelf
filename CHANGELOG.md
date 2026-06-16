@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.0
+- Added embedded commerce signal extraction for Shopify/theme-style product JSON, variant arrays, selling plan groups, metafield-like keys, and policy snippets.
+- Upgraded price, availability, variant readiness, offer completeness, agent answerability, specs, and merchant-feed checks to use extracted commerce evidence.
+- Added `commerce_signals` to scan JSON and a Commerce Signals section to Markdown reports.
+
 ## 0.8.0
 - Added `agentshelf audit-run` to scan page sets and maintain local scheduled-audit history.
 - Added safe previous/current result rotation, timestamped JSONL archives, generated diff reports, and optional agent-task output.

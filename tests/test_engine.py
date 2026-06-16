@@ -103,6 +103,78 @@ class EngineTests(unittest.TestCase):
         bundle = scan_readiness(parse_input(html))
         self.assertTrue(any("dynamic_rendering_likely" in warning for warning in bundle["warnings"]))
 
+    def test_shopify_variant_json_counts_as_commerce_evidence(self) -> None:
+        html = """<!doctype html>
+<html>
+  <head><title>Subscription Roast</title></head>
+  <body>
+    <h1>Subscription Roast</h1>
+    <script type="application/json" id="ProductJson-template">
+      {
+        "title": "Subscription Roast",
+        "options": [{"name": "Size"}, {"name": "Grind"}],
+        "variants": [
+          {"id": 1, "title": "12oz / Whole Bean", "price": 1800, "available": true, "option1": "12oz", "option2": "Whole Bean"},
+          {"id": 2, "title": "2lb / Ground", "price": 4200, "available": false, "option1": "2lb", "option2": "Ground"}
+        ],
+        "selling_plan_groups": [{"name": "Subscribe and save"}],
+        "metafields": {"custom.tasting_notes": "cocoa and citrus", "custom.origin": "Colombia"}
+      }
+    </script>
+    <p>Ships every Monday with free shipping over $40.</p>
+    <p>Returns accepted for unopened bags within 30 days.</p>
+    <p>Rating 4.8/5 from 210 reviews.</p>
+    <section><h2>FAQ</h2><p>Choose whole bean or ground.</p></section>
+  </body>
+</html>"""
+        bundle = scan_readiness(parse_input(html))
+        checks = {check["id"]: check for check in bundle["checks"]}
+
+        self.assertTrue(checks["price"]["passed"])
+        self.assertIn("variant price", checks["price"]["evidence"])
+        self.assertTrue(checks["availability"]["passed"])
+        self.assertTrue(checks["variant_readiness"]["passed"])
+        self.assertTrue(checks["merchant_feed_hints"]["passed"])
+        self.assertEqual(bundle["commerce_signals"]["variant_count"], 2)
+        self.assertEqual(bundle["commerce_signals"]["selling_plan_group_count"], 1)
+        self.assertIn("custom.tasting_notes", bundle["commerce_signals"]["metafield_keys"])
+
+    def test_incomplete_variant_json_does_not_pass_variant_readiness(self) -> None:
+        html = """<html><head><title>Half Wired Variant</title></head><body>
+<h1>Half Wired Variant</h1>
+<script type="application/json">
+{"options":[{"name":"Size"}],"variants":[{"id":1,"title":"Small"},{"id":2,"title":"Large"}]}
+</script>
+<p>Shipping in 3 days. 30-day returns.</p>
+</body></html>"""
+        bundle = scan_readiness(parse_input(html))
+        variant_check = next(check for check in bundle["checks"] if check["id"] == "variant_readiness")
+
+        self.assertFalse(variant_check["passed"])
+        self.assertIn("incomplete", variant_check["evidence"])
+        self.assertEqual(bundle["commerce_signals"]["variant_count"], 2)
+        self.assertEqual(bundle["commerce_signals"]["variants_with_price"], 0)
+
+    def test_shopify_assignment_json_is_parsed_with_nested_objects(self) -> None:
+        html = """<html><head><title>Analytics Product</title></head><body>
+<h1>Analytics Product</h1>
+<script>
+window.ShopifyAnalytics = window.ShopifyAnalytics || {};
+window.ShopifyAnalytics.meta = {
+  "product": {
+    "options": [{"name": "Color"}],
+    "variants": [{"id": 1, "price": 2900, "available": true, "option1": "Blue"}]
+  }
+};
+</script>
+<p>Delivery in 2 days. Returns within 30 days. FAQ: color may vary.</p>
+</body></html>"""
+        bundle = scan_readiness(parse_input(html))
+
+        self.assertEqual(bundle["commerce_signals"]["variant_count"], 1)
+        self.assertEqual(bundle["commerce_signals"]["variants_with_price"], 1)
+        self.assertTrue(next(check for check in bundle["checks"] if check["id"] == "variant_readiness")["passed"])
+
 
 class BenchmarkTests(unittest.TestCase):
     def test_benchmark_expectations_are_stable(self) -> None:

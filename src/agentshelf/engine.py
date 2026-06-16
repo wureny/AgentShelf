@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import html as html_lib
 import json
 import re
 from typing import Any
@@ -152,6 +153,10 @@ def _jsonld_blocks(html: str) -> list[str]:
     return re.findall(pattern, html, flags=re.IGNORECASE)
 
 
+def _script_blocks(html: str) -> list[str]:
+    return re.findall(r"<script\b[^>]*>([\s\S]*?)</script>", html, flags=re.IGNORECASE)
+
+
 def _flatten_jsonld(value: Any) -> list[dict[str, Any]]:
     if isinstance(value, dict):
         items = [value]
@@ -234,6 +239,171 @@ def _schema_values(items: list[dict[str, Any]], keys: tuple[str, ...]) -> list[A
     return values
 
 
+def _walk_json(value: Any) -> list[Any]:
+    values = [value]
+    if isinstance(value, dict):
+        for child in value.values():
+            values.extend(_walk_json(child))
+    elif isinstance(value, list):
+        for child in value:
+            values.extend(_walk_json(child))
+    return values
+
+
+def _parse_embedded_json_objects(html: str) -> list[Any]:
+    objects: list[Any] = []
+    for block in _script_blocks(html):
+        stripped = html_lib.unescape(block).strip()
+        if not stripped:
+            continue
+        candidates = []
+        if stripped.startswith(("{", "[")):
+            candidates.append(stripped)
+        for match in re.finditer(r"(?:product|meta|ProductJson)\s*=", stripped, flags=re.IGNORECASE):
+            candidate = _balanced_json_object(stripped, match.end())
+            if candidate:
+                candidates.append(candidate)
+        candidates.extend(match.group(1) for match in re.finditer(r"JSON\.parse\(\s*['\"](\{[\s\S]*?\})['\"]\s*\)", stripped))
+        for candidate in candidates:
+            try:
+                objects.append(json.loads(candidate))
+            except json.JSONDecodeError:
+                continue
+    for attr in re.findall(r"data-[\w:-]*product[\w:-]*=['\"]([^'\"]+)['\"]", html, flags=re.IGNORECASE):
+        try:
+            objects.append(json.loads(html_lib.unescape(attr)))
+        except json.JSONDecodeError:
+            continue
+    return objects
+
+
+def _balanced_json_object(text: str, start: int) -> str | None:
+    while start < len(text) and text[start].isspace():
+        start += 1
+    if start >= len(text) or text[start] != "{":
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : index + 1]
+    return None
+
+
+def _commerce_signals(html: str, plain_text: str, products: list[dict[str, Any]], offers: list[dict[str, Any]]) -> dict[str, Any]:
+    embedded = _parse_embedded_json_objects(html)
+    variants: list[dict[str, Any]] = []
+    selling_plan_groups: list[Any] = []
+    option_names: set[str] = set()
+    metafield_keys: set[str] = set()
+
+    for root in embedded + products:
+        for value in _walk_json(root):
+            if not isinstance(value, dict):
+                continue
+            raw_variants = value.get("variants")
+            if isinstance(raw_variants, list):
+                variants.extend(item for item in raw_variants if isinstance(item, dict))
+            raw_selling_plans = value.get("selling_plan_groups") or value.get("sellingPlanGroups")
+            if isinstance(raw_selling_plans, list):
+                selling_plan_groups.extend(raw_selling_plans)
+            raw_options = value.get("options") or value.get("options_with_values")
+            if isinstance(raw_options, list):
+                for option in raw_options:
+                    if isinstance(option, str):
+                        option_names.add(option)
+                    elif isinstance(option, dict) and option.get("name"):
+                        option_names.add(str(option["name"]))
+            raw_metafields = value.get("metafields") or value.get("metafield")
+            if isinstance(raw_metafields, dict):
+                metafield_keys.update(str(key) for key in raw_metafields)
+            elif isinstance(raw_metafields, list):
+                for metafield in raw_metafields:
+                    if isinstance(metafield, dict):
+                        namespace = metafield.get("namespace")
+                        key = metafield.get("key") or metafield.get("name")
+                        if namespace and key:
+                            metafield_keys.add(f"{namespace}.{key}")
+                        elif key:
+                            metafield_keys.add(str(key))
+
+    for match in re.finditer(r"data-metafield-([\w:-]+)", html, flags=re.IGNORECASE):
+        metafield_keys.add(match.group(1).replace("-", "."))
+
+    for variant in variants:
+        for key in ("option1", "option2", "option3", "size", "color", "colour"):
+            if variant.get(key):
+                option_names.add(key)
+
+    variant_price_count = sum(1 for variant in variants if _variant_has_price(variant))
+    variant_availability_count = sum(1 for variant in variants if _variant_has_availability(variant))
+    policy_snippets = _policy_snippets(plain_text)
+    return {
+        "variant_count": len(variants),
+        "variants_with_price": variant_price_count,
+        "variants_with_availability": variant_availability_count,
+        "option_names": sorted(option_names),
+        "selling_plan_group_count": len(selling_plan_groups),
+        "metafield_keys": sorted(metafield_keys),
+        "shipping_snippets": policy_snippets["shipping"],
+        "return_snippets": policy_snippets["returns"],
+        "has_offer_schema": bool(offers),
+    }
+
+
+def _variant_has_price(variant: dict[str, Any]) -> bool:
+    return any(variant.get(key) not in (None, "") for key in ("price", "price_min", "price_max", "compare_at_price"))
+
+
+def _variant_has_availability(variant: dict[str, Any]) -> bool:
+    if any(key in variant for key in ("available", "in_stock", "inventory_quantity", "inventory_policy")):
+        return True
+    availability = str(variant.get("availability", "")).lower()
+    return availability in {"instock", "in stock", "outofstock", "out of stock", "preorder", "pre-order"}
+
+
+def _policy_snippets(plain_text: str) -> dict[str, list[str]]:
+    snippets = {"shipping": [], "returns": []}
+    patterns = {
+        "shipping": r"[^.]{0,80}(?:shipping|delivery|arrives|ships in|dispatch)[^.]{0,80}",
+        "returns": r"[^.]{0,80}(?:returns?|refund|exchange)[^.]{0,80}",
+    }
+    for key, pattern in patterns.items():
+        seen: set[str] = set()
+        for match in re.finditer(pattern, plain_text, flags=re.IGNORECASE):
+            snippet = _trim_repeated_prefix(_normalize_whitespace(match.group(0)))
+            if snippet and snippet not in seen:
+                snippets[key].append(snippet)
+                seen.add(snippet)
+            if len(snippets[key]) >= 3:
+                break
+    return snippets
+
+
+def _trim_repeated_prefix(text: str) -> str:
+    words = text.split()
+    for width in range(1, min(5, len(words) // 2 + 1)):
+        if words[:width] == words[width : width * 2]:
+            return " ".join(words[width:])
+    return text
+
+
 def parse_input(text: str, fallback_title: str = "Untitled Product Page", source: str = "inline") -> ScanInput:
     match = re.search(r"<title>(.*?)</title>", text, flags=re.IGNORECASE | re.DOTALL)
     title = fallback_title
@@ -265,21 +435,25 @@ def _check_product_title(scan_input: ScanInput, plain_text: str, products: list[
     return False, None
 
 
-def _check_price(plain_text: str, products: list[dict[str, Any]]) -> tuple[bool, str | None]:
+def _check_price(plain_text: str, products: list[dict[str, Any]], commerce: dict[str, Any]) -> tuple[bool, str | None]:
     for offer in _offer_values(products):
         price = offer.get("price")
         currency = offer.get("priceCurrency")
         if price:
             return True, f"Offer price: {currency or ''} {price}".strip()
+    if commerce["variants_with_price"]:
+        return True, f"{commerce['variants_with_price']} variant price(s) in embedded commerce JSON"
     evidence = _first_match(plain_text, [r"\$\s?\d+(?:\.\d{2})?", r"usd\s?\d+(?:\.\d{2})?", r"price\s*:\s*\$?\s?\d+"])
     return (evidence is not None), evidence
 
 
-def _check_availability(plain_text: str, products: list[dict[str, Any]]) -> tuple[bool, str | None]:
+def _check_availability(plain_text: str, products: list[dict[str, Any]], commerce: dict[str, Any]) -> tuple[bool, str | None]:
     for offer in _offer_values(products):
         availability = offer.get("availability")
         if availability:
             return True, f"Offer availability: {availability}"
+    if commerce["variants_with_availability"]:
+        return True, f"{commerce['variants_with_availability']} variant availability signal(s) in embedded commerce JSON"
     evidence = _first_match(plain_text, [r"in stock", r"out of stock", r"ships in [^.]+", r"availability"])
     return (evidence is not None), evidence
 
@@ -298,6 +472,17 @@ def _check_offer_completeness(offers: list[dict[str, Any]], jsonld_items: list[d
     return False, None
 
 
+def _check_offer_completeness_with_commerce(offers: list[dict[str, Any]], jsonld_items: list[dict[str, Any]], commerce: dict[str, Any]) -> tuple[bool, str | None]:
+    passed, evidence = _check_offer_completeness(offers, jsonld_items)
+    if passed:
+        return passed, evidence
+    variant_offer = commerce["variants_with_price"] and commerce["variants_with_availability"]
+    policy_context = bool(commerce["shipping_snippets"] or commerce["return_snippets"] or commerce["metafield_keys"])
+    if variant_offer and policy_context:
+        return True, "Embedded variant JSON has price and availability with policy or metafield context"
+    return False, None
+
+
 def _check_merchant_feed_hints(jsonld_items: list[dict[str, Any]], schema_types: set[str]) -> tuple[bool, str | None]:
     feed_types = sorted(schema_types.intersection({"product", "offer", "aggregaterating", "faqpage"}))
     policy_fields = _schema_values(jsonld_items, ("shippingDetails", "hasMerchantReturnPolicy", "aggregateRating"))
@@ -306,6 +491,63 @@ def _check_merchant_feed_hints(jsonld_items: list[dict[str, Any]], schema_types:
     if policy_fields:
         return True, "merchant policy fields present"
     return False, None
+
+
+def _check_merchant_feed_hints_with_commerce(jsonld_items: list[dict[str, Any]], schema_types: set[str], commerce: dict[str, Any]) -> tuple[bool, str | None]:
+    passed, evidence = _check_merchant_feed_hints(jsonld_items, schema_types)
+    if passed:
+        return passed, evidence
+    hints = []
+    if commerce["variant_count"]:
+        hints.append(f"{commerce['variant_count']} variant(s)")
+    if commerce["selling_plan_group_count"]:
+        hints.append(f"{commerce['selling_plan_group_count']} selling plan group(s)")
+    if commerce["metafield_keys"]:
+        hints.append(f"{len(commerce['metafield_keys'])} metafield-like key(s)")
+    if hints:
+        return True, ", ".join(hints)
+    return False, None
+
+
+def _check_variant_readiness(plain_text: str, commerce: dict[str, Any]) -> tuple[bool, str | None]:
+    if commerce["variant_count"]:
+        has_options = bool(commerce["option_names"])
+        has_prices = commerce["variants_with_price"] > 0
+        has_availability = commerce["variants_with_availability"] > 0
+        if has_options and has_prices and has_availability:
+            return (
+                True,
+                f"{commerce['variant_count']} variant(s), options={', '.join(commerce['option_names'])}, prices and availability present",
+            )
+        return False, f"{commerce['variant_count']} variant(s) found but option, price, or availability context is incomplete"
+    return _check_text(
+        plain_text,
+        [r"variant", r"size", r"color", r"option", r"choose your", r"select (?:a )?(?:size|color)"],
+    )
+
+
+def _check_policy_snippet(plain_text: str, commerce: dict[str, Any], key: str, patterns: list[str]) -> tuple[bool, str | None]:
+    snippets = commerce["shipping_snippets"] if key == "shipping" else commerce["return_snippets"]
+    if snippets:
+        return True, snippets[0]
+    return _check_text(plain_text, patterns)
+
+
+def _check_specs_with_commerce(plain_text: str, commerce: dict[str, Any]) -> tuple[bool, str | None]:
+    if commerce["metafield_keys"]:
+        return True, f"metafield-like specs: {', '.join(commerce['metafield_keys'][:5])}"
+    return _check_text(plain_text, [r"specifications", r"dimensions", r"materials", r"features", r"capacity"])
+
+
+def _check_agent_answerability(plain_text: str, commerce: dict[str, Any]) -> tuple[bool, str | None]:
+    if commerce["shipping_snippets"] and commerce["return_snippets"]:
+        return True, "shipping and return policy snippets are present"
+    if commerce["metafield_keys"] and (commerce["shipping_snippets"] or commerce["return_snippets"]):
+        return True, "metafield-like product context plus policy snippet present"
+    return _check_text(
+        plain_text,
+        [r"fits", r"compatible", r"warranty", r"care", r"materials", r"shipping", r"returns?", r"faq"],
+    )
 
 
 def _visible_price(plain_text: str) -> str | None:
@@ -371,6 +613,7 @@ def scan_readiness(scan_input: ScanInput) -> dict[str, Any]:
     ]
     offers = _offer_values(products)
     schema_types = _item_types(jsonld_items)
+    commerce = _commerce_signals(scan_input.content, plain_text, products, offers)
     dynamic_rendering_likely = _detect_dynamic_rendering(scan_input.content, plain_text)
     if dynamic_rendering_likely:
         warnings.append("dynamic_rendering_likely: static HTML may miss JS-rendered price, inventory, reviews, or variants.")
@@ -378,24 +621,28 @@ def scan_readiness(scan_input: ScanInput) -> dict[str, Any]:
 
     evaluators = {
         "product_title": lambda: _check_product_title(scan_input, plain_text, products),
-        "price": lambda: _check_price(plain_text, products),
-        "availability": lambda: _check_availability(plain_text, products),
-        "shipping": lambda: _check_text(plain_text, [r"shipping", r"delivery", r"arrives", r"dispatch", r"ships in [^.]+"]),
-        "returns": lambda: _check_text(plain_text, [r"return", r"refund", r"exchange", r"30-day"]),
-        "specs": lambda: _check_text(plain_text, [r"specifications", r"dimensions", r"materials", r"features", r"capacity"]),
+        "price": lambda: _check_price(plain_text, products, commerce),
+        "availability": lambda: _check_availability(plain_text, products, commerce),
+        "shipping": lambda: _check_policy_snippet(
+            plain_text,
+            commerce,
+            "shipping",
+            [r"shipping", r"delivery", r"arrives", r"dispatch", r"ships in [^.]+"],
+        ),
+        "returns": lambda: _check_policy_snippet(
+            plain_text,
+            commerce,
+            "returns",
+            [r"return", r"refund", r"exchange", r"30-day"],
+        ),
+        "specs": lambda: _check_specs_with_commerce(plain_text, commerce),
         "reviews": lambda: _check_text(plain_text, [r"review", r"rating", r"\d(\.\d)?/5", r"stars?"]),
         "schema_product": lambda: (bool(products), f"{len(products)} Product JSON-LD object(s)" if products else None),
         "faq": lambda: _check_text(plain_text, [r"faq", r"frequently asked", r"questions"]),
-        "variant_readiness": lambda: _check_text(
-            plain_text,
-            [r"variant", r"size", r"color", r"option", r"choose your", r"select (?:a )?(?:size|color)"],
-        ),
-        "offer_completeness": lambda: _check_offer_completeness(offers, jsonld_items),
-        "agent_answerability": lambda: _check_text(
-            plain_text,
-            [r"fits", r"compatible", r"warranty", r"care", r"materials", r"shipping", r"returns?", r"faq"],
-        ),
-        "merchant_feed_hints": lambda: _check_merchant_feed_hints(jsonld_items, schema_types),
+        "variant_readiness": lambda: _check_variant_readiness(plain_text, commerce),
+        "offer_completeness": lambda: _check_offer_completeness_with_commerce(offers, jsonld_items, commerce),
+        "agent_answerability": lambda: _check_agent_answerability(plain_text, commerce),
+        "merchant_feed_hints": lambda: _check_merchant_feed_hints_with_commerce(jsonld_items, schema_types, commerce),
     }
 
     checks: list[dict[str, Any]] = []
@@ -455,6 +702,7 @@ def scan_readiness(scan_input: ScanInput) -> dict[str, Any]:
         "warnings": warnings,
         "contradictions": contradiction_issues,
         "confidence": confidence,
+        "commerce_signals": commerce,
         "agent_risks": [
             "Agents may skip the item if price or inventory state is ambiguous.",
             "Missing structured data increases extraction errors and ranking instability.",
@@ -565,6 +813,14 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         f"- Passed checks: {bundle['summary']['passed_checks']}/{bundle['summary']['total_checks']}",
         f"- Dimension scores: {', '.join(f'{key}={value}' for key, value in bundle['dimensions'].items())}",
         f"- Confidence: {bundle['confidence']['level']} ({bundle['confidence']['basis']})",
+        "",
+        "## Commerce Signals",
+        f"- Variants: {bundle['commerce_signals']['variant_count']} "
+        f"({bundle['commerce_signals']['variants_with_price']} with price, "
+        f"{bundle['commerce_signals']['variants_with_availability']} with availability)",
+        f"- Options: {', '.join(bundle['commerce_signals']['option_names']) or 'None detected'}",
+        f"- Selling plan groups: {bundle['commerce_signals']['selling_plan_group_count']}",
+        f"- Metafield-like keys: {', '.join(bundle['commerce_signals']['metafield_keys'][:8]) or 'None detected'}",
         "",
         "## Checks",
     ]
