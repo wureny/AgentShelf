@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import http.server
+import os
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -15,7 +18,7 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "agentshelf.cli", *args],
         cwd=ROOT,
-        env={"PYTHONPATH": str(ROOT / "src")},
+        env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
         text=True,
         capture_output=True,
         check=False,
@@ -56,6 +59,54 @@ class CliTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("# AgentShelf Report", output.read_text(encoding="utf-8"))
+
+    def test_agent_audit_returns_contract_json(self) -> None:
+        result = _run_cli("agent-audit", "examples/weak_product_page.html", "--contract", "v1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["contract"], "v1")
+        self.assertIn("blocking_issues", payload)
+        self.assertTrue(payload["agent_tasks"])
+
+    def test_agent_audit_fail_on_blockers(self) -> None:
+        result = _run_cli("agent-audit", "examples/weak_product_page.html", "--fail-on-blockers")
+        self.assertEqual(result.returncode, 1)
+
+    def test_snapshot_writes_html_from_local_server(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            page = root / "product.html"
+            page.write_text("<html><title>Local Product</title><h1>Local Product</h1></html>", encoding="utf-8")
+
+            class Handler(http.server.SimpleHTTPRequestHandler):
+                def log_message(self, format: str, *args: object) -> None:
+                    return
+
+            try:
+                server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            except PermissionError as exc:
+                self.skipTest(f"local socket binding unavailable in this sandbox: {exc}")
+            old_cwd = os.getcwd()
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            try:
+                os.chdir(root)
+                thread.start()
+                output = root / "snapshot.html"
+                url = f"http://127.0.0.1:{server.server_port}/product.html"
+                result = _run_cli("snapshot", url, "--output", str(output))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("Local Product", output.read_text(encoding="utf-8"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+                os.chdir(old_cwd)
+
+    def test_scan_benchmark_fixtures_as_jsonl(self) -> None:
+        result = _run_cli("scan", "benchmarks/fixtures", "--batch", "--format", "jsonl")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertGreaterEqual(len(rows), 8)
 
 
 if __name__ == "__main__":

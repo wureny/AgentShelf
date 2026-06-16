@@ -10,8 +10,9 @@ This project shows practical AI-commerce product thinking by turning vague "agen
 
 ## Resume Bullets
 - Built `AgentShelf`, an open-source CLI and GitHub Action that audits product pages for AI shopping-agent readiness across price, stock, shipping, returns, specs, reviews, FAQ, and structured data.
-- Designed a weighted scoring engine that turns storefront HTML into evidence-backed, prioritized machine-readability fixes without relying on external APIs.
-- Packaged a professional open-source release with installable Python metadata, CI, contribution docs, sample fixtures, tests, and GitHub Action integration.
+- Designed a multi-dimensional scoring engine that turns storefront HTML into evidence-backed, prioritized machine-readability fixes without relying on external APIs.
+- Added an agent-native JSON contract that converts audit failures into coding-agent tasks with reasons, page areas, acceptance checks, and priority.
+- Packaged a professional open-source release with installable Python metadata, CI, contribution docs, benchmark fixtures, tests, and GitHub Action integration.
 
 ## Positioning Angle
 Useful as evidence of AI product strategy, commerce-domain judgment, and the ability to ship agent-adjacent developer tools quickly.
