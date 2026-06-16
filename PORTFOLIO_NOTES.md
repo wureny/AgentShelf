@@ -12,6 +12,7 @@ This project shows practical AI-commerce product thinking by turning vague "agen
 - Built `AgentShelf`, an open-source CLI and GitHub Action that audits product pages for AI shopping-agent readiness across price, stock, shipping, returns, specs, reviews, FAQ, and structured data.
 - Designed a multi-dimensional scoring engine that turns storefront HTML into evidence-backed, prioritized machine-readability fixes without relying on external APIs.
 - Added an agent-native JSON contract that converts audit failures into coding-agent tasks with reasons, page areas, acceptance checks, and priority.
+- Added optional Playwright-backed rendered snapshots so JS-heavy Shopify/DTC pages can be audited without making the default CLI heavy.
 - Packaged a professional open-source release with installable Python metadata, CI, contribution docs, benchmark fixtures, tests, and GitHub Action integration.
 
 ## Positioning Angle

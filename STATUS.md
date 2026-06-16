@@ -1,13 +1,13 @@
 # Status
 
-- Date: 2026-06-14
+- Date: 2026-06-16
 - Phase: maintain_or_extend
 - Project path: `/Users/wurenyu/Documents/Codex/2026-06-06/intent-to-prompt-users-wurenyu-codex/projects/agentic-commerce-readiness-scanner`
 - Canonical requested root: `/Users/wurenyu/workspace`
 - Current blocker: none
 
 ## Current Milestone
-Make AgentShelf meaningfully more agent-native and closer to real merchant audit workflows.
+Make AgentShelf more useful on real JS-heavy merchant pages without making the default CLI heavy.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -17,6 +17,8 @@ Make AgentShelf meaningfully more agent-native and closer to real merchant audit
 - Added `agent-audit` with a stable JSON contract for coding agents.
 - Added raw HTML `snapshot` command for URL capture without browser dependencies.
 - Added dimension scoring, agent-specific checks, contradiction detection, confidence levels, and benchmark fixtures.
+- Added optional Playwright-backed rendered snapshots behind `agentshelf[render]`.
+- Updated docs and package metadata for `agentshelf snapshot <url> --rendered`.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -27,10 +29,12 @@ Make AgentShelf meaningfully more agent-native and closer to real merchant audit
 - `agentshelf scan examples --batch --format jsonl`
 - `agentshelf agent-audit examples/weak_product_page.html --contract v1`
 - `agentshelf scan benchmarks/fixtures --batch --format jsonl`
+- `python3 -m unittest tests.test_cli.CliTests.test_rendered_snapshot_uses_playwright_when_available`
 
 ## Next Best Task
-Add optional rendered snapshot mode behind `agentshelf[render]` if live Shopify pages prove too JS-heavy for raw HTML snapshots.
+Test `agentshelf snapshot --rendered` against 3-5 real Shopify/DTC product pages and add anonymized fixtures for failures raw snapshots miss.
 
 ## Risks
-- Raw URL snapshot mode does not execute JavaScript, so JS-rendered storefronts are flagged but not fully rendered.
+- Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.
+- Raw URL snapshot mode still does not execute JavaScript unless `--rendered` is explicitly used.
 - Benchmark fixtures are curated examples, not empirical evidence of improved ChatGPT, Google, Perplexity, or Claude shopping-agent ranking.

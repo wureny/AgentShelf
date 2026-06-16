@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+- Added optional Playwright-backed rendered snapshots with `agentshelf snapshot <url> --rendered`.
+- Added `agentshelf[render]` extra for users who need JS-rendered storefront capture.
+- Documented rendered snapshot setup and clarified that site-wide crawling remains out of scope.
+
 ## 0.2.0
 - Added `agentshelf agent-audit` with a stable JSON contract for coding agents.
 - Added `agentshelf snapshot` for raw HTML URL snapshots.

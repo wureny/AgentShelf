@@ -39,6 +39,14 @@ Fetch a raw HTML snapshot for later audit:
 agentshelf snapshot https://example.com/product --output snapshots/product.html
 ```
 
+Fetch a rendered snapshot for JS-heavy storefronts:
+
+```bash
+python3 -m pip install -e ".[render]"
+python3 -m playwright install chromium
+agentshelf snapshot https://example.com/product --rendered --output snapshots/product.html
+```
+
 ## Example Output
 ```text
 # AgentShelf Report: TrailBottle Pro 24oz
@@ -62,7 +70,7 @@ Weak pages return prioritized fixes:
 ```bash
 agentshelf scan <file-or-dir-or-glob> [options]
 agentshelf agent-audit <file-or-url> [options]
-agentshelf snapshot <url> --output <path>
+agentshelf snapshot <url> --output <path> [--rendered]
 ```
 
 Options:
@@ -75,7 +83,7 @@ Options:
 
 `agent-audit` emits JSON with stable fields for coding agents: `target`, `score`, `band`, `blocking_issues`, `agent_tasks`, `evidence`, `next_actions`, `confidence`, and `warnings`.
 
-`snapshot` fetches raw HTML with the standard library. It does not execute JavaScript. Pages that appear JS-rendered are flagged with `dynamic_rendering_likely` during audit.
+`snapshot` fetches raw HTML with the standard library by default. Use `--rendered` for a Playwright-backed single-page capture when product data is injected by JavaScript. Rendered mode is optional so the base CLI stays lightweight.
 
 ## GitHub Action
 Use AgentShelf as a PR gate for product-page snapshots, generated storefront HTML, or theme fixture output.
@@ -141,7 +149,7 @@ agentshelf scan benchmarks/fixtures --batch --format jsonl
 ```
 
 ## Current Non-Goals
-- JavaScript-rendered crawling
+- site-wide crawling
 - checkout automation
 - Shopify app installation
 - paid API integrations
@@ -152,6 +160,7 @@ python3 -m pip install -e .
 python3 -m unittest discover -s tests
 agentshelf scan examples/sample_product_page.html --format markdown --min-score 85
 agentshelf agent-audit examples/weak_product_page.html --contract v1
+python3 -m pip install -e ".[render]"  # optional rendered snapshots
 ```
 
 ## Example Files

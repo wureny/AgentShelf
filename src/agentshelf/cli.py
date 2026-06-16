@@ -14,7 +14,12 @@ from agentshelf.engine import build_agent_contract, parse_input, render_json, re
 
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
-USER_AGENT = "AgentShelf/0.2 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.3 (+https://github.com/wureny/AgentShelf)"
+RENDER_EXTRA_MESSAGE = (
+    "Rendered snapshots require the optional Playwright extra. "
+    "Install it with `python3 -m pip install 'agentshelf[render]'` and then run "
+    "`python3 -m playwright install chromium`."
+)
 
 
 def _resolve_inputs(target: str, batch: bool) -> list[Path]:
@@ -70,6 +75,36 @@ def _fetch_url(url: str, timeout: float = 10.0) -> str:
     if "charset=" in content_type:
         charset = content_type.split("charset=", 1)[1].split(";", 1)[0].strip()
     return raw.decode(charset or "utf-8", errors="replace")
+
+
+def _fetch_rendered_url(url: str, timeout: float = 15.0, wait_until: str = "networkidle") -> str:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("Only http and https URLs are supported.")
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise ValueError(RENDER_EXTRA_MESSAGE) from exc
+
+    timeout_ms = int(timeout * 1000)
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                page = browser.new_page(user_agent=USER_AGENT)
+                page.goto(url, wait_until=wait_until, timeout=timeout_ms)
+                html = page.content()
+            finally:
+                browser.close()
+    except PlaywrightError as exc:
+        message = str(exc)
+        if "Executable doesn't exist" in message or "playwright install" in message.lower():
+            raise OSError(f"{RENDER_EXTRA_MESSAGE} Playwright reported: {message}") from exc
+        raise OSError(f"Rendered snapshot failed for {url}: {message}") from exc
+    if not html.strip():
+        raise ValueError(f"Empty rendered response from {url}.")
+    return html
 
 
 def _load_target(target: str) -> dict:
@@ -150,14 +185,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Return non-zero when high-severity blocking issues are present.",
     )
 
-    snapshot = subcommands.add_parser("snapshot", help="Fetch raw HTML for a product page URL.")
+    snapshot = subcommands.add_parser("snapshot", help="Fetch raw or rendered HTML for a product page URL.")
     snapshot.add_argument("url", help="http(s) URL to fetch.")
     snapshot.add_argument("--output", type=Path, required=True, help="Path to write the fetched HTML.")
     snapshot.add_argument("--timeout", type=float, default=10.0, help="Fetch timeout in seconds.")
     snapshot.add_argument(
         "--rendered",
         action="store_true",
-        help="Reserved for a future Playwright-backed rendered snapshot mode.",
+        help="Use optional Playwright rendering. Requires `agentshelf[render]` and Chromium installed.",
+    )
+    snapshot.add_argument(
+        "--wait-until",
+        choices=("domcontentloaded", "load", "networkidle"),
+        default="networkidle",
+        help="Playwright page load state for --rendered snapshots.",
     )
     return parser
 
@@ -183,8 +224,9 @@ def main() -> int:
             exit_code = 1 if args.fail_on_blockers and any(issue["severity"] == "high" for issue in contract["blocking_issues"]) else 0
         elif args.command == "snapshot":
             if args.rendered:
-                raise ValueError("--rendered is reserved for a future optional Playwright-backed mode.")
-            html = _fetch_url(args.url, timeout=args.timeout)
+                html = _fetch_rendered_url(args.url, timeout=args.timeout, wait_until=args.wait_until)
+            else:
+                html = _fetch_url(args.url, timeout=args.timeout)
             if not html.strip():
                 raise ValueError(f"Empty response from {args.url}.")
             args.output.parent.mkdir(parents=True, exist_ok=True)
