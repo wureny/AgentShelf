@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Make merchant page-set ingestion practical without arbitrary crawling.
+Make scheduled merchant audits actionable by showing regressions and improvements between runs.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -26,6 +26,7 @@ Make merchant page-set ingestion practical without arbitrary crawling.
 - Extended the GitHub Action inputs for config files, SARIF output, and fail-band gates.
 - Added `compare` for raw-vs-rendered snapshot analysis with score deltas, unlocked signals, regressions, and agent recommendations.
 - Added `discover` for robots.txt sitemap hints and explicit sitemap ingestion with include/exclude filters and limits.
+- Added `diff` for comparing JSON/JSONL scan artifacts across scheduled audit runs, including regressions, improvements, blocker changes, catalog changes, and agent next actions.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -43,9 +44,10 @@ Make merchant page-set ingestion practical without arbitrary crawling.
 - `python3 -m unittest tests.test_cli.CliTests.test_snapshot_url_file_writes_manifest tests.test_cli.CliTests.test_snapshot_writes_html_from_local_server`
 - `agentshelf compare examples/js_product_raw.html examples/js_product_rendered.html --format json`
 - `agentshelf discover --sitemap <local test server>/sitemap.xml`
+- `agentshelf diff previous-results.jsonl current-results.jsonl --output audit-diff.md`
 
 ## Next Best Task
-Add scheduled delta reports so merchants can see which product pages regressed or improved between audit runs.
+Add a first-party run-history helper that rotates `previous-results.jsonl` and `current-results.jsonl` safely for local scheduled jobs.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

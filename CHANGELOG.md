@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0
+- Added `agentshelf diff` to compare two JSON/JSONL scan result files across scheduled audit runs.
+- Added regression, improvement, new-page, removed-page, blocker, warning, and next-action reporting for merchant page sets.
+- Added Markdown and JSON diff output for human review artifacts and agent-native automation.
+
 ## 0.6.0
 - Added `agentshelf discover` to collect product-like URLs from robots.txt sitemap hints or explicit sitemap URLs.
 - Added include/exclude regex filters, limits, text/JSON/JSONL output, and URL-list handoff to `snapshot --url-file`.

@@ -32,6 +32,11 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 class CliTests(unittest.TestCase):
+    def _scan_bundle_for_diff(self, fixture: str, source: str = "store/products/demo") -> dict:
+        bundle = cli._load_scan(ROOT / fixture)
+        bundle["page"]["source"] = source
+        return bundle
+
     def test_single_markdown_scan(self) -> None:
         result = _run_cli("scan", "examples/sample_product_page.html", "--format", "markdown")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -159,6 +164,57 @@ class CliTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             payload = json.loads(output.read_text(encoding="utf-8"))
             self.assertIn("agent_recommendation", payload)
+
+    def test_diff_reports_improvement_and_resolved_blockers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            baseline = root / "baseline.jsonl"
+            current = root / "current.jsonl"
+            weak = self._scan_bundle_for_diff("examples/weak_product_page.html")
+            strong = self._scan_bundle_for_diff("examples/sample_product_page.html")
+            baseline.write_text(json.dumps(weak) + "\n", encoding="utf-8")
+            current.write_text(json.dumps(strong) + "\n", encoding="utf-8")
+
+            result = _run_cli("diff", str(baseline), str(current), "--format", "json")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["summary"]["improved_count"], 1)
+            self.assertEqual(payload["summary"]["regressed_count"], 0)
+            self.assertTrue(payload["improvements"][0]["resolved_blocking_issues"])
+
+    def test_diff_reports_regression_and_new_blockers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            baseline = root / "baseline.jsonl"
+            current = root / "current.jsonl"
+            strong = self._scan_bundle_for_diff("examples/sample_product_page.html")
+            weak = self._scan_bundle_for_diff("examples/weak_product_page.html")
+            baseline.write_text(json.dumps(strong) + "\n", encoding="utf-8")
+            current.write_text(json.dumps(weak) + "\n", encoding="utf-8")
+
+            result = _run_cli("diff", str(baseline), str(current))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("# AgentShelf Audit Diff", result.stdout)
+            self.assertIn("Regressions", result.stdout)
+            self.assertIn("new blockers", result.stdout)
+
+    def test_diff_accepts_json_list_and_writes_output_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            baseline = root / "baseline.json"
+            current = root / "current.json"
+            output = root / "diff.md"
+            weak = self._scan_bundle_for_diff("examples/weak_product_page.html")
+            strong = self._scan_bundle_for_diff("examples/sample_product_page.html")
+            baseline.write_text(json.dumps([weak]), encoding="utf-8")
+            current.write_text(json.dumps([strong]), encoding="utf-8")
+
+            result = _run_cli("diff", str(baseline), str(current), "--output", str(output))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("# AgentShelf Audit Diff", output.read_text(encoding="utf-8"))
 
     def test_discover_reads_robots_sitemap_hints(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

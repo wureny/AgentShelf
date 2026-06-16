@@ -16,6 +16,7 @@ This project shows practical AI-commerce product thinking by turning vague "agen
 - Added production-oriented CI and agent surfaces: SARIF output, repeatable JSON config, batch URL snapshots with manifests, and JSONL remediation tasks.
 - Added raw-vs-rendered snapshot comparison so operators can justify when browser-based capture is necessary.
 - Added sitemap-based product URL discovery so real merchants can audit page sets without hand-maintained URL lists or arbitrary crawling.
+- Added audit-run diff reports so scheduled jobs can highlight product-page regressions, resolved blockers, and next agent tasks across merchant catalogs.
 - Packaged a professional open-source release with installable Python metadata, CI, contribution docs, benchmark fixtures, tests, and GitHub Action integration.
 
 ## Positioning Angle

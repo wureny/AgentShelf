@@ -17,7 +17,7 @@ from agentshelf.engine import build_agent_contract, parse_input, render_markdown
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.6 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.7 (+https://github.com/wureny/AgentShelf)"
 RENDER_EXTRA_MESSAGE = (
     "Rendered snapshots require the optional Playwright extra. "
     "Install it with `python3 -m pip install 'agentshelf[render]'` and then run "
@@ -520,6 +520,260 @@ def _render_compare_markdown(payload: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _load_scan_results(path: Path) -> list[dict]:
+    raw = path.read_text(encoding="utf-8").strip()
+    if not raw:
+        raise ValueError(f"Empty scan result file: {path}.")
+    if path.suffix.lower() == ".jsonl":
+        rows = []
+        for line_number, line in enumerate(raw.splitlines(), start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                rows.append(json.loads(stripped))
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Invalid JSONL in {path} line {line_number}: {exc.msg}.") from exc
+        return _validate_scan_results(rows, path)
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in {path}: {exc.msg}.") from exc
+    rows = payload if isinstance(payload, list) else [payload]
+    return _validate_scan_results(rows, path)
+
+
+def _validate_scan_results(rows: list[dict], path: Path) -> list[dict]:
+    if not rows:
+        raise ValueError(f"No scan results found in {path}.")
+    for index, row in enumerate(rows, start=1):
+        if not isinstance(row, dict) or not {"page", "score", "band", "checks"}.issubset(row):
+            raise ValueError(
+                f"{path} result {index} is not an AgentShelf scan result. "
+                "Use `agentshelf scan ... --format json` or `--format jsonl`."
+            )
+    return rows
+
+
+def _result_key(bundle: dict, key: str) -> str:
+    page = bundle.get("page", {})
+    value = page.get(key)
+    if not value:
+        raise ValueError(f"Scan result is missing page.{key}; cannot match audit runs.")
+    return str(value)
+
+
+def _blocking_issue_map(bundle: dict) -> dict[str, dict]:
+    return {issue["id"]: issue for issue in build_agent_contract(bundle)["blocking_issues"]}
+
+
+def _warning_set(bundle: dict) -> set[str]:
+    return {str(item) for item in bundle.get("warnings", [])}
+
+
+def _dimension_delta(baseline: dict, current: dict) -> dict[str, int]:
+    keys = sorted(set(baseline.get("dimensions", {})) | set(current.get("dimensions", {})))
+    return {
+        key: int(current.get("dimensions", {}).get(key, 0)) - int(baseline.get("dimensions", {}).get(key, 0))
+        for key in keys
+    }
+
+
+def _page_diff(source_key: str, baseline: dict, current: dict) -> dict:
+    baseline_issues = _blocking_issue_map(baseline)
+    current_issues = _blocking_issue_map(current)
+    baseline_warnings = _warning_set(baseline)
+    current_warnings = _warning_set(current)
+    score_delta = int(current["score"]) - int(baseline["score"])
+    band_delta = BAND_ORDER[current["band"]] - BAND_ORDER[baseline["band"]]
+    new_issue_ids = sorted(set(current_issues) - set(baseline_issues))
+    resolved_issue_ids = sorted(set(baseline_issues) - set(current_issues))
+    current_contract = build_agent_contract(current)
+    return {
+        "key": source_key,
+        "title": current.get("page", {}).get("title") or baseline.get("page", {}).get("title"),
+        "baseline": {
+            "score": baseline["score"],
+            "band": baseline["band"],
+            "dimensions": baseline.get("dimensions", {}),
+        },
+        "current": {
+            "score": current["score"],
+            "band": current["band"],
+            "dimensions": current.get("dimensions", {}),
+        },
+        "delta": {
+            "score": score_delta,
+            "band_changed": baseline["band"] != current["band"],
+            "band_direction": "improved" if band_delta > 0 else "regressed" if band_delta < 0 else "unchanged",
+            "dimensions": _dimension_delta(baseline, current),
+        },
+        "new_blocking_issues": [current_issues[issue_id] for issue_id in new_issue_ids],
+        "resolved_blocking_issues": [baseline_issues[issue_id] for issue_id in resolved_issue_ids],
+        "new_warnings": sorted(current_warnings - baseline_warnings),
+        "resolved_warnings": sorted(baseline_warnings - current_warnings),
+        "next_actions": current_contract["next_actions"],
+        "agent_tasks": current_contract["agent_tasks"][:3],
+    }
+
+
+def _is_regression(item: dict) -> bool:
+    return (
+        item["delta"]["score"] < 0
+        or item["delta"]["band_direction"] == "regressed"
+        or any(issue.get("severity") == "high" for issue in item["new_blocking_issues"])
+    )
+
+
+def _is_improvement(item: dict) -> bool:
+    return (
+        item["delta"]["score"] > 0
+        or item["delta"]["band_direction"] == "improved"
+        or bool(item["resolved_blocking_issues"])
+    )
+
+
+def _index_results(rows: list[dict], key: str, label: str) -> dict[str, dict]:
+    indexed: dict[str, dict] = {}
+    for row in rows:
+        row_key = _result_key(row, key)
+        if row_key in indexed:
+            raise ValueError(f"Duplicate {key} {row_key!r} in {label} results.")
+        indexed[row_key] = row
+    return indexed
+
+
+def _build_audit_diff(baseline_rows: list[dict], current_rows: list[dict], key: str = "source") -> dict:
+    baseline = _index_results(baseline_rows, key, "baseline")
+    current = _index_results(current_rows, key, "current")
+    common_keys = sorted(set(baseline) & set(current))
+    page_diffs = [_page_diff(item, baseline[item], current[item]) for item in common_keys]
+    regressions = sorted(
+        [item for item in page_diffs if _is_regression(item)],
+        key=lambda item: (
+            item["delta"]["score"],
+            -len([issue for issue in item["new_blocking_issues"] if issue.get("severity") == "high"]),
+            item["key"],
+        ),
+    )
+    improvements = sorted(
+        [item for item in page_diffs if _is_improvement(item) and not _is_regression(item)],
+        key=lambda item: (-item["delta"]["score"], item["key"]),
+    )
+    new_pages = [
+        {
+            "key": item,
+            "title": current[item]["page"].get("title"),
+            "score": current[item]["score"],
+            "band": current[item]["band"],
+        }
+        for item in sorted(set(current) - set(baseline))
+    ]
+    removed_pages = [
+        {
+            "key": item,
+            "title": baseline[item]["page"].get("title"),
+            "score": baseline[item]["score"],
+            "band": baseline[item]["band"],
+        }
+        for item in sorted(set(baseline) - set(current))
+    ]
+    unchanged_count = len(page_diffs) - len(regressions) - len(improvements)
+    summary = {
+        "baseline_count": len(baseline_rows),
+        "current_count": len(current_rows),
+        "matched_count": len(common_keys),
+        "regressed_count": len(regressions),
+        "improved_count": len(improvements),
+        "unchanged_count": max(unchanged_count, 0),
+        "new_page_count": len(new_pages),
+        "removed_page_count": len(removed_pages),
+    }
+    return {
+        "contract": "agentshelf.audit_diff.v1",
+        "match_key": key,
+        "summary": summary,
+        "regressions": regressions,
+        "improvements": improvements,
+        "new_pages": new_pages,
+        "removed_pages": removed_pages,
+        "agent_recommendation": _audit_diff_recommendation(summary, regressions, new_pages, removed_pages),
+    }
+
+
+def _audit_diff_recommendation(summary: dict, regressions: list[dict], new_pages: list[dict], removed_pages: list[dict]) -> str:
+    if regressions:
+        first = regressions[0]
+        return (
+            f"Prioritize {first['key']}: score changed {first['delta']['score']:+d} "
+            f"and {len(first['new_blocking_issues'])} blocking issue(s) are newly present."
+        )
+    if summary["improved_count"] and not summary["regressed_count"]:
+        return "No regressions detected; review improved pages and keep the current publishing workflow."
+    if new_pages or removed_pages:
+        return "No matched-page regressions detected; review new or removed pages for catalog coverage changes."
+    return "No material audit changes detected between these runs."
+
+
+def _render_audit_diff_markdown(payload: dict) -> str:
+    summary = payload["summary"]
+    lines = [
+        "# AgentShelf Audit Diff",
+        "",
+        "## Summary",
+        f"- Baseline pages: {summary['baseline_count']}",
+        f"- Current pages: {summary['current_count']}",
+        f"- Matched pages: {summary['matched_count']}",
+        f"- Regressed pages: {summary['regressed_count']}",
+        f"- Improved pages: {summary['improved_count']}",
+        f"- New pages: {summary['new_page_count']}",
+        f"- Removed pages: {summary['removed_page_count']}",
+        f"- Recommendation: {payload['agent_recommendation']}",
+        "",
+        "## Regressions",
+    ]
+    if payload["regressions"]:
+        for item in payload["regressions"]:
+            issues = ", ".join(issue["id"] for issue in item["new_blocking_issues"]) or "no new blockers"
+            lines.append(
+                f"- `{item['key']}`: {item['baseline']['score']} -> {item['current']['score']} "
+                f"({item['delta']['score']:+d}), band {item['baseline']['band']} -> {item['current']['band']}; "
+                f"new blockers: {issues}"
+            )
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Improvements"])
+    if payload["improvements"]:
+        for item in payload["improvements"]:
+            resolved = ", ".join(issue["id"] for issue in item["resolved_blocking_issues"]) or "score/band improved"
+            lines.append(
+                f"- `{item['key']}`: {item['baseline']['score']} -> {item['current']['score']} "
+                f"({item['delta']['score']:+d}); resolved: {resolved}"
+            )
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Catalog Changes"])
+    if payload["new_pages"]:
+        for item in payload["new_pages"]:
+            lines.append(f"- New `{item['key']}`: {item['score']} ({item['band']})")
+    if payload["removed_pages"]:
+        for item in payload["removed_pages"]:
+            lines.append(f"- Removed `{item['key']}`: {item['score']} ({item['band']})")
+    if not payload["new_pages"] and not payload["removed_pages"]:
+        lines.append("- None")
+    lines.extend(["", "## Next Actions"])
+    if payload["regressions"]:
+        for item in payload["regressions"][:5]:
+            if item["agent_tasks"]:
+                task = item["agent_tasks"][0]
+                lines.append(f"- `{item['key']}`: {task['id']} - {task['acceptance_check']}")
+            elif item["next_actions"]:
+                lines.append(f"- `{item['key']}`: {item['next_actions'][0]}")
+    else:
+        lines.append("- No regression remediation needed.")
+    return "\n".join(lines) + "\n"
+
+
 def _render_discovery(payload: dict, output_format: str) -> str:
     if output_format == "json":
         return json.dumps(payload, indent=2) + "\n"
@@ -581,6 +835,13 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("rendered", type=Path, help="Rendered HTML snapshot path.")
     compare.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
     compare.add_argument("--output", type=Path, help="Optional output file path.")
+
+    diff = subcommands.add_parser("diff", help="Compare two AgentShelf scan result files for regressions.")
+    diff.add_argument("baseline", type=Path, help="Baseline JSON or JSONL output from `agentshelf scan`.")
+    diff.add_argument("current", type=Path, help="Current JSON or JSONL output from `agentshelf scan`.")
+    diff.add_argument("--key", choices=("source", "title"), default="source", help="Page field used to match audit runs.")
+    diff.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
+    diff.add_argument("--output", type=Path, help="Optional output file path.")
 
     discover = subcommands.add_parser("discover", help="Discover product-like URLs from robots.txt sitemap hints or a sitemap URL.")
     discover.add_argument("--site", help="Storefront root URL. AgentShelf reads robots.txt for Sitemap hints.")
@@ -656,6 +917,12 @@ def main() -> int:
             rendered_bundle = _load_scan_as(args.rendered, "rendered")
             payload = _build_compare(raw_bundle, rendered_bundle)
             rendered = json.dumps(payload, indent=2) + "\n" if args.format == "json" else _render_compare_markdown(payload)
+            exit_code = 0
+        elif args.command == "diff":
+            baseline_rows = _load_scan_results(args.baseline)
+            current_rows = _load_scan_results(args.current)
+            payload = _build_audit_diff(baseline_rows, current_rows, key=args.key)
+            rendered = json.dumps(payload, indent=2) + "\n" if args.format == "json" else _render_audit_diff_markdown(payload)
             exit_code = 0
         elif args.command == "discover":
             payload = _discover_urls(
