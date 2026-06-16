@@ -13,13 +13,13 @@ from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
-from agentshelf.engine import build_agent_contract, parse_input, render_markdown, scan_readiness
+from agentshelf.engine import ADAPTER_PROFILES, build_agent_contract, parse_input, render_markdown, scan_readiness
 
 
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.9 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.10 (+https://github.com/wureny/AgentShelf)"
 RENDER_EXTRA_MESSAGE = (
     "Rendered snapshots require the optional Playwright extra. "
     "Install it with `python3 -m pip install 'agentshelf[render]'` and then run "
@@ -83,16 +83,16 @@ def _coerce_score(value: object) -> int | None:
     return score
 
 
-def _load_scan(path: Path) -> dict:
+def _load_scan(path: Path, adapter_profile: str = "auto") -> dict:
     raw = path.read_text(encoding="utf-8")
     parsed = parse_input(raw, fallback_title=path.stem.replace("_", " ").title(), source=str(path))
-    return scan_readiness(parsed)
+    return scan_readiness(parsed, adapter_profile=adapter_profile)
 
 
-def _load_scan_as(path: Path, label: str) -> dict:
+def _load_scan_as(path: Path, label: str, adapter_profile: str = "auto") -> dict:
     raw = path.read_text(encoding="utf-8")
     parsed = parse_input(raw, fallback_title=path.stem.replace("_", " ").title(), source=f"{label}:{path}")
-    return scan_readiness(parsed)
+    return scan_readiness(parsed, adapter_profile=adapter_profile)
 
 
 def _is_url(target: str) -> bool:
@@ -278,15 +278,15 @@ def _write_text_atomic(path: Path, text: str) -> None:
     tmp_path.replace(path)
 
 
-def _load_target(target: str) -> dict:
+def _load_target(target: str, adapter_profile: str = "auto") -> dict:
     if _is_url(target):
         raw = _fetch_url(target)
         parsed = parse_input(raw, fallback_title=urlparse(target).netloc or "Fetched Product Page", source=target)
-        return scan_readiness(parsed)
+        return scan_readiness(parsed, adapter_profile=adapter_profile)
     path = Path(target)
     raw = path.read_text(encoding="utf-8")
     parsed = parse_input(raw, fallback_title=path.stem.replace("_", " ").title(), source=str(path.resolve()))
-    return scan_readiness(parsed)
+    return scan_readiness(parsed, adapter_profile=adapter_profile)
 
 
 def _render_batch_markdown(results: Iterable[dict]) -> str:
@@ -805,11 +805,12 @@ def _build_audit_run(
     min_score: int | None,
     fail_on: str | None,
     key: str,
+    adapter_profile: str,
 ) -> tuple[dict, str]:
     paths = _resolve_inputs(target, batch)
     if len(paths) > 1 and not batch:
         raise ValueError("Multiple inputs found. Re-run with --batch.")
-    results = [_load_scan(path) for path in paths]
+    results = [_load_scan(path, adapter_profile=adapter_profile) for path in paths]
     timestamp = _utc_timestamp()
     history_dir.mkdir(parents=True, exist_ok=True)
 
@@ -855,6 +856,7 @@ def _build_audit_run(
         "threshold_failed": bool(exit_code),
         "min_score": min_score,
         "fail_on": fail_on,
+        "adapter_profile": adapter_profile,
     }
     return payload, _render_audit_run_markdown(payload)
 
@@ -942,6 +944,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scan.add_argument("--output", type=Path, help="Optional output file path.")
     scan.add_argument("--min-score", type=int, help="Return non-zero when any page scores below this value.")
+    scan.add_argument("--profile", choices=ADAPTER_PROFILES, default="auto", help="Storefront adapter profile for commerce extraction.")
     scan.add_argument(
         "--fail-on",
         choices=("weak", "not_ready"),
@@ -953,6 +956,7 @@ def build_parser() -> argparse.ArgumentParser:
     agent.add_argument("--format", choices=("json",), default="json", help="Output format. Defaults to JSON.")
     agent.add_argument("--contract", choices=("v1",), default="v1", help="Agent contract version.")
     agent.add_argument("--output", type=Path, help="Optional output file path.")
+    agent.add_argument("--profile", choices=ADAPTER_PROFILES, default="auto", help="Storefront adapter profile for commerce extraction.")
     agent.add_argument(
         "--fail-on-blockers",
         action="store_true",
@@ -963,12 +967,14 @@ def build_parser() -> argparse.ArgumentParser:
     tasks.add_argument("path", help="HTML/text file, directory, or glob to scan.")
     tasks.add_argument("--batch", action="store_true", help="Allow directory or glob batch scanning.")
     tasks.add_argument("--output", type=Path, help="Optional output file path.")
+    tasks.add_argument("--profile", choices=ADAPTER_PROFILES, default="auto", help="Storefront adapter profile for commerce extraction.")
 
     compare = subcommands.add_parser("compare", help="Compare raw and rendered snapshots for unlocked agent-readiness signals.")
     compare.add_argument("raw", type=Path, help="Raw HTML snapshot path.")
     compare.add_argument("rendered", type=Path, help="Rendered HTML snapshot path.")
     compare.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
     compare.add_argument("--output", type=Path, help="Optional output file path.")
+    compare.add_argument("--profile", choices=ADAPTER_PROFILES, default="auto", help="Storefront adapter profile for commerce extraction.")
 
     diff = subcommands.add_parser("diff", help="Compare two AgentShelf scan result files for regressions.")
     diff.add_argument("baseline", type=Path, help="Baseline JSON or JSONL output from `agentshelf scan`.")
@@ -989,6 +995,7 @@ def build_parser() -> argparse.ArgumentParser:
     audit_run.add_argument("--report", type=Path, help="Optional Markdown diff report path. Defaults to <history-dir>/audit-diff.md.")
     audit_run.add_argument("--tasks-output", type=Path, help="Optional JSONL task output for coding agents.")
     audit_run.add_argument("--key", choices=("source", "title"), default="source", help="Page field used to match audit runs.")
+    audit_run.add_argument("--profile", choices=ADAPTER_PROFILES, default="auto", help="Storefront adapter profile for commerce extraction.")
     audit_run.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Summary output format.")
     audit_run.add_argument("--output", type=Path, help="Optional path for the audit-run summary.")
     audit_run.add_argument("--min-score", type=int, help="Return non-zero when any page scores below this value.")
@@ -1043,20 +1050,23 @@ def main() -> int:
             args.min_score = _config_value(config, "min_score", args.min_score, None)
             args.fail_on = _config_value(config, "fail_on", args.fail_on, None)
             args.output = _config_value(config, "output", args.output, None)
+            args.profile = _config_value(config, "profile", args.profile, "auto")
             args.min_score = _coerce_score(args.min_score)
             if args.format not in {"markdown", "json", "jsonl", "sarif"}:
                 raise ValueError("Config key `format` must be markdown, json, jsonl, or sarif.")
             if args.fail_on is not None and args.fail_on not in {"weak", "not_ready"}:
                 raise ValueError("Config key `fail_on` must be weak or not_ready.")
+            if args.profile not in ADAPTER_PROFILES:
+                raise ValueError(f"Config key `profile` must be one of: {', '.join(ADAPTER_PROFILES)}.")
             if args.output is not None and not isinstance(args.output, Path):
                 args.output = Path(str(args.output))
             paths = _resolve_inputs(args.path, args.batch)
             batch = args.batch or len(paths) > 1
-            results = [_load_scan(path) for path in paths]
+            results = [_load_scan(path, adapter_profile=args.profile) for path in paths]
             rendered = _render_results(results, args.format, batch)
             exit_code = 1 if any(_fails_threshold(item, args.min_score, args.fail_on) for item in results) else 0
         elif args.command == "agent-audit":
-            bundle = _load_target(args.target)
+            bundle = _load_target(args.target, adapter_profile=args.profile)
             contract = build_agent_contract(bundle, contract=args.contract)
             rendered = json.dumps(contract, indent=2) + "\n"
             exit_code = 1 if args.fail_on_blockers and any(issue["severity"] == "high" for issue in contract["blocking_issues"]) else 0
@@ -1064,12 +1074,12 @@ def main() -> int:
             paths = _resolve_inputs(args.path, args.batch)
             if len(paths) > 1 and not args.batch:
                 raise ValueError("Multiple inputs found. Re-run with --batch.")
-            results = [_load_scan(path) for path in paths]
+            results = [_load_scan(path, adapter_profile=args.profile) for path in paths]
             rendered = _render_agent_tasks(results)
             exit_code = 0
         elif args.command == "compare":
-            raw_bundle = _load_scan_as(args.raw, "raw")
-            rendered_bundle = _load_scan_as(args.rendered, "rendered")
+            raw_bundle = _load_scan_as(args.raw, "raw", adapter_profile=args.profile)
+            rendered_bundle = _load_scan_as(args.rendered, "rendered", adapter_profile=args.profile)
             payload = _build_compare(raw_bundle, rendered_bundle)
             rendered = json.dumps(payload, indent=2) + "\n" if args.format == "json" else _render_compare_markdown(payload)
             exit_code = 0
@@ -1090,6 +1100,7 @@ def main() -> int:
                 min_score=args.min_score,
                 fail_on=args.fail_on,
                 key=args.key,
+                adapter_profile=args.profile,
             )
             rendered = json.dumps(payload, indent=2) + "\n" if args.format == "json" else markdown
             exit_code = 1 if payload["threshold_failed"] else 0

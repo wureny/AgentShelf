@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.0
+- Added storefront adapter profiles: `auto`, `generic`, `shopify`, `woocommerce`, and `headless`.
+- Added profile detection metadata to `commerce_signals` so agents can see requested, detected, and active extraction profiles.
+- Added `--profile` support across scan, agent-audit, agent-tasks, compare, audit-run, config files, and the GitHub Action.
+
 ## 0.9.0
 - Added embedded commerce signal extraction for Shopify/theme-style product JSON, variant arrays, selling plan groups, metafield-like keys, and policy snippets.
 - Upgraded price, availability, variant readiness, offer completeness, agent answerability, specs, and merchant-feed checks to use extracted commerce evidence.

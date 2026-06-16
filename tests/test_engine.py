@@ -138,6 +138,7 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(bundle["commerce_signals"]["variant_count"], 2)
         self.assertEqual(bundle["commerce_signals"]["selling_plan_group_count"], 1)
         self.assertIn("custom.tasting_notes", bundle["commerce_signals"]["metafield_keys"])
+        self.assertEqual(bundle["commerce_signals"]["adapter_profile"]["detected"], "shopify")
 
     def test_incomplete_variant_json_does_not_pass_variant_readiness(self) -> None:
         html = """<html><head><title>Half Wired Variant</title></head><body>
@@ -174,6 +175,45 @@ window.ShopifyAnalytics.meta = {
         self.assertEqual(bundle["commerce_signals"]["variant_count"], 1)
         self.assertEqual(bundle["commerce_signals"]["variants_with_price"], 1)
         self.assertTrue(next(check for check in bundle["checks"] if check["id"] == "variant_readiness")["passed"])
+
+    def test_woocommerce_variation_profile_extracts_variation_data(self) -> None:
+        html = """<html><head><title>Woo Hoodie</title></head><body class="single-product woocommerce">
+<h1>Woo Hoodie</h1>
+<form class="variations_form" data-product_variations='[
+  {"variation_id":11,"display_price":49.99,"is_in_stock":true,"attributes":{"attribute_pa_size":"M","attribute_pa_color":"Blue"}},
+  {"variation_id":12,"display_price":54.99,"is_in_stock":false,"attributes":{"attribute_pa_size":"L","attribute_pa_color":"Black"}}
+]'></form>
+<p>Delivery in 4 days. Returns within 30 days. Rating 4.6/5 from 80 reviews. FAQ: washable.</p>
+</body></html>"""
+        bundle = scan_readiness(parse_input(html))
+
+        self.assertEqual(bundle["commerce_signals"]["adapter_profile"]["detected"], "woocommerce")
+        self.assertEqual(bundle["commerce_signals"]["variant_count"], 2)
+        self.assertEqual(bundle["commerce_signals"]["variants_with_price"], 2)
+        self.assertEqual(bundle["commerce_signals"]["variants_with_availability"], 2)
+        self.assertIn("pa_size", bundle["commerce_signals"]["option_names"])
+        self.assertTrue(next(check for check in bundle["checks"] if check["id"] == "variant_readiness")["passed"])
+
+    def test_headless_profile_detects_next_data_variants(self) -> None:
+        html = """<html><head><title>Headless Pack</title></head><body>
+<h1>Headless Pack</h1>
+<script id="__NEXT_DATA__" type="application/json">
+{"props":{"pageProps":{"product":{"options":[{"name":"Pack"}],"variants":[{"id":"v1","price":"19.00","available":true,"option1":"Single"}]}}}}
+</script>
+<p>Ships tomorrow. Refunds accepted within 14 days. FAQ: compatible with most kits.</p>
+</body></html>"""
+        bundle = scan_readiness(parse_input(html))
+
+        self.assertEqual(bundle["commerce_signals"]["adapter_profile"]["detected"], "headless")
+        self.assertEqual(bundle["commerce_signals"]["variant_count"], 1)
+        self.assertTrue(next(check for check in bundle["checks"] if check["id"] == "price")["passed"])
+
+    def test_forced_adapter_profile_overrides_detection(self) -> None:
+        bundle = scan_readiness(parse_input("<html><title>Plain</title><h1>Plain</h1></html>"), adapter_profile="shopify")
+
+        self.assertEqual(bundle["commerce_signals"]["adapter_profile"]["requested"], "shopify")
+        self.assertEqual(bundle["commerce_signals"]["adapter_profile"]["detected"], "generic")
+        self.assertEqual(bundle["commerce_signals"]["adapter_profile"]["active"], "shopify")
 
 
 class BenchmarkTests(unittest.TestCase):

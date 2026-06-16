@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Deepen storefront-specific evidence extraction so AgentShelf catches real Shopify/DTC commerce signals.
+Make storefront-specific extraction configurable for production CI and agent workflows.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -30,6 +30,7 @@ Deepen storefront-specific evidence extraction so AgentShelf catches real Shopif
 - Added `audit-run` for local scheduled audits with safe previous/current result rotation, timestamped archives, generated diff reports, and optional agent task output.
 - Added embedded commerce signal extraction for Shopify/theme-style product JSON, variants, selling plan groups, metafield-like keys, and policy snippets.
 - Upgraded price, inventory, variant readiness, offer completeness, specs, policy, agent answerability, and merchant-feed checks to use storefront commerce evidence.
+- Added storefront adapter profiles (`auto`, `generic`, `shopify`, `woocommerce`, `headless`) with CLI, config, GitHub Action, JSON, and Markdown support.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -50,9 +51,10 @@ Deepen storefront-specific evidence extraction so AgentShelf catches real Shopif
 - `agentshelf diff previous-results.jsonl current-results.jsonl --output audit-diff.md`
 - `agentshelf audit-run "snapshots/*.html" --batch --history-dir .agentshelf/runs --tasks-output agentshelf-tasks.jsonl`
 - `agentshelf scan examples/sample_product_page.html --format markdown`
+- `agentshelf scan examples/shopify_variant_product.html --profile shopify --format json`
 
 ## Next Best Task
-Add optional storefront adapter profiles for Shopify, WooCommerce, and headless commerce exports so users can tune extraction and scoring without forking rules.
+Add profile-specific benchmark fixtures and docs for WooCommerce and headless storefront exports.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

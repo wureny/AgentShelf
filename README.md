@@ -29,6 +29,12 @@ Batch scan page snapshots:
 agentshelf scan "examples/*.html" --batch --format jsonl --output agentshelf-results.jsonl
 ```
 
+Force a storefront adapter profile when you know the page type:
+
+```bash
+agentshelf scan examples/shopify_variant_product.html --profile shopify --format markdown
+```
+
 Discover product URLs from sitemap hints:
 
 ```bash
@@ -130,6 +136,7 @@ Options:
 - `--batch`: allow directory or glob scanning
 - `--config <path>`: load repeatable scan defaults from JSON
 - `--format markdown|json|jsonl|sarif`: choose report format
+- `--profile auto|generic|shopify|woocommerce|headless`: choose or auto-detect storefront extraction behavior
 - `--output <path>`: write output to a file
 - `--min-score <0-100>`: return non-zero when any page scores below this value
 - `--fail-on weak|not_ready`: return non-zero when any page is at or below the selected band
@@ -211,6 +218,7 @@ jobs:
           fail-on: not_ready
           format: sarif
           output: agentshelf-results.sarif
+          profile: auto
 ```
 
 ## JSON Output
@@ -223,6 +231,11 @@ JSON reports include stable fields for dashboards and CI:
   "band": "strong",
   "checks": [],
   "commerce_signals": {
+    "adapter_profile": {
+      "requested": "auto",
+      "detected": "shopify",
+      "active": "shopify"
+    },
     "variant_count": 2,
     "variants_with_price": 2,
     "variants_with_availability": 2,
@@ -248,6 +261,14 @@ JSON reports include stable fields for dashboards and CI:
 AgentShelf rules should be deterministic, explainable, and operator-actionable. Every failed check should point to a concrete storefront improvement, not just a score penalty.
 
 AgentShelf treats Shopify/theme-style embedded product data as commerce evidence, not noise. Variant JSON can satisfy price, availability, and variant-readiness checks when it includes readable options, price, and stock context; incomplete variant JSON is reported as incomplete instead of being overtrusted.
+
+Adapter profiles let production users choose deterministic extraction behavior:
+
+- `auto`: detect storefront markers and choose a profile.
+- `generic`: avoid storefront-specific assumptions.
+- `shopify`: prioritize Shopify theme JSON, variants, selling plans, metafield-like keys, and policy snippets.
+- `woocommerce`: prioritize WooCommerce variation forms and `data-product_variations`.
+- `headless`: prioritize app-state JSON such as `__NEXT_DATA__`, `__NUXT__`, and initial state exports.
 
 ## Why This Is Not Just SEO/Schema Checking
 AgentShelf checks whether a shopping agent can make a reliable purchase recommendation, not only whether a page has rich-result metadata. The benchmark fixtures cover agent-specific failures:
@@ -280,6 +301,8 @@ agentshelf agent-audit examples/weak_product_page.html --contract v1
 agentshelf agent-tasks examples --batch
 agentshelf compare examples/js_product_raw.html examples/js_product_rendered.html --format json
 agentshelf discover --sitemap https://example.com/sitemap.xml --limit 10
+agentshelf scan examples/woocommerce_variable_product.html --profile woocommerce --format json
+agentshelf scan examples/headless_product_state.html --profile headless --format json
 python3 -m pip install -e ".[render]"  # optional rendered snapshots
 ```
 
@@ -289,6 +312,8 @@ python3 -m pip install -e ".[render]"  # optional rendered snapshots
 - [JS raw sample page](examples/js_product_raw.html)
 - [JS rendered sample page](examples/js_product_rendered.html)
 - [Shopify-style variant sample page](examples/shopify_variant_product.html)
+- [WooCommerce variable product sample page](examples/woocommerce_variable_product.html)
+- [Headless app-state sample page](examples/headless_product_state.html)
 - [Sample report](outputs/sample_report.md)
 
 ## License

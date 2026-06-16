@@ -1,18 +1,19 @@
 # Architecture
 
 ## Overview
-The MVP is a lightweight Python CLI with a three-step flow:
+AgentShelf is a lightweight Python CLI with a composable audit workflow:
 
 1. Discover product-like URLs from robots.txt sitemap hints or an explicit sitemap URL.
 2. Read an HTML/text product-page snapshot from disk, fetch raw HTML with `snapshot`, or capture rendered HTML with the optional `agentshelf[render]` extra.
 3. Run weighted deterministic checks for price, inventory, shipping, returns, specs, reviews, FAQ, and Product schema signals.
 4. Parse Product JSON-LD when present to extract stronger evidence for offers and availability.
-5. Extract Shopify/theme-style commerce signals from embedded product JSON, variant arrays, selling plan groups, metafield-like keys, and policy snippets.
-6. Compute dimension scores for discoverability, offer clarity, policy clarity, and agent actionability.
-7. Render human reports, JSON/JSONL, SARIF, or an agent-native JSON contract with prioritized tasks.
-8. Compare raw and rendered snapshots to decide whether browser capture is worth the operational cost for a page class.
-9. Compare scheduled scan result files to surface product-page regressions, improvements, and catalog coverage changes.
-10. Run scheduled audits with local previous/current history, timestamped archives, diff reports, and optional agent task output.
+5. Select or auto-detect a storefront adapter profile (`generic`, `shopify`, `woocommerce`, or `headless`).
+6. Extract commerce signals from embedded product JSON, variant arrays, WooCommerce variation forms, selling plan groups, metafield-like keys, and policy snippets.
+7. Compute dimension scores for discoverability, offer clarity, policy clarity, and agent actionability.
+8. Render human reports, JSON/JSONL, SARIF, or an agent-native JSON contract with prioritized tasks.
+9. Compare raw and rendered snapshots to decide whether browser capture is worth the operational cost for a page class.
+10. Compare scheduled scan result files to surface product-page regressions, improvements, and catalog coverage changes.
+11. Run scheduled audits with local previous/current history, timestamped archives, diff reports, and optional agent task output.
 
 ## Components
 - `src/agentshelf/engine.py`: parser, heuristic scoring engine, JSON-LD extraction, and renderers
@@ -29,7 +30,8 @@ The MVP is a lightweight Python CLI with a three-step flow:
 - Rendered snapshot mode is optional and dynamically imports Playwright only when `--rendered` is requested.
 - Local-file input first, so the product can run without network access or storefront credentials.
 - Weighted pass/fail checks keep the first version explainable and easy to extend.
-- Embedded commerce extraction treats Shopify/theme JSON as first-class evidence, so variant price, availability, selling plans, and metafield-like specs can help checks pass even when visible copy is sparse.
+- Adapter profiles keep extraction deterministic while still supporting real storefront variation: `auto` detects a likely profile, and explicit profiles let CI pin Shopify, WooCommerce, headless, or generic behavior.
+- Embedded commerce extraction treats storefront JSON as first-class evidence, so variant price, availability, selling plans, WooCommerce variation data, and metafield-like specs can help checks pass even when visible copy is sparse.
 - GitHub Action wraps the CLI instead of duplicating scanning logic.
 - `agent-audit` uses stable task-oriented JSON so coding agents can act on results directly.
 - `agent-tasks` emits JSONL so coding agents can remediate batches without parsing human reports.
@@ -44,5 +46,5 @@ The MVP is a lightweight Python CLI with a three-step flow:
 
 ## Extension Path
 - Add deeper schema validation for variants, offers, return policy, and merchant policy metadata.
-- Add optional storefront adapter profiles for Shopify, WooCommerce, and headless commerce exports while keeping the base CLI secret-free.
+- Add profile-specific docs and benchmark packs for Shopify, WooCommerce, and headless commerce exports while keeping the base CLI secret-free.
 - Add empirical benchmark runs against real agent answer quality before claiming ranking or conversion lift.

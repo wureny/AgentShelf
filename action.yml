@@ -24,6 +24,10 @@ inputs:
     description: Report output path.
     required: false
     default: agentshelf-report.md
+  profile:
+    description: "Storefront adapter profile: auto, generic, shopify, woocommerce, or headless."
+    required: false
+    default: auto
 runs:
   using: composite
   steps:
@@ -45,6 +49,9 @@ runs:
         fi
         if [ -n "${{ inputs.fail-on }}" ]; then
           args+=(--fail-on "${{ inputs.fail-on }}")
+        fi
+        if [ -z "${{ inputs.config }}" ] || [ "${{ inputs.profile }}" != "auto" ]; then
+          args+=(--profile "${{ inputs.profile }}")
         fi
         if [ -z "${{ inputs.config }}" ] || [ "${{ inputs.output }}" != "agentshelf-report.md" ]; then
           args+=(--output "${{ inputs.output }}")

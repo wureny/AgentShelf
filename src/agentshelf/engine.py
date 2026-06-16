@@ -128,6 +128,7 @@ CHECKS = [
 ]
 
 DIMENSIONS = ("discoverability", "offer_clarity", "policy_clarity", "agent_actionability")
+ADAPTER_PROFILES = ("auto", "generic", "shopify", "woocommerce", "headless")
 
 
 @dataclass
@@ -269,9 +270,14 @@ def _parse_embedded_json_objects(html: str) -> list[Any]:
                 objects.append(json.loads(candidate))
             except json.JSONDecodeError:
                 continue
-    for attr in re.findall(r"data-[\w:-]*product[\w:-]*=['\"]([^'\"]+)['\"]", html, flags=re.IGNORECASE):
+    for match in re.finditer(r"data-[\w:-]*product[\w:-]*=(['\"])([\s\S]*?)\1", html, flags=re.IGNORECASE):
         try:
-            objects.append(json.loads(html_lib.unescape(attr)))
+            objects.append(json.loads(html_lib.unescape(match.group(2))))
+        except json.JSONDecodeError:
+            continue
+    for match in re.finditer(r"data-product_variations=(['\"])([\s\S]*?)\1", html, flags=re.IGNORECASE):
+        try:
+            objects.append({"variations": json.loads(html_lib.unescape(match.group(2)))})
         except json.JSONDecodeError:
             continue
     return objects
@@ -306,8 +312,15 @@ def _balanced_json_object(text: str, start: int) -> str | None:
     return None
 
 
-def _commerce_signals(html: str, plain_text: str, products: list[dict[str, Any]], offers: list[dict[str, Any]]) -> dict[str, Any]:
+def _commerce_signals(
+    html: str,
+    plain_text: str,
+    products: list[dict[str, Any]],
+    offers: list[dict[str, Any]],
+    requested_profile: str,
+) -> dict[str, Any]:
     embedded = _parse_embedded_json_objects(html)
+    adapter_profile = _adapter_profile(html, embedded, requested_profile)
     variants: list[dict[str, Any]] = []
     selling_plan_groups: list[Any] = []
     option_names: set[str] = set()
@@ -320,6 +333,9 @@ def _commerce_signals(html: str, plain_text: str, products: list[dict[str, Any]]
             raw_variants = value.get("variants")
             if isinstance(raw_variants, list):
                 variants.extend(item for item in raw_variants if isinstance(item, dict))
+            raw_variations = value.get("variations")
+            if isinstance(raw_variations, list):
+                variants.extend(item for item in raw_variations if isinstance(item, dict))
             raw_selling_plans = value.get("selling_plan_groups") or value.get("sellingPlanGroups")
             if isinstance(raw_selling_plans, list):
                 selling_plan_groups.extend(raw_selling_plans)
@@ -342,6 +358,9 @@ def _commerce_signals(html: str, plain_text: str, products: list[dict[str, Any]]
                             metafield_keys.add(f"{namespace}.{key}")
                         elif key:
                             metafield_keys.add(str(key))
+            attributes = value.get("attributes")
+            if isinstance(attributes, dict):
+                option_names.update(str(key).replace("attribute_", "") for key in attributes)
 
     for match in re.finditer(r"data-metafield-([\w:-]+)", html, flags=re.IGNORECASE):
         metafield_keys.add(match.group(1).replace("-", "."))
@@ -355,6 +374,7 @@ def _commerce_signals(html: str, plain_text: str, products: list[dict[str, Any]]
     variant_availability_count = sum(1 for variant in variants if _variant_has_availability(variant))
     policy_snippets = _policy_snippets(plain_text)
     return {
+        "adapter_profile": adapter_profile,
         "variant_count": len(variants),
         "variants_with_price": variant_price_count,
         "variants_with_availability": variant_availability_count,
@@ -367,12 +387,55 @@ def _commerce_signals(html: str, plain_text: str, products: list[dict[str, Any]]
     }
 
 
+def _adapter_profile(html: str, embedded: list[Any], requested_profile: str) -> dict[str, Any]:
+    requested = _normalize_adapter_profile(requested_profile)
+    detected, evidence = _detect_adapter_profile(html, embedded)
+    active = detected if requested == "auto" else requested
+    return {"requested": requested, "detected": detected, "active": active, "evidence": evidence}
+
+
+def _normalize_adapter_profile(value: str | None) -> str:
+    profile = (value or "auto").strip().lower()
+    if profile not in ADAPTER_PROFILES:
+        raise ValueError(f"Unsupported adapter profile {value!r}. Use one of: {', '.join(ADAPTER_PROFILES)}.")
+    return profile
+
+
+def _detect_adapter_profile(html: str, embedded: list[Any]) -> tuple[str, list[str]]:
+    lower_html = html.lower()
+    evidence: list[str] = []
+    if any(token in lower_html for token in ("shopify-section", "shopifyanalytics", "productjson", "selling_plan_groups")):
+        evidence.append("shopify theme markers")
+        return "shopify", evidence
+    if any(token in lower_html for token in ("woocommerce", "data-product_variations", "variations_form", "wc-variation")):
+        evidence.append("woocommerce variation markers")
+        return "woocommerce", evidence
+    if any(token in lower_html for token in ("__next_data__", "__nuxt__", "__initial_state__", "window.__initial_state__")):
+        evidence.append("headless app state markers")
+        return "headless", evidence
+    if any(_json_tree_has_key(item, {"variants", "selling_plan_groups", "variations"}) for item in embedded):
+        evidence.append("embedded commerce JSON")
+        return "headless", evidence
+    return "generic", ["no storefront-specific markers detected"]
+
+
+def _json_tree_has_key(value: Any, keys: set[str]) -> bool:
+    if isinstance(value, dict):
+        return any(key in value for key in keys) or any(_json_tree_has_key(child, keys) for child in value.values())
+    if isinstance(value, list):
+        return any(_json_tree_has_key(child, keys) for child in value)
+    return False
+
+
 def _variant_has_price(variant: dict[str, Any]) -> bool:
-    return any(variant.get(key) not in (None, "") for key in ("price", "price_min", "price_max", "compare_at_price"))
+    return any(
+        variant.get(key) not in (None, "")
+        for key in ("price", "price_min", "price_max", "compare_at_price", "display_price", "display_regular_price")
+    )
 
 
 def _variant_has_availability(variant: dict[str, Any]) -> bool:
-    if any(key in variant for key in ("available", "in_stock", "inventory_quantity", "inventory_policy")):
+    if any(key in variant for key in ("available", "in_stock", "is_in_stock", "inventory_quantity", "inventory_policy")):
         return True
     availability = str(variant.get("availability", "")).lower()
     return availability in {"instock", "in stock", "outofstock", "out of stock", "preorder", "pre-order"}
@@ -381,7 +444,7 @@ def _variant_has_availability(variant: dict[str, Any]) -> bool:
 def _policy_snippets(plain_text: str) -> dict[str, list[str]]:
     snippets = {"shipping": [], "returns": []}
     patterns = {
-        "shipping": r"[^.]{0,80}(?:shipping|delivery|arrives|ships in|dispatch)[^.]{0,80}",
+        "shipping": r"[^.]{0,80}(?:shipping|delivery|arrives|ships(?:\s+\w+)?|dispatch)[^.]{0,80}",
         "returns": r"[^.]{0,80}(?:returns?|refund|exchange)[^.]{0,80}",
     }
     for key, pattern in patterns.items():
@@ -603,7 +666,8 @@ def _detect_contradictions(plain_text: str, offers: list[dict[str, Any]]) -> lis
     return issues
 
 
-def scan_readiness(scan_input: ScanInput) -> dict[str, Any]:
+def scan_readiness(scan_input: ScanInput, adapter_profile: str = "auto") -> dict[str, Any]:
+    adapter_profile = _normalize_adapter_profile(adapter_profile)
     plain_text = _visible_text(scan_input.content).lower()
     jsonld_items, warnings = _jsonld_items(scan_input.content)
     products = [
@@ -613,7 +677,7 @@ def scan_readiness(scan_input: ScanInput) -> dict[str, Any]:
     ]
     offers = _offer_values(products)
     schema_types = _item_types(jsonld_items)
-    commerce = _commerce_signals(scan_input.content, plain_text, products, offers)
+    commerce = _commerce_signals(scan_input.content, plain_text, products, offers, requested_profile=adapter_profile)
     dynamic_rendering_likely = _detect_dynamic_rendering(scan_input.content, plain_text)
     if dynamic_rendering_likely:
         warnings.append("dynamic_rendering_likely: static HTML may miss JS-rendered price, inventory, reviews, or variants.")
@@ -627,7 +691,7 @@ def scan_readiness(scan_input: ScanInput) -> dict[str, Any]:
             plain_text,
             commerce,
             "shipping",
-            [r"shipping", r"delivery", r"arrives", r"dispatch", r"ships in [^.]+"],
+            [r"shipping", r"delivery", r"arrives", r"dispatch", r"ships(?:\s+\w+)?"],
         ),
         "returns": lambda: _check_policy_snippet(
             plain_text,
@@ -813,6 +877,9 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         f"- Passed checks: {bundle['summary']['passed_checks']}/{bundle['summary']['total_checks']}",
         f"- Dimension scores: {', '.join(f'{key}={value}' for key, value in bundle['dimensions'].items())}",
         f"- Confidence: {bundle['confidence']['level']} ({bundle['confidence']['basis']})",
+        f"- Adapter profile: {bundle['commerce_signals']['adapter_profile']['active']} "
+        f"(requested={bundle['commerce_signals']['adapter_profile']['requested']}, "
+        f"detected={bundle['commerce_signals']['adapter_profile']['detected']})",
         "",
         "## Commerce Signals",
         f"- Variants: {bundle['commerce_signals']['variant_count']} "

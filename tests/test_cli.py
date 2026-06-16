@@ -73,6 +73,30 @@ class CliTests(unittest.TestCase):
             self.assertEqual(payload["version"], "2.1.0")
             self.assertTrue(payload["runs"][0]["results"])
 
+    def test_scan_profile_can_be_set_from_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = Path(tmpdir) / "agentshelf.json"
+            report = Path(tmpdir) / "report.json"
+            config.write_text(
+                json.dumps({"format": "json", "profile": "shopify", "output": str(report)}),
+                encoding="utf-8",
+            )
+
+            result = _run_cli("scan", "examples/weak_product_page.html", "--config", str(config))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(report.read_text(encoding="utf-8"))
+            self.assertEqual(payload["commerce_signals"]["adapter_profile"]["requested"], "shopify")
+            self.assertEqual(payload["commerce_signals"]["adapter_profile"]["active"], "shopify")
+
+    def test_scan_profile_option_is_in_json_output(self) -> None:
+        result = _run_cli("scan", "examples/shopify_variant_product.html", "--profile", "shopify", "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["commerce_signals"]["adapter_profile"]["requested"], "shopify")
+        self.assertEqual(payload["commerce_signals"]["adapter_profile"]["detected"], "shopify")
+
     def test_sarif_output_is_parseable(self) -> None:
         result = _run_cli("scan", "examples/weak_product_page.html", "--format", "sarif")
         self.assertEqual(result.returncode, 0, result.stderr)

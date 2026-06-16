@@ -19,6 +19,7 @@ This project shows practical AI-commerce product thinking by turning vague "agen
 - Added audit-run diff reports so scheduled jobs can highlight product-page regressions, resolved blockers, and next agent tasks across merchant catalogs.
 - Added a scheduled audit-run workflow that manages previous/current artifacts and timestamped archives locally, making the CLI useful in cron and GitHub Actions without external services.
 - Added Shopify/theme-style commerce extraction for embedded variants, selling plans, metafield-like keys, and policy snippets, making the engine more credible on real DTC storefront snapshots.
+- Added storefront adapter profiles for Shopify, WooCommerce, headless, and generic pages so production CI and coding agents can pin deterministic extraction behavior.
 - Packaged a professional open-source release with installable Python metadata, CI, contribution docs, benchmark fixtures, tests, and GitHub Action integration.
 
 ## Positioning Angle
