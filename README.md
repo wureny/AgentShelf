@@ -65,6 +65,12 @@ python3 -m playwright install chromium
 agentshelf snapshot https://example.com/product --rendered --output snapshots/product.html
 ```
 
+Compare raw vs rendered snapshots:
+
+```bash
+agentshelf compare examples/js_product_raw.html examples/js_product_rendered.html --format json
+```
+
 ## Example Output
 ```text
 # AgentShelf Report: TrailBottle Pro 24oz
@@ -90,6 +96,7 @@ Weak pages return prioritized fixes:
 agentshelf scan <file-or-dir-or-glob> [options]
 agentshelf agent-audit <file-or-url> [options]
 agentshelf agent-tasks <file-or-dir-or-glob> [options]
+agentshelf compare <raw.html> <rendered.html> [options]
 agentshelf snapshot <url> --output <path> [--rendered]
 agentshelf snapshot --url-file <urls.txt> --output-dir <dir> [--manifest <path>]
 ```
@@ -108,6 +115,8 @@ Options:
 `agent-tasks` emits JSONL remediation tasks across one page or a batch, so coding agents can pick up precise page areas, reasons, and acceptance checks.
 
 `snapshot` fetches raw HTML with the standard library by default. Use `--rendered` for a Playwright-backed single-page capture when product data is injected by JavaScript. Rendered mode is optional so the base CLI stays lightweight.
+
+`compare` shows whether rendered capture unlocks agent-readiness signals that raw HTML misses. It reports score deltas, dimension deltas, newly visible evidence, regressions, and an agent recommendation.
 
 ## Production Workflows
 Use a config file when AgentShelf runs in CI or scheduled audits:
@@ -128,6 +137,14 @@ agentshelf scan "snapshots/*.html" --batch --format sarif --output agentshelf-re
 ```
 
 Use `agent-tasks` when a coding agent should directly edit a product template, fixture, or generated page until blocking issues are gone.
+
+Use `compare` before adopting rendered capture broadly:
+
+```bash
+agentshelf compare examples/js_product_raw.html examples/js_product_rendered.html --format markdown
+```
+
+If compare says raw capture is sufficient, keep the cheaper raw workflow. If rendered unlocks price, inventory, variant, or schema signals, use `snapshot --rendered` for that page class.
 
 ## GitHub Action
 Use AgentShelf as a PR gate for product-page snapshots, generated storefront HTML, or theme fixture output.
@@ -206,12 +223,15 @@ python3 -m unittest discover -s tests
 agentshelf scan examples/sample_product_page.html --format markdown --min-score 85
 agentshelf agent-audit examples/weak_product_page.html --contract v1
 agentshelf agent-tasks examples --batch
+agentshelf compare examples/js_product_raw.html examples/js_product_rendered.html --format json
 python3 -m pip install -e ".[render]"  # optional rendered snapshots
 ```
 
 ## Example Files
 - [Strong sample page](examples/sample_product_page.html)
 - [Weak sample page](examples/weak_product_page.html)
+- [JS raw sample page](examples/js_product_raw.html)
+- [JS rendered sample page](examples/js_product_rendered.html)
 - [Sample report](outputs/sample_report.md)
 
 ## License

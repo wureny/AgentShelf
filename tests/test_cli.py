@@ -108,6 +108,58 @@ class CliTests(unittest.TestCase):
         self.assertIn("task", rows[0])
         self.assertIn("acceptance_check", rows[0]["task"])
 
+    def test_compare_raw_and_rendered_snapshots_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            raw = root / "raw.html"
+            rendered = root / "rendered.html"
+            raw.write_text(
+                """<html><head><title>JS Product</title></head><body>
+<div id="__next"></div><script src="a.js"></script><script src="b.js"></script><script src="c.js"></script>
+</body></html>""",
+                encoding="utf-8",
+            )
+            rendered.write_text(
+                """<html><head><title>JS Product</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Product","name":"JS Product","offers":{"@type":"Offer","priceCurrency":"USD","price":"29.00","availability":"https://schema.org/InStock","seller":{"@type":"Organization","name":"Demo Store"}}}
+</script></head><body><h1>JS Product</h1><p>$29.00</p><p>In stock</p><p>Free shipping and 30-day returns.</p><p>Materials: cotton. Size: M. Color: blue.</p><section>FAQ: fits most buyers.</section></body></html>""",
+                encoding="utf-8",
+            )
+
+            result = _run_cli("compare", str(raw), str(rendered), "--format", "json")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertGreater(payload["delta"]["score"], 0)
+            unlocked = {item["check_id"] for item in payload["unlocked_signals"]}
+            self.assertIn("price", unlocked)
+            self.assertIn("schema_product", unlocked)
+            self.assertIn("Use rendered snapshots", payload["agent_recommendation"])
+
+    def test_compare_raw_and_rendered_snapshots_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            raw = root / "raw.html"
+            rendered = root / "rendered.html"
+            raw.write_text("<html><title>Same</title><p>$10.00</p></html>", encoding="utf-8")
+            rendered.write_text("<html><title>Same</title><p>$10.00</p></html>", encoding="utf-8")
+            result = _run_cli("compare", str(raw), str(rendered))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("# AgentShelf Snapshot Compare", result.stdout)
+
+    def test_compare_writes_output_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            raw = root / "raw.html"
+            rendered = root / "rendered.html"
+            output = root / "compare.json"
+            raw.write_text("<html><title>Same</title><p>$10.00</p></html>", encoding="utf-8")
+            rendered.write_text("<html><title>Same</title><p>$10.00</p></html>", encoding="utf-8")
+            result = _run_cli("compare", str(raw), str(rendered), "--format", "json", "--output", str(output))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertIn("agent_recommendation", payload)
+
     def test_snapshot_writes_html_from_local_server(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

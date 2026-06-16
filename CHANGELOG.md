@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0
+- Added `agentshelf compare raw.html rendered.html` to quantify signals unlocked by rendered capture.
+- Added JSON and Markdown compare output with score deltas, dimension deltas, unlocked signals, regressions, and agent recommendations.
+
 ## 0.4.0
 - Added `.agentshelf.json` configuration support for repeatable CI gates.
 - Added SARIF output for GitHub code scanning and production-quality CI annotations.

@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Make AgentShelf directly usable in production-like CI and coding-agent remediation workflows.
+Make rendered capture operationally explainable by comparing raw and rendered snapshots.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -24,6 +24,7 @@ Make AgentShelf directly usable in production-like CI and coding-agent remediati
 - Added `agent-tasks` JSONL output so coding agents can remediate batches.
 - Added `snapshot --url-file --output-dir --manifest` for merchant URL list capture workflows.
 - Extended the GitHub Action inputs for config files, SARIF output, and fail-band gates.
+- Added `compare` for raw-vs-rendered snapshot analysis with score deltas, unlocked signals, regressions, and agent recommendations.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -39,9 +40,10 @@ Make AgentShelf directly usable in production-like CI and coding-agent remediati
 - `agentshelf agent-tasks examples --batch`
 - `agentshelf scan examples/weak_product_page.html --config examples/agentshelf.config.json`
 - `python3 -m unittest tests.test_cli.CliTests.test_snapshot_url_file_writes_manifest tests.test_cli.CliTests.test_snapshot_writes_html_from_local_server`
+- `agentshelf compare examples/js_product_raw.html examples/js_product_rendered.html --format json`
 
 ## Next Best Task
-Add a lightweight `agentshelf compare raw.html rendered.html` command that shows which audit signals were unlocked by rendered capture.
+Add sitemap/product-list ingestion with robots-aware rate limiting so merchants can feed AgentShelf real product page sets safely.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

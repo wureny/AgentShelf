@@ -16,7 +16,7 @@ from agentshelf.engine import build_agent_contract, parse_input, render_markdown
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.4 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.5 (+https://github.com/wureny/AgentShelf)"
 RENDER_EXTRA_MESSAGE = (
     "Rendered snapshots require the optional Playwright extra. "
     "Install it with `python3 -m pip install 'agentshelf[render]'` and then run "
@@ -83,6 +83,12 @@ def _coerce_score(value: object) -> int | None:
 def _load_scan(path: Path) -> dict:
     raw = path.read_text(encoding="utf-8")
     parsed = parse_input(raw, fallback_title=path.stem.replace("_", " ").title(), source=str(path))
+    return scan_readiness(parsed)
+
+
+def _load_scan_as(path: Path, label: str) -> dict:
+    raw = path.read_text(encoding="utf-8")
+    parsed = parse_input(raw, fallback_title=path.stem.replace("_", " ").title(), source=f"{label}:{path}")
     return scan_readiness(parsed)
 
 
@@ -290,6 +296,132 @@ def _render_agent_tasks(results: list[dict]) -> str:
     return "\n".join(lines) + ("\n" if lines else "")
 
 
+def _check_map(bundle: dict) -> dict[str, dict]:
+    return {check["id"]: check for check in bundle["checks"]}
+
+
+def _build_compare(raw_bundle: dict, rendered_bundle: dict) -> dict:
+    raw_checks = _check_map(raw_bundle)
+    rendered_checks = _check_map(rendered_bundle)
+    unlocked_signals = []
+    regressions = []
+    evidence_changes = []
+
+    for check_id, rendered_check in rendered_checks.items():
+        raw_check = raw_checks[check_id]
+        if not raw_check["passed"] and rendered_check["passed"]:
+            unlocked_signals.append(
+                {
+                    "check_id": check_id,
+                    "dimension": rendered_check["dimension"],
+                    "evidence": rendered_check["evidence"],
+                    "agent_impact": rendered_check["agent_impact"],
+                }
+            )
+        elif raw_check["passed"] and not rendered_check["passed"]:
+            regressions.append(
+                {
+                    "check_id": check_id,
+                    "dimension": rendered_check["dimension"],
+                    "recommendation": rendered_check["recommendation"],
+                }
+            )
+        if raw_check.get("evidence") != rendered_check.get("evidence") and rendered_check.get("evidence"):
+            evidence_changes.append(
+                {
+                    "check_id": check_id,
+                    "raw_evidence": raw_check.get("evidence"),
+                    "rendered_evidence": rendered_check.get("evidence"),
+                }
+            )
+
+    raw_issue_ids = {issue["id"] for issue in build_agent_contract(raw_bundle)["blocking_issues"]}
+    rendered_contract = build_agent_contract(rendered_bundle)
+    rendered_issue_ids = {issue["id"] for issue in rendered_contract["blocking_issues"]}
+    resolved_issue_ids = sorted(raw_issue_ids - rendered_issue_ids)
+    new_issue_ids = sorted(rendered_issue_ids - raw_issue_ids)
+
+    dimension_delta = {
+        key: rendered_bundle["dimensions"][key] - raw_bundle["dimensions"][key]
+        for key in rendered_bundle["dimensions"]
+    }
+    return {
+        "raw": {
+            "source": raw_bundle["page"]["source"],
+            "score": raw_bundle["score"],
+            "band": raw_bundle["band"],
+            "dimensions": raw_bundle["dimensions"],
+            "confidence": raw_bundle["confidence"],
+            "warnings": raw_bundle["warnings"],
+        },
+        "rendered": {
+            "source": rendered_bundle["page"]["source"],
+            "score": rendered_bundle["score"],
+            "band": rendered_bundle["band"],
+            "dimensions": rendered_bundle["dimensions"],
+            "confidence": rendered_bundle["confidence"],
+            "warnings": rendered_bundle["warnings"],
+        },
+        "delta": {
+            "score": rendered_bundle["score"] - raw_bundle["score"],
+            "dimensions": dimension_delta,
+            "band_changed": raw_bundle["band"] != rendered_bundle["band"],
+        },
+        "unlocked_signals": unlocked_signals,
+        "regressions": regressions,
+        "evidence_changes": evidence_changes,
+        "resolved_blocking_issues": resolved_issue_ids,
+        "new_blocking_issues": new_issue_ids,
+        "next_actions": rendered_contract["next_actions"],
+        "agent_recommendation": _compare_recommendation(raw_bundle, rendered_bundle, unlocked_signals, regressions),
+    }
+
+
+def _compare_recommendation(raw_bundle: dict, rendered_bundle: dict, unlocked: list[dict], regressions: list[dict]) -> str:
+    if regressions:
+        return "Rendered snapshot removed or changed signals that raw HTML had; inspect hydration, geolocation, consent, or bot handling before trusting automation."
+    if unlocked and rendered_bundle["score"] > raw_bundle["score"]:
+        return "Use rendered snapshots for this page class; JavaScript hydration exposes commerce signals that raw HTML misses."
+    if raw_bundle["score"] == rendered_bundle["score"] and not unlocked:
+        return "Raw snapshot appears sufficient for this page class; rendered capture did not unlock additional readiness signals."
+    return "Rendered and raw snapshots differ; inspect evidence_changes before choosing the cheaper capture mode."
+
+
+def _render_compare_markdown(payload: dict) -> str:
+    lines = [
+        "# AgentShelf Snapshot Compare",
+        "",
+        "## Summary",
+        f"- Raw score: {payload['raw']['score']} ({payload['raw']['band']})",
+        f"- Rendered score: {payload['rendered']['score']} ({payload['rendered']['band']})",
+        f"- Score delta: {payload['delta']['score']:+d}",
+        f"- Recommendation: {payload['agent_recommendation']}",
+        "",
+        "## Dimension Delta",
+    ]
+    for dimension, delta in payload["delta"]["dimensions"].items():
+        lines.append(f"- {dimension}: {delta:+d}")
+    lines.extend(["", "## Unlocked Signals"])
+    if payload["unlocked_signals"]:
+        for item in payload["unlocked_signals"]:
+            lines.append(f"- {item['check_id']}: {item['evidence'] or 'evidence present'}")
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Regressions"])
+    if payload["regressions"]:
+        for item in payload["regressions"]:
+            lines.append(f"- {item['check_id']}: {item['recommendation']}")
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Next Actions"])
+    if payload["next_actions"]:
+        for item in payload["next_actions"]:
+            lines.append(f"- {item}")
+    else:
+        lines.append("- No urgent rendered-snapshot fixes.")
+    return "\n".join(lines) + "\n"
+
+
 def _fails_threshold(result: dict, min_score: int | None, fail_on: str | None) -> bool:
     if min_score is not None and result["score"] < min_score:
         return True
@@ -337,6 +469,12 @@ def build_parser() -> argparse.ArgumentParser:
     tasks.add_argument("path", help="HTML/text file, directory, or glob to scan.")
     tasks.add_argument("--batch", action="store_true", help="Allow directory or glob batch scanning.")
     tasks.add_argument("--output", type=Path, help="Optional output file path.")
+
+    compare = subcommands.add_parser("compare", help="Compare raw and rendered snapshots for unlocked agent-readiness signals.")
+    compare.add_argument("raw", type=Path, help="Raw HTML snapshot path.")
+    compare.add_argument("rendered", type=Path, help="Rendered HTML snapshot path.")
+    compare.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
+    compare.add_argument("--output", type=Path, help="Optional output file path.")
 
     snapshot = subcommands.add_parser("snapshot", help="Fetch raw or rendered HTML for a product page URL.")
     snapshot.add_argument("url", nargs="?", help="http(s) URL to fetch.")
@@ -396,6 +534,12 @@ def main() -> int:
                 raise ValueError("Multiple inputs found. Re-run with --batch.")
             results = [_load_scan(path) for path in paths]
             rendered = _render_agent_tasks(results)
+            exit_code = 0
+        elif args.command == "compare":
+            raw_bundle = _load_scan_as(args.raw, "raw")
+            rendered_bundle = _load_scan_as(args.rendered, "rendered")
+            payload = _build_compare(raw_bundle, rendered_bundle)
+            rendered = json.dumps(payload, indent=2) + "\n" if args.format == "json" else _render_compare_markdown(payload)
             exit_code = 0
         elif args.command == "snapshot":
             if bool(args.url) == bool(args.url_file):
