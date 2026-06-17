@@ -2399,6 +2399,7 @@ def _html_escape(value: object) -> str:
 
 def _render_dashboard_html(calibration: dict) -> str:
     summary = calibration["summary"]
+    muted_none = '<span class="muted">None</span>'
     category_cards = "\n".join(
         f"<div class='metric'><span>{_html_escape(category)}</span><strong>{count}</strong></div>"
         for category, count in summary["category_counts"].items()
@@ -2416,9 +2417,9 @@ def _render_dashboard_html(calibration: dict) -> str:
             f"<div class='meta'><span>Priority {_html_escape(page['priority'])}</span>"
             f"<span>Confidence {_html_escape(page['confidence']['level'])}</span>"
             f"<span>Profile {_html_escape(page['adapter_profile']['active'])}</span></div>"
-            f"<div class='section'><h3>Review categories</h3><div>{categories or '<span class=\"muted\">None</span>'}</div></div>"
-            f"<div class='section'><h3>Blocking issues</h3><div>{blockers or '<span class=\"muted\">None</span>'}</div></div>"
-            f"<div class='section'><h3>Agent tasks</h3><div>{tasks or '<span class=\"muted\">None</span>'}</div></div>"
+            f"<div class='section'><h3>Review categories</h3><div>{categories or muted_none}</div></div>"
+            f"<div class='section'><h3>Blocking issues</h3><div>{blockers or muted_none}</div></div>"
+            f"<div class='section'><h3>Agent tasks</h3><div>{tasks or muted_none}</div></div>"
             "</article>"
         )
     actions = "\n".join(f"<li>{_html_escape(action)}</li>" for action in calibration.get("agent_next_actions", []))
