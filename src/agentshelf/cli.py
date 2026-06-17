@@ -20,7 +20,7 @@ from agentshelf.engine import ADAPTER_PROFILES, build_agent_contract, parse_inpu
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.13 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.14 (+https://github.com/wureny/AgentShelf)"
 RENDER_EXTRA_MESSAGE = (
     "Rendered snapshots require the optional Playwright extra. "
     "Install it with `python3 -m pip install 'agentshelf[render]'` and then run "
@@ -1139,6 +1139,202 @@ def _export_calibration_fixtures(payload: dict, output_dir: Path) -> list[dict]:
     return exported
 
 
+def _load_calibration_labels(path: Path) -> dict:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid calibration labels {path}: {exc.msg}.") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Invalid calibration labels {path}: expected a JSON object.")
+    labels = payload.get("labels")
+    if not isinstance(labels, list) or not labels:
+        raise ValueError(f"Invalid calibration labels {path}: expected a non-empty labels array.")
+    normalized = []
+    for index, label in enumerate(labels, start=1):
+        if not isinstance(label, dict):
+            raise ValueError(f"Invalid label {index}: expected an object.")
+        if not (label.get("source") or label.get("title")):
+            raise ValueError(f"Invalid label {index}: source or title is required.")
+        kind = str(label.get("kind", "check"))
+        if kind not in {"check", "blocking_issue", "agent_task", "category", "warning"}:
+            raise ValueError(f"Invalid label {index}: kind must be check, blocking_issue, agent_task, category, or warning.")
+        label_id = label.get("id")
+        if not isinstance(label_id, str) or not label_id:
+            raise ValueError(f"Invalid label {index}: id is required.")
+        expected = label.get("expected")
+        verdict = label.get("verdict")
+        if expected is None and verdict == "true_positive":
+            expected = "present"
+        if expected is None and verdict == "false_positive":
+            expected = "absent"
+        if expected not in {"present", "absent"}:
+            raise ValueError(f"Invalid label {index}: expected must be present or absent.")
+        normalized.append(
+            {
+                "source": label.get("source"),
+                "title": label.get("title"),
+                "kind": kind,
+                "id": label_id,
+                "expected": expected,
+                "verdict": verdict,
+                "note": label.get("note"),
+            }
+        )
+    return {
+        "contract": payload.get("contract", "agentshelf.calibration_labels.v1"),
+        "match_key": payload.get("match_key"),
+        "labels": normalized,
+    }
+
+
+def _evaluation_observations(bundle: dict) -> dict[str, set[str]]:
+    contract = build_agent_contract(bundle)
+    failed_checks = {
+        check["id"]
+        for check in bundle["checks"]
+        if check.get("applicable", True) and not check["passed"]
+    }
+    warnings = set()
+    for warning in bundle.get("warnings", []):
+        warnings.add(str(warning))
+        warnings.add(str(warning).split(":", 1)[0])
+    return {
+        "check": failed_checks,
+        "blocking_issue": {issue["id"] for issue in contract["blocking_issues"]},
+        "agent_task": {task["id"] for task in contract["agent_tasks"]},
+        "category": {category["category"] for category in _build_calibration([bundle], bundle["page"]["source"], max_fixtures=1)["pages"][0]["review_categories"]},
+        "warning": warnings,
+    }
+
+
+def _label_key(label: dict, default_key: str) -> tuple[str, str]:
+    if label.get("source"):
+        return "source", str(label["source"])
+    if label.get("title"):
+        return "title", str(label["title"])
+    return default_key, ""
+
+
+def _bundle_key(bundle: dict, key: str) -> str:
+    page = bundle.get("page", {})
+    value = page.get(key)
+    if not value:
+        raise ValueError(f"Scan result is missing page.{key}; cannot evaluate labels.")
+    return str(value)
+
+
+def _build_calibration_evaluation(results: list[dict], labels_payload: dict, key: str = "source") -> dict:
+    indexes = {
+        "source": _index_results(results, "source", "evaluation"),
+        "title": _index_results(results, "title", "evaluation"),
+    }
+    evaluated = []
+    missing_pages = []
+    for label in labels_payload["labels"]:
+        match_key, match_value = _label_key(label, key)
+        bundle = indexes[match_key].get(match_value)
+        if bundle is None and match_key == "source":
+            source_path = Path(match_value)
+            if source_path.exists():
+                bundle = indexes[match_key].get(str(source_path.resolve()))
+        if bundle is None:
+            missing_pages.append(label)
+            evaluated.append({**label, "actual": "missing_page", "passed": False})
+            continue
+        observed = _evaluation_observations(bundle)
+        present = label["id"] in observed[label["kind"]]
+        actual = "present" if present else "absent"
+        evaluated.append(
+            {
+                **label,
+                "actual": actual,
+                "passed": actual == label["expected"],
+                "page": {
+                    "source": bundle["page"]["source"],
+                    "title": bundle["page"]["title"],
+                    "score": bundle["score"],
+                    "band": bundle["band"],
+                },
+            }
+        )
+    failures = [item for item in evaluated if not item["passed"]]
+    false_positive_regressions = [
+        item
+        for item in failures
+        if item.get("verdict") == "false_positive" or item.get("expected") == "absent"
+    ]
+    true_positive_regressions = [
+        item
+        for item in failures
+        if item.get("verdict") == "true_positive" or item.get("expected") == "present"
+    ]
+    passed = len(evaluated) - len(failures)
+    total = len(evaluated)
+    return {
+        "contract": "agentshelf.calibration_evaluation.v1",
+        "labels_contract": labels_payload["contract"],
+        "summary": {
+            "labels": total,
+            "passed": passed,
+            "failed": len(failures),
+            "accuracy": round(passed / total, 4) if total else 0,
+            "missing_pages": len(missing_pages),
+            "false_positive_regressions": len(false_positive_regressions),
+            "true_positive_regressions": len(true_positive_regressions),
+        },
+        "failures": failures,
+        "results": evaluated,
+        "agent_next_actions": _evaluation_next_actions(failures),
+    }
+
+
+def _evaluation_next_actions(failures: list[dict]) -> list[str]:
+    if not failures:
+        return ["All labeled calibration expectations passed; this rule set is safe against the current labeled fixtures."]
+    actions = []
+    absent_failures = [item for item in failures if item["expected"] == "absent" and item["actual"] == "present"]
+    present_failures = [item for item in failures if item["expected"] == "present" and item["actual"] == "absent"]
+    missing_pages = [item for item in failures if item["actual"] == "missing_page"]
+    if absent_failures:
+        actions.append("Review false-positive labels that are still present before tightening CI thresholds.")
+    if present_failures:
+        actions.append("Review true-positive labels that disappeared; a rule may have become too lenient.")
+    if missing_pages:
+        actions.append("Update label source/title keys or regenerate scan artifacts for missing labeled pages.")
+    return actions
+
+
+def _render_calibration_evaluation_markdown(payload: dict) -> str:
+    summary = payload["summary"]
+    lines = [
+        "# AgentShelf Calibration Evaluation",
+        "",
+        "## Summary",
+        f"- Labels: {summary['labels']}",
+        f"- Passed: {summary['passed']}",
+        f"- Failed: {summary['failed']}",
+        f"- Accuracy: {summary['accuracy']:.2%}",
+        f"- Missing pages: {summary['missing_pages']}",
+        f"- False-positive regressions: {summary['false_positive_regressions']}",
+        f"- True-positive regressions: {summary['true_positive_regressions']}",
+        "",
+        "## Failures",
+    ]
+    if payload["failures"]:
+        for item in payload["failures"]:
+            target = item.get("source") or item.get("title")
+            lines.append(
+                f"- `{target}` {item['kind']} `{item['id']}` expected {item['expected']} "
+                f"but was {item['actual']}"
+            )
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Agent Next Actions"])
+    for action in payload["agent_next_actions"]:
+        lines.append(f"- {action}")
+    return "\n".join(lines) + "\n"
+
+
 def _render_discovery(payload: dict, output_format: str) -> str:
     if output_format == "json":
         return json.dumps(payload, indent=2) + "\n"
@@ -1243,6 +1439,14 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.add_argument("--output", type=Path, help="Optional output file path.")
     calibrate.add_argument("--export-fixtures", type=Path, help="Optional directory for anonymized local HTML fixture candidates.")
     calibrate.add_argument("--max-fixtures", type=int, default=10, help="Maximum fixture candidates to include or export.")
+
+    evaluate = subcommands.add_parser("evaluate", help="Evaluate scan results against labeled calibration expectations.")
+    evaluate.add_argument("results", type=Path, help="AgentShelf JSON or JSONL scan output.")
+    evaluate.add_argument("--labels", type=Path, required=True, help="Calibration labels JSON file.")
+    evaluate.add_argument("--key", choices=("source", "title"), default="source", help="Default page field used when labels omit source/title.")
+    evaluate.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
+    evaluate.add_argument("--output", type=Path, help="Optional output file path.")
+    evaluate.add_argument("--fail-on-regressions", action="store_true", help="Return non-zero when any labeled expectation fails.")
 
     discover = subcommands.add_parser("discover", help="Discover product-like URLs from robots.txt sitemap hints or a sitemap URL.")
     discover.add_argument("--site", help="Storefront root URL. AgentShelf reads robots.txt for Sitemap hints.")
@@ -1360,6 +1564,12 @@ def main() -> int:
                 payload["fixture_export"] = _export_calibration_fixtures(payload, args.export_fixtures)
             rendered = json.dumps(payload, indent=2) + "\n" if args.format == "json" else _render_calibration_markdown(payload)
             exit_code = 0
+        elif args.command == "evaluate":
+            results = _load_scan_results(args.results)
+            labels = _load_calibration_labels(args.labels)
+            payload = _build_calibration_evaluation(results, labels, key=args.key)
+            rendered = json.dumps(payload, indent=2) + "\n" if args.format == "json" else _render_calibration_evaluation_markdown(payload)
+            exit_code = 1 if args.fail_on_regressions and payload["summary"]["failed"] else 0
         elif args.command == "discover":
             payload = _discover_urls(
                 site=args.site,

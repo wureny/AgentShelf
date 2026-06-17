@@ -106,6 +106,15 @@ agentshelf calibrate "snapshots/*.html" \
   --format json
 ```
 
+Evaluate a rule change against human calibration labels:
+
+```bash
+agentshelf scan benchmarks/fixtures --batch --format jsonl --output calibration-results.jsonl
+agentshelf evaluate calibration-results.jsonl \
+  --labels examples/calibration-labels.json \
+  --fail-on-regressions
+```
+
 ## Example Output
 ```text
 # AgentShelf Report: TrailBottle Pro 24oz
@@ -136,6 +145,7 @@ agentshelf compare <raw.html> <rendered.html> [options]
 agentshelf diff <baseline-results.jsonl> <current-results.jsonl> [options]
 agentshelf audit-run <file-or-dir-or-glob> [options]
 agentshelf calibrate <file-or-dir-or-glob-or-results.jsonl> [options]
+agentshelf evaluate <results.json-or-jsonl> --labels <labels.json> [options]
 agentshelf discover --site <url> [options]
 agentshelf discover --sitemap <url> [options]
 agentshelf snapshot <url> --output <path> [--rendered]
@@ -165,6 +175,8 @@ Options:
 `audit-run` is the scheduled-job wrapper around `scan` and `diff`. It writes `<history-dir>/current-results.jsonl`, rotates the previous run into `<history-dir>/previous-results.jsonl`, archives each run as `results-<timestamp>.jsonl`, writes an `audit-diff.md` report, and can emit `agent-tasks` JSONL in the same pass.
 
 `calibrate` reviews real-page scan output for likely false-positive and false-negative categories. It can scan HTML snapshots directly or read existing `scan --format json|jsonl` artifacts with `--from-results`. Use `--export-fixtures` to write anonymized local HTML candidates plus metadata sidecars for benchmark review.
+
+`evaluate` compares scan results against a human label file. Use it after calibration reviews to lock confirmed true positives and false positives, then run it in CI with `--fail-on-regressions` before changing rules or thresholds.
 
 `discover` reads `robots.txt` for `Sitemap:` hints or accepts an explicit sitemap URL. It filters product-like URLs and emits a URL list for `snapshot --url-file`; it does not crawl arbitrary site links.
 
@@ -209,11 +221,40 @@ agentshelf audit-run "snapshots/*.html" \
 agentshelf calibrate .agentshelf/runs/current-results.jsonl \
   --from-results \
   --output calibration-report.md
+agentshelf evaluate .agentshelf/runs/current-results.jsonl \
+  --labels examples/calibration-labels.json \
+  --fail-on-regressions
 ```
 
 On the first run, `audit-run` creates a baseline. On later runs, it automatically writes `.agentshelf/runs/audit-diff.md` from the last saved result set. In CI, upload `.agentshelf/runs/audit-diff.md`, `calibration-report.md`, and `agentshelf-tasks.jsonl` as review artifacts so humans see the merchant-level regression summary and agents get machine-actionable fixes.
 
 Use calibration reports before changing scoring rules. A common loop is: run real merchant snapshots, inspect `rendered_capture_review`, `profile_rule_review`, `policy_schema_review`, and `offer_extraction_review`, then export anonymized fixture candidates for cases that should become benchmark coverage.
+
+Calibration labels use this shape:
+
+```json
+{
+  "contract": "agentshelf.calibration_labels.v1",
+  "labels": [
+    {
+      "source": "snapshots/product.html",
+      "kind": "check",
+      "id": "subscription_terms",
+      "verdict": "true_positive",
+      "note": "Subscription cadence and cancellation terms are genuinely missing."
+    },
+    {
+      "source": "snapshots/strong-product.html",
+      "kind": "check",
+      "id": "return_policy_schema",
+      "verdict": "false_positive",
+      "note": "Return policy schema is present in a storefront-specific structure."
+    }
+  ]
+}
+```
+
+Supported label kinds are `check`, `blocking_issue`, `agent_task`, `category`, and `warning`. `true_positive` means the finding should remain present; `false_positive` means it should be absent after the rule is fixed.
 
 ## GitHub Action
 Use AgentShelf as a PR gate for product-page snapshots, generated storefront HTML, or theme fixture output.
@@ -340,6 +381,7 @@ agentshelf discover --sitemap https://example.com/sitemap.xml --limit 10
 agentshelf scan examples/woocommerce_variable_product.html --profile woocommerce --format json
 agentshelf scan examples/headless_product_state.html --profile headless --format json
 agentshelf calibrate benchmarks/fixtures --batch --format markdown
+agentshelf evaluate calibration-results.jsonl --labels examples/calibration-labels.json
 python3 -m pip install -e ".[render]"  # optional rendered snapshots
 ```
 
@@ -351,6 +393,7 @@ python3 -m pip install -e ".[render]"  # optional rendered snapshots
 - [Shopify-style variant sample page](examples/shopify_variant_product.html)
 - [WooCommerce variable product sample page](examples/woocommerce_variable_product.html)
 - [Headless app-state sample page](examples/headless_product_state.html)
+- [Calibration labels example](examples/calibration-labels.json)
 - [Sample report](outputs/sample_report.md)
 
 ## License

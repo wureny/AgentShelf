@@ -1,0 +1,26 @@
+{
+  "contract": "agentshelf.calibration_labels.v1",
+  "labels": [
+    {
+      "source": "benchmarks/fixtures/profile_rule_gap_product.html",
+      "kind": "check",
+      "id": "subscription_terms",
+      "verdict": "true_positive",
+      "note": "This fixture intentionally omits subscription cadence and cancellation terms."
+    },
+    {
+      "source": "benchmarks/fixtures/profile_rule_gap_product.html",
+      "kind": "category",
+      "id": "profile_rule_review",
+      "verdict": "true_positive",
+      "note": "The page should remain visible in calibration reviews until the subscription and bundle details are fixed."
+    },
+    {
+      "source": "benchmarks/fixtures/strong_static_product.html",
+      "kind": "check",
+      "id": "return_policy_schema",
+      "verdict": "false_positive",
+      "note": "Strong fixture includes return policy schema, so this check should not be flagged."
+    }
+  ]
+}

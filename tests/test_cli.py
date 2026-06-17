@@ -369,6 +369,77 @@ class CliTests(unittest.TestCase):
             self.assertIn("policy_schema_review", payload["summary"]["category_counts"])
             self.assertTrue(payload["agent_next_actions"])
 
+    def test_evaluate_calibration_labels_passes_expected_findings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            result_file = root / "results.jsonl"
+            labels = root / "labels.json"
+            scan = _run_cli("scan", "benchmarks/fixtures/profile_rule_gap_product.html", "--format", "jsonl")
+            self.assertEqual(scan.returncode, 0, scan.stderr)
+            result_file.write_text(scan.stdout, encoding="utf-8")
+            source = json.loads(scan.stdout)["page"]["source"]
+            labels.write_text(
+                json.dumps(
+                    {
+                        "contract": "agentshelf.calibration_labels.v1",
+                        "labels": [
+                            {
+                                "source": source,
+                                "kind": "check",
+                                "id": "subscription_terms",
+                                "verdict": "true_positive",
+                            },
+                            {
+                                "source": source,
+                                "kind": "category",
+                                "id": "profile_rule_review",
+                                "verdict": "true_positive",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = _run_cli("evaluate", str(result_file), "--labels", str(labels), "--format", "json", "--fail-on-regressions")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["summary"]["failed"], 0)
+            self.assertEqual(payload["summary"]["accuracy"], 1.0)
+
+    def test_evaluate_calibration_labels_fails_false_positive_regression(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            result_file = root / "results.jsonl"
+            labels = root / "labels.json"
+            scan = _run_cli("scan", "benchmarks/fixtures/profile_rule_gap_product.html", "--format", "jsonl")
+            self.assertEqual(scan.returncode, 0, scan.stderr)
+            result_file.write_text(scan.stdout, encoding="utf-8")
+            source = json.loads(scan.stdout)["page"]["source"]
+            labels.write_text(
+                json.dumps(
+                    {
+                        "labels": [
+                            {
+                                "source": source,
+                                "kind": "check",
+                                "id": "subscription_terms",
+                                "verdict": "false_positive",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = _run_cli("evaluate", str(result_file), "--labels", str(labels), "--format", "json", "--fail-on-regressions")
+
+            self.assertEqual(result.returncode, 1)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["summary"]["failed"], 1)
+            self.assertEqual(payload["summary"]["false_positive_regressions"], 1)
+
     def test_discover_reads_robots_sitemap_hints(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.0
+- Added `agentshelf evaluate` for CI-friendly evaluation of scan results against human calibration labels.
+- Added calibration label support for checks, blocking issues, agent tasks, calibration categories, and warnings.
+- Added an example `examples/calibration-labels.json` contract for true-positive and false-positive expectations.
+
 ## 0.13.0
 - Added `agentshelf calibrate` for real-page calibration reviews from HTML snapshots or existing scan JSON/JSONL artifacts.
 - Added calibration categories for rendered capture, contradictions, profile rules, policy schema, offer extraction, content gaps, and low-confidence snapshots.

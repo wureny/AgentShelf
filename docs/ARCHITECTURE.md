@@ -15,6 +15,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 10. Compare scheduled scan result files to surface product-page regressions, improvements, and catalog coverage changes.
 11. Run scheduled audits with local previous/current history, timestamped archives, diff reports, and optional agent task output.
 12. Calibrate rules against real merchant snapshots by grouping likely false-positive categories and exporting anonymized fixture candidates.
+13. Evaluate rule changes against human labels for true positives and false positives before tightening CI gates.
 
 ## Components
 - `src/agentshelf/engine.py`: parser, heuristic scoring engine, JSON-LD extraction, and renderers
@@ -42,6 +43,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - `diff` compares stored scan artifacts instead of rescanning pages, so scheduled jobs can produce regression reports from CI artifacts.
 - `audit-run` wraps scan and diff for local scheduled jobs, rotating previous/current JSONL safely before writing current results.
 - `calibrate` turns real-page scan artifacts into review categories and anonymized fixture candidates, so production false positives can become benchmark coverage instead of ad hoc rule changes.
+- `evaluate` compares scan artifacts with human calibration labels for checks, blockers, tasks, categories, and warnings, making rule changes safer to run in CI.
 - SARIF output maps failed checks into code-scanning-style findings for CI and GitHub annotations.
 - `.agentshelf.json` keeps production scan gates repeatable across local, CI, and scheduled runs.
 - Raw snapshot mode does not execute JavaScript; dynamic pages are flagged instead of silently trusted. `--rendered` handles single-page JS capture when the optional browser dependency is installed.
@@ -52,4 +54,4 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - Add deeper schema validation for variants, offers, return policy, merchant policy metadata, subscription selling plans, and bundle components.
 - Add more storefront profile packs for preorders, backorders, subscriptions with prepaid plans, B2B pricing, and marketplace sellers.
 - Add empirical benchmark runs against real agent answer quality before claiming ranking or conversion lift.
-- Add optional human labels for calibration exports so future scoring changes can be evaluated against confirmed false positives and true positives.
+- Add richer label authoring helpers so calibration exports can be promoted into labels with less manual editing.

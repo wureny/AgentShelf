@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Calibrate AgentShelf against real merchant page sets and turn review findings into reusable fixtures.
+Evaluate rule changes against labeled calibration fixtures before tightening production gates.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -40,6 +40,8 @@ Calibrate AgentShelf against real merchant page sets and turn review findings in
 - Added `agentshelf calibrate` to summarize real-page calibration hotspots from HTML snapshots or scan JSON/JSONL artifacts.
 - Added calibration categories for rendered capture, contradictions, profile rules, policy schema, offer extraction, content gaps, and low-confidence snapshots.
 - Added anonymized fixture export for local HTML candidates plus metadata sidecars.
+- Added `agentshelf evaluate` to compare scan results against human calibration labels for checks, blocking issues, agent tasks, categories, and warnings.
+- Added `examples/calibration-labels.json` as a true-positive and false-positive label contract example.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -64,9 +66,10 @@ Calibrate AgentShelf against real merchant page sets and turn review findings in
 - `python3 -m unittest tests.test_engine.BenchmarkTests`
 - `.venv/bin/python -m unittest tests.test_engine`
 - `.venv/bin/python -m unittest tests.test_cli.CliTests.test_calibrate_from_html_batch_exports_anonymized_fixtures tests.test_cli.CliTests.test_calibrate_from_scan_results_jsonl`
+- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_evaluate_calibration_labels_passes_expected_findings tests.test_cli.CliTests.test_evaluate_calibration_labels_fails_false_positive_regression`
 
 ## Next Best Task
-Add optional calibration labels and a `calibration evaluate` workflow to compare rule changes against confirmed true-positive and false-positive fixtures.
+Add label authoring helpers that convert selected calibration findings into draft labels, reducing manual editing for real merchant calibration runs.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.
