@@ -22,7 +22,7 @@ from agentshelf.engine import ADAPTER_PROFILES, build_agent_contract, parse_inpu
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.20 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.21 (+https://github.com/wureny/AgentShelf)"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -1016,6 +1016,92 @@ def _render_storefront_fixtures(
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest
+
+
+def _render_import_remediation_tasks(manifest: dict) -> str:
+    lines = []
+    for warning in manifest["validation"]["warnings"]:
+        task = _import_warning_to_task(warning, manifest)
+        lines.append(json.dumps(task))
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
+def _import_warning_to_task(warning: dict, manifest: dict) -> dict:
+    field = warning["field"]
+    task_id = f"fix_import_{field.replace('.', '_')}"
+    return {
+        "source": manifest["source"],
+        "input_format": manifest["input_format"],
+        "product": warning["product"],
+        "task": {
+            "id": task_id,
+            "reason": warning["message"],
+            "files_or_page_area": _import_task_area(field, manifest["input_format"]),
+            "acceptance_check": _import_task_acceptance(field),
+            "priority": _import_task_priority(field),
+            "field": field,
+            "action": warning["action"],
+        },
+    }
+
+
+def _import_task_area(field: str, input_format: str) -> str:
+    if input_format == "woocommerce":
+        mapping = {
+            "price": "WooCommerce CSV price columns: Regular price, Sale price, or Price.",
+            "currency": "WooCommerce CSV export or upstream export job currency column.",
+            "availability": "WooCommerce CSV stock columns: In stock?, Stock, or stock_status.",
+            "variants": "WooCommerce CSV variable product rows and variation rows linked by Parent.",
+            "variant.price": "WooCommerce variation row price columns.",
+            "variant.options": "WooCommerce Attribute N name/value(s) columns on variation rows.",
+            "variant.available": "WooCommerce variation row stock columns.",
+        }
+    elif input_format == "shopify":
+        mapping = {
+            "price": "Shopify product JSON variants[].price.",
+            "currency": "Shopify product export currency field or export wrapper metadata.",
+            "availability": "Shopify variant available, inventory_quantity, or inventory_policy fields.",
+            "variants": "Shopify product JSON variants array.",
+            "variant.price": "Shopify variants[].price.",
+            "variant.options": "Shopify variants[].option1/option2/option3 and product options[].name.",
+            "variant.available": "Shopify variants[].available or inventory_quantity.",
+        }
+    elif input_format == "headless":
+        mapping = {
+            "price": "Headless catalog price, priceRange, pricing, or variants[].price fields.",
+            "currency": "Headless catalog currencyCode or price.currencyCode fields.",
+            "availability": "Headless catalog availableForSale or available fields.",
+            "variants": "Headless catalog variants nodes, edges, or variantNodes.",
+            "variant.price": "Headless variant price or priceV2 fields.",
+            "variant.options": "Headless variant selectedOptions or options fields.",
+            "variant.available": "Headless variant availableForSale or available fields.",
+        }
+    else:
+        mapping = {
+            "price": "Normalized AgentShelf product price or variants[].price.",
+            "currency": "Normalized AgentShelf product currency.",
+            "availability": "Normalized AgentShelf product availability or variants[].available.",
+            "variants": "Normalized AgentShelf variants array.",
+            "variant.price": "Normalized AgentShelf variants[].price.",
+            "variant.options": "Normalized AgentShelf variants[].options.",
+            "variant.available": "Normalized AgentShelf variants[].available.",
+        }
+    shared = {
+        "shipping": "Product export shipping or shippingPolicy field.",
+        "returns": "Product export returns or returnPolicy field.",
+        "specs": "Product export specs, metafields, attributes, or product facts.",
+    }
+    return {**mapping, **shared}.get(field, f"Product export field `{field}`.")
+
+
+def _import_task_acceptance(field: str) -> str:
+    return (
+        f"Re-run `agentshelf render-fixtures ... --format json --fail-on-warnings` and confirm no validation warning remains for `{field}`."
+    )
+
+
+def _import_task_priority(field: str) -> str:
+    return "high" if field in {"price", "availability", "variants", "variant.price", "variant.available"} else "medium"
 
 
 def _render_fixture_summary(manifest: dict, output_format: str) -> str:
@@ -2589,6 +2675,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Return non-zero when import validation warnings are present.",
     )
+    render_fixtures.add_argument("--tasks-output", type=Path, help="Optional JSONL output for import remediation tasks.")
     render_fixtures.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Summary output format.")
     return parser
 
@@ -2760,6 +2847,8 @@ def main() -> int:
                 manifest_path=args.manifest,
                 input_format=args.input_format,
             )
+            if args.tasks_output:
+                _write_text_atomic(args.tasks_output, _render_import_remediation_tasks(payload))
             rendered = _render_fixture_summary(payload, args.format)
             exit_code = 1 if args.fail_on_warnings and payload["validation"]["warning_count"] else 0
         else:

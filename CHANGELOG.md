@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.21.0
+- Added `render-fixtures --tasks-output` to turn import validation warnings into machine-readable JSONL remediation tasks for coding agents.
+- Added platform-aware task guidance for Shopify JSON, WooCommerce CSV, headless catalog JSON, and normalized AgentShelf product exports.
+- Added tests for warning-to-task conversion and empty task files for clean imports.
+
 ## 0.20.0
 - Added import validation to `render-fixtures` manifests so missing native-export fields are visible before generated snapshots are trusted.
 - Added `render-fixtures --fail-on-warnings` for CI pipelines that should fail when exports omit price, currency, stock, variants, shipping, returns, specs, or variant option context.

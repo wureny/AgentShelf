@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Make native merchant import gaps visible and CI-gated before generated snapshots are trusted.
+Make native merchant import gaps machine-actionable for coding agents.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -57,6 +57,8 @@ Make native merchant import gaps visible and CI-gated before generated snapshots
 - Added native export examples: `examples/shopify-products.json`, `examples/woocommerce-products.csv`, and `examples/headless-catalog.json`.
 - Added import validation in `render-fixtures` manifests for missing price, currency, availability, variants, shipping, returns, specs, and variant option context.
 - Added `render-fixtures --fail-on-warnings` so production CI can fail before fallback-generated snapshots create overconfident audit results.
+- Added `render-fixtures --tasks-output` so validation warnings can be emitted as JSONL remediation tasks for coding agents.
+- Added platform-aware import remediation task guidance for Shopify JSON, WooCommerce CSV, headless catalog JSON, and normalized AgentShelf exports.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -102,9 +104,11 @@ Make native merchant import gaps visible and CI-gated before generated snapshots
 - `.venv/bin/agentshelf scan /tmp/agentshelf-native --batch --format jsonl --min-score 85`
 - `.venv/bin/python -m unittest tests.test_cli.CliTests.test_render_fixtures_manifest_includes_validation_status tests.test_cli.CliTests.test_render_fixtures_warns_for_missing_import_fields tests.test_cli.CliTests.test_render_fixtures_fail_on_warnings_returns_nonzero`
 - `.venv/bin/agentshelf render-fixtures /tmp/agentshelf-thin-products.json --input-format agentshelf --platform shopify --output-dir /tmp/agentshelf-validation --format json --fail-on-warnings`
+- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_render_fixtures_writes_import_remediation_tasks tests.test_cli.CliTests.test_render_fixtures_clean_import_writes_empty_task_file`
+- `.venv/bin/agentshelf render-fixtures /tmp/agentshelf-thin-products.json --input-format agentshelf --platform shopify --output-dir /tmp/agentshelf-import-tasks --tasks-output /tmp/agentshelf-import-tasks/tasks.jsonl --format json`
 
 ## Next Best Task
-Add machine-readable import remediation tasks so coding agents can fix export jobs or catalog mapping code from validation warnings.
+Add GitHub Actions support for `render-fixtures --tasks-output` so import remediation tasks upload alongside scan tasks, SARIF, dashboards, and calibration artifacts.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

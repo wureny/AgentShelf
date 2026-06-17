@@ -100,6 +100,7 @@ agentshelf render-fixtures examples/woocommerce-products.csv \
   --input-format woocommerce \
   --platform woocommerce \
   --output-dir snapshots/woocommerce \
+  --tasks-output import-tasks.jsonl \
   --fail-on-warnings
 agentshelf render-fixtures examples/headless-catalog.json \
   --input-format headless \
@@ -185,7 +186,7 @@ agentshelf discover --site <url> [options]
 agentshelf discover --sitemap <url> [options]
 agentshelf snapshot <url> --output <path> [--rendered]
 agentshelf snapshot --url-file <urls.txt> --output-dir <dir> [--manifest <path>]
-agentshelf render-fixtures <products.json-or-csv> [--input-format auto|agentshelf|shopify|woocommerce|headless] [--platform shopify|woocommerce|headless|all] [--fail-on-warnings]
+agentshelf render-fixtures <products.json-or-csv> [--input-format auto|agentshelf|shopify|woocommerce|headless] [--platform shopify|woocommerce|headless|all] [--tasks-output import-tasks.jsonl] [--fail-on-warnings]
 ```
 
 Options:
@@ -204,7 +205,7 @@ Options:
 
 `snapshot` fetches raw HTML with the standard library by default. Use `--rendered` for a Playwright-backed single-page capture when product data is injected by JavaScript. Rendered mode is optional so the base CLI stays lightweight.
 
-`render-fixtures` turns product exports into deterministic Shopify, WooCommerce, and headless HTML snapshots. It accepts AgentShelf's normalized product JSON, Shopify product JSON, WooCommerce product CSV, and generic headless catalog JSON. Use it in CI when you can export catalog data or template data before deployment but do not want live crawling or browser capture in every PR. The output manifest includes import validation warnings for missing price, currency, stock, variants, shipping, returns, specs, or variant option context; add `--fail-on-warnings` when those gaps should fail CI before scan results are trusted.
+`render-fixtures` turns product exports into deterministic Shopify, WooCommerce, and headless HTML snapshots. It accepts AgentShelf's normalized product JSON, Shopify product JSON, WooCommerce product CSV, and generic headless catalog JSON. Use it in CI when you can export catalog data or template data before deployment but do not want live crawling or browser capture in every PR. The output manifest includes import validation warnings for missing price, currency, stock, variants, shipping, returns, specs, or variant option context; add `--fail-on-warnings` when those gaps should fail CI before scan results are trusted. Add `--tasks-output import-tasks.jsonl` when a coding agent should fix the export job or catalog mapper.
 
 `compare` shows whether rendered capture unlocks agent-readiness signals that raw HTML misses. It reports score deltas, dimension deltas, newly visible evidence, regressions, and an agent recommendation.
 
@@ -295,6 +296,7 @@ agentshelf render-fixtures examples/woocommerce-products.csv \
   --platform woocommerce \
   --output-dir snapshots/woocommerce \
   --manifest snapshots/woocommerce/manifest.json \
+  --tasks-output snapshots/woocommerce/import-tasks.jsonl \
   --fail-on-warnings
 agentshelf scan snapshots/woocommerce --batch --profile woocommerce --format jsonl --min-score 85
 ```
@@ -469,6 +471,25 @@ The manifest includes a validation block:
 
 Use `--fail-on-warnings` in production CI so missing import data fails before fallback text creates overconfident snapshots.
 
+Use `--tasks-output` to produce JSONL tasks for coding agents:
+
+```json
+{
+  "source": "catalog-export.json",
+  "input_format": "headless",
+  "product": "TrailBottle Pro 24oz",
+  "task": {
+    "id": "fix_import_shipping",
+    "reason": "Product export did not include shipping policy text; fixture generation used generic shipping copy.",
+    "files_or_page_area": "Product export shipping or shippingPolicy field.",
+    "acceptance_check": "Re-run `agentshelf render-fixtures ... --format json --fail-on-warnings` and confirm no validation warning remains for `shipping`.",
+    "priority": "medium",
+    "field": "shipping",
+    "action": "Add shipping or shippingPolicy to the export."
+  }
+}
+```
+
 ```json
 {
   "products": [
@@ -529,7 +550,7 @@ agentshelf compare examples/js_product_raw.html examples/js_product_rendered.htm
 agentshelf discover --sitemap https://example.com/sitemap.xml --limit 10
 agentshelf render-fixtures examples/storefront-products.json --platform all --output-dir snapshots --manifest snapshots/manifest.json
 agentshelf render-fixtures examples/shopify-products.json --input-format shopify --platform shopify --output-dir snapshots/shopify
-agentshelf render-fixtures examples/woocommerce-products.csv --input-format woocommerce --platform woocommerce --output-dir snapshots/woocommerce --fail-on-warnings
+agentshelf render-fixtures examples/woocommerce-products.csv --input-format woocommerce --platform woocommerce --output-dir snapshots/woocommerce --tasks-output snapshots/woocommerce/import-tasks.jsonl --fail-on-warnings
 agentshelf render-fixtures examples/headless-catalog.json --input-format headless --platform headless --output-dir snapshots/headless
 agentshelf scan examples/woocommerce_variable_product.html --profile woocommerce --format json
 agentshelf scan examples/headless_product_state.html --profile headless --format json

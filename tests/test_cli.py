@@ -1006,6 +1006,63 @@ class CliTests(unittest.TestCase):
             payload = json.loads(result.stdout)
             self.assertGreater(payload["validation"]["warning_count"], 0)
 
+    def test_render_fixtures_writes_import_remediation_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            products = root / "thin-products.json"
+            tasks = root / "import-tasks.jsonl"
+            products.write_text(json.dumps({"products": [{"title": "Thin Product", "price": "12.00"}]}), encoding="utf-8")
+
+            result = _run_cli(
+                "render-fixtures",
+                str(products),
+                "--input-format",
+                "agentshelf",
+                "--platform",
+                "shopify",
+                "--output-dir",
+                str(root / "snapshots"),
+                "--tasks-output",
+                str(tasks),
+                "--format",
+                "json",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = [json.loads(line) for line in tasks.read_text(encoding="utf-8").splitlines()]
+            task_ids = {row["task"]["id"] for row in rows}
+            self.assertIn("fix_import_shipping", task_ids)
+            self.assertIn("fix_import_variants", task_ids)
+            first = rows[0]
+            self.assertEqual(first["source"], str(products))
+            self.assertEqual(first["input_format"], "agentshelf")
+            self.assertIn("acceptance_check", first["task"])
+            self.assertIn("files_or_page_area", first["task"])
+
+    def test_render_fixtures_clean_import_writes_empty_task_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            tasks = root / "import-tasks.jsonl"
+
+            result = _run_cli(
+                "render-fixtures",
+                "examples/shopify-products.json",
+                "--input-format",
+                "shopify",
+                "--platform",
+                "shopify",
+                "--output-dir",
+                str(root / "snapshots"),
+                "--tasks-output",
+                str(tasks),
+                "--format",
+                "json",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(tasks.exists())
+            self.assertEqual(tasks.read_text(encoding="utf-8"), "")
+
     def test_rendered_snapshot_missing_extra_has_actionable_error(self) -> None:
         original_import = __import__
 
