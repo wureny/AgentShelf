@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Reduce production false positives while deepening merchant-specific rule coverage.
+Calibrate AgentShelf against real merchant page sets and turn review findings into reusable fixtures.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -37,6 +37,9 @@ Reduce production false positives while deepening merchant-specific rule coverag
 - Added profile-rule agent tasks: `add_return_policy_schema`, `complete_subscription_terms`, `clarify_bundle_components`, and `add_regional_shipping_matrix`.
 - Added a production-style benchmark fixture for subscription bundle gaps and updated benchmark expectations for stricter agent-readiness scoring.
 - Improved JSON-LD schema extraction so nested Offer return policy metadata is detected.
+- Added `agentshelf calibrate` to summarize real-page calibration hotspots from HTML snapshots or scan JSON/JSONL artifacts.
+- Added calibration categories for rendered capture, contradictions, profile rules, policy schema, offer extraction, content gaps, and low-confidence snapshots.
+- Added anonymized fixture export for local HTML candidates plus metadata sidecars.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -60,9 +63,10 @@ Reduce production false positives while deepening merchant-specific rule coverag
 - `agentshelf scan examples/shopify_variant_product.html --profile shopify --format json`
 - `python3 -m unittest tests.test_engine.BenchmarkTests`
 - `.venv/bin/python -m unittest tests.test_engine`
+- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_calibrate_from_html_batch_exports_anonymized_fixtures tests.test_cli.CliTests.test_calibrate_from_scan_results_jsonl`
 
 ## Next Best Task
-Add a small real-page calibration harness that can scan a merchant URL list, summarize false-positive categories, and export anonymized fixture candidates.
+Add optional calibration labels and a `calibration evaluate` workflow to compare rule changes against confirmed true-positive and false-positive fixtures.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

@@ -22,6 +22,7 @@ This project shows practical AI-commerce product thinking by turning vague "agen
 - Added storefront adapter profiles for Shopify, WooCommerce, headless, and generic pages so production CI and coding agents can pin deterministic extraction behavior.
 - Added profile-specific benchmark contracts for Shopify, WooCommerce, and headless storefront exports to keep production extraction behavior stable.
 - Added applicable merchant rule packs for subscriptions, bundles, regional shipping, and return policy schema so AgentShelf now catches higher-value agent-readiness gaps beyond basic SEO/schema checks.
+- Added a real-page calibration workflow that groups likely false-positive categories and exports anonymized merchant fixtures for repeatable benchmark improvement.
 - Packaged a professional open-source release with installable Python metadata, CI, contribution docs, benchmark fixtures, tests, and GitHub Action integration.
 
 ## Positioning Angle

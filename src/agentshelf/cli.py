@@ -4,6 +4,7 @@ import argparse
 import glob
 import hashlib
 import json
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,7 +20,7 @@ from agentshelf.engine import ADAPTER_PROFILES, build_agent_contract, parse_inpu
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.12 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.13 (+https://github.com/wureny/AgentShelf)"
 RENDER_EXTRA_MESSAGE = (
     "Rendered snapshots require the optional Playwright extra. "
     "Install it with `python3 -m pip install 'agentshelf[render]'` and then run "
@@ -915,6 +916,229 @@ def _render_audit_run_markdown(payload: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _calibration_category(bundle: dict, check: dict | None = None, warning: str | None = None, issue: dict | None = None) -> dict:
+    source = bundle["page"]["source"]
+    if warning and "dynamic_rendering_likely" in warning:
+        return {
+            "category": "rendered_capture_review",
+            "source": source,
+            "reason": "Static snapshot looks JS-rendered; raw HTML may create false negatives for price, inventory, variants, or reviews.",
+            "suggested_label": "needs_rendered_snapshot",
+        }
+    if issue:
+        return {
+            "category": "contradiction_review",
+            "source": source,
+            "reason": issue["message"],
+            "suggested_label": "verify_visible_vs_schema_truth",
+        }
+    if check is None:
+        return {
+            "category": "low_confidence_review",
+            "source": source,
+            "reason": bundle["confidence"]["basis"],
+            "suggested_label": "needs_human_calibration",
+        }
+    if check["id"] in {"subscription_terms", "bundle_components", "regional_shipping_promises"}:
+        return {
+            "category": "profile_rule_review",
+            "source": source,
+            "reason": check["evidence"] or check["recommendation"],
+            "suggested_label": f"verify_{check['id']}",
+        }
+    if check["id"] == "return_policy_schema":
+        return {
+            "category": "policy_schema_review",
+            "source": source,
+            "reason": check["evidence"] or check["recommendation"],
+            "suggested_label": "verify_return_policy_schema_gap",
+        }
+    if check["id"] in {"price", "availability", "variant_readiness", "offer_completeness"}:
+        return {
+            "category": "offer_extraction_review",
+            "source": source,
+            "reason": check["evidence"] or check["recommendation"],
+            "suggested_label": f"verify_{check['id']}_extraction",
+        }
+    return {
+        "category": "content_gap_review",
+        "source": source,
+        "reason": check["evidence"] or check["recommendation"],
+        "suggested_label": f"verify_{check['id']}",
+    }
+
+
+def _calibration_priority(bundle: dict) -> int:
+    band_weight = {"not_ready": 4, "weak": 3, "workable": 2, "strong": 1}
+    contract = build_agent_contract(bundle)
+    return (
+        band_weight.get(bundle["band"], 0) * 100
+        + len(contract["blocking_issues"]) * 10
+        + len(bundle.get("warnings", [])) * 5
+        + len(bundle.get("contradictions", [])) * 15
+    )
+
+
+def _build_calibration(results: list[dict], source_label: str, max_fixtures: int) -> dict:
+    pages = []
+    category_counts: dict[str, int] = {}
+    fixture_candidates = []
+    for bundle in results:
+        contract = build_agent_contract(bundle)
+        categories = []
+        for warning in bundle.get("warnings", []):
+            categories.append(_calibration_category(bundle, warning=warning))
+        for issue in bundle.get("contradictions", []):
+            categories.append(_calibration_category(bundle, issue=issue))
+        for check in bundle["checks"]:
+            if not check.get("applicable", True) or check["passed"]:
+                continue
+            categories.append(_calibration_category(bundle, check=check))
+        if bundle["confidence"]["level"] == "low":
+            categories.append(_calibration_category(bundle))
+
+        deduped = []
+        seen = set()
+        for item in categories:
+            key = (item["category"], item["suggested_label"])
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(item)
+            category_counts[item["category"]] = category_counts.get(item["category"], 0) + 1
+
+        page_item = {
+            "source": bundle["page"]["source"],
+            "title": bundle["page"]["title"],
+            "score": bundle["score"],
+            "band": bundle["band"],
+            "confidence": bundle["confidence"],
+            "adapter_profile": bundle["commerce_signals"]["adapter_profile"],
+            "review_categories": deduped,
+            "blocking_issue_ids": [issue["id"] for issue in contract["blocking_issues"]],
+            "agent_task_ids": [task["id"] for task in contract["agent_tasks"]],
+            "priority": _calibration_priority(bundle),
+        }
+        pages.append(page_item)
+        if deduped:
+            fixture_candidates.append(page_item)
+
+    fixture_candidates = sorted(fixture_candidates, key=lambda item: (-item["priority"], item["source"]))[:max_fixtures]
+    return {
+        "contract": "agentshelf.calibration.v1",
+        "source": source_label,
+        "summary": {
+            "pages": len(results),
+            "review_pages": len([page for page in pages if page["review_categories"]]),
+            "category_counts": dict(sorted(category_counts.items())),
+            "bands": {band: sum(1 for item in results if item["band"] == band) for band in BAND_ORDER},
+            "confidence": {
+                level: sum(1 for item in results if item["confidence"]["level"] == level)
+                for level in ("high", "medium", "low")
+            },
+        },
+        "pages": sorted(pages, key=lambda item: (-item["priority"], item["source"])),
+        "fixture_candidates": fixture_candidates,
+        "agent_next_actions": _calibration_next_actions(category_counts),
+    }
+
+
+def _calibration_next_actions(category_counts: dict[str, int]) -> list[str]:
+    actions = []
+    if category_counts.get("rendered_capture_review"):
+        actions.append("Run `agentshelf compare` on representative raw/rendered pairs before changing scoring rules.")
+    if category_counts.get("profile_rule_review"):
+        actions.append("Review subscription, bundle, and regional-shipping pages for intentional false positives, then add fixtures for confirmed patterns.")
+    if category_counts.get("policy_schema_review"):
+        actions.append("Check whether return policy schema is absent or just nested in a storefront-specific structure AgentShelf should parse.")
+    if category_counts.get("offer_extraction_review"):
+        actions.append("Inspect page source for platform-specific price, inventory, or variant data that should become adapter evidence.")
+    if not actions:
+        actions.append("No calibration hotspots detected; keep the current rules and add fixtures only for new merchant patterns.")
+    return actions
+
+
+def _render_calibration_markdown(payload: dict) -> str:
+    summary = payload["summary"]
+    lines = [
+        "# AgentShelf Calibration Report",
+        "",
+        "## Summary",
+        f"- Source: `{payload['source']}`",
+        f"- Pages: {summary['pages']}",
+        f"- Pages needing review: {summary['review_pages']}",
+        f"- Bands: {', '.join(f'{key}={value}' for key, value in summary['bands'].items())}",
+        f"- Confidence: {', '.join(f'{key}={value}' for key, value in summary['confidence'].items())}",
+        "",
+        "## Review Categories",
+    ]
+    if summary["category_counts"]:
+        for category, count in summary["category_counts"].items():
+            lines.append(f"- {category}: {count}")
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Fixture Candidates"])
+    if payload["fixture_candidates"]:
+        for item in payload["fixture_candidates"]:
+            category_names = sorted({category["category"] for category in item["review_categories"]})
+            categories = ", ".join(category_names)
+            lines.append(f"- `{item['source']}`: {item['score']} ({item['band']}), {categories}")
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Agent Next Actions"])
+    for action in payload["agent_next_actions"]:
+        lines.append(f"- {action}")
+    return "\n".join(lines) + "\n"
+
+
+def _anonymize_html(text: str) -> str:
+    text = re.sub(r"https?://[^\s\"'<>]+", "https://example.com/product", text)
+    text = re.sub(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "merchant@example.com", text)
+    text = re.sub(r"\+?\d[\d\s().-]{7,}\d", "000-000-0000", text)
+    text = re.sub(r"\b[A-Z0-9._%+-]+\.myshopify\.com\b", "demo-store.myshopify.com", text, flags=re.IGNORECASE)
+    return text
+
+
+def _safe_fixture_name(source: str, index: int) -> str:
+    parsed = urlparse(source)
+    base = parsed.path if parsed.scheme else source
+    name = Path(base).stem or "fixture"
+    slug = "".join(char.lower() if char.isalnum() else "-" for char in name).strip("-")[:48] or "fixture"
+    digest = hashlib.sha1(source.encode("utf-8")).hexdigest()[:8]
+    return f"{index:02d}-{slug}-{digest}.html"
+
+
+def _export_calibration_fixtures(payload: dict, output_dir: Path) -> list[dict]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    exported = []
+    for index, candidate in enumerate(payload["fixture_candidates"], start=1):
+        source = candidate["source"]
+        source_path = Path(source)
+        if not source_path.exists() or not source_path.is_file():
+            exported.append({"source": source, "status": "skipped", "reason": "source is not a local file"})
+            continue
+        fixture_path = output_dir / _safe_fixture_name(source, index)
+        metadata_path = fixture_path.with_suffix(".json")
+        fixture_path.write_text(_anonymize_html(source_path.read_text(encoding="utf-8")), encoding="utf-8")
+        metadata_path.write_text(
+            json.dumps(
+                {
+                    "source": source,
+                    "fixture": str(fixture_path),
+                    "score": candidate["score"],
+                    "band": candidate["band"],
+                    "review_categories": candidate["review_categories"],
+                    "agent_task_ids": candidate["agent_task_ids"],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        exported.append({"source": source, "status": "exported", "fixture": str(fixture_path), "metadata": str(metadata_path)})
+    return exported
+
+
 def _render_discovery(payload: dict, output_format: str) -> str:
     if output_format == "json":
         return json.dumps(payload, indent=2) + "\n"
@@ -1009,6 +1233,16 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("weak", "not_ready"),
         help="Return non-zero when any page is at or below this readiness band.",
     )
+
+    calibrate = subcommands.add_parser("calibrate", help="Summarize real-page calibration hotspots and export anonymized fixture candidates.")
+    calibrate.add_argument("target", help="HTML/text file, directory, glob, or scan result file.")
+    calibrate.add_argument("--from-results", action="store_true", help="Read target as AgentShelf JSON/JSONL scan output instead of HTML snapshots.")
+    calibrate.add_argument("--batch", action="store_true", help="Allow directory or glob scanning when target is HTML snapshots.")
+    calibrate.add_argument("--profile", choices=ADAPTER_PROFILES, default="auto", help="Storefront adapter profile for scanning HTML snapshots.")
+    calibrate.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
+    calibrate.add_argument("--output", type=Path, help="Optional output file path.")
+    calibrate.add_argument("--export-fixtures", type=Path, help="Optional directory for anonymized local HTML fixture candidates.")
+    calibrate.add_argument("--max-fixtures", type=int, default=10, help="Maximum fixture candidates to include or export.")
 
     discover = subcommands.add_parser("discover", help="Discover product-like URLs from robots.txt sitemap hints or a sitemap URL.")
     discover.add_argument("--site", help="Storefront root URL. AgentShelf reads robots.txt for Sitemap hints.")
@@ -1109,6 +1343,23 @@ def main() -> int:
             )
             rendered = json.dumps(payload, indent=2) + "\n" if args.format == "json" else markdown
             exit_code = 1 if payload["threshold_failed"] else 0
+        elif args.command == "calibrate":
+            if args.max_fixtures < 1:
+                raise ValueError("--max-fixtures must be at least 1.")
+            if args.from_results:
+                results = _load_scan_results(Path(args.target))
+                source_label = str(Path(args.target))
+            else:
+                paths = _resolve_inputs(args.target, args.batch)
+                if len(paths) > 1 and not args.batch:
+                    raise ValueError("Multiple inputs found. Re-run with --batch.")
+                results = [_load_scan(path, adapter_profile=args.profile) for path in paths]
+                source_label = args.target
+            payload = _build_calibration(results, source_label=source_label, max_fixtures=args.max_fixtures)
+            if args.export_fixtures:
+                payload["fixture_export"] = _export_calibration_fixtures(payload, args.export_fixtures)
+            rendered = json.dumps(payload, indent=2) + "\n" if args.format == "json" else _render_calibration_markdown(payload)
+            exit_code = 0
         elif args.command == "discover":
             payload = _discover_urls(
                 site=args.site,

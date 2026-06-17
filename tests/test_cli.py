@@ -311,6 +311,64 @@ class CliTests(unittest.TestCase):
             self.assertTrue((history / "current-results.jsonl").exists())
             self.assertTrue((history / "audit-diff.md").exists())
 
+    def test_calibrate_from_html_batch_exports_anonymized_fixtures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            page = root / "merchant-product.html"
+            page.write_text(
+                """<html><head><title>Merchant Product</title></head><body>
+<h1>Merchant Product Bundle</h1>
+<p>Contact founder@realbrand.example or visit https://realbrand.example/products/bundle.</p>
+<p>Bundle price $89.00. In stock. Subscribe and save.</p>
+<p>Ships to US and Canada.</p>
+<p>30-day returns.</p>
+<script type="application/json" id="ProductJson-template">
+{"options":[{"name":"Plan"}],"variants":[{"id":1,"price":8900,"available":true,"option1":"Monthly"}],"selling_plan_groups":[{"name":"Subscribe and save"}]}
+</script>
+</body></html>""",
+                encoding="utf-8",
+            )
+            fixtures = root / "fixtures"
+
+            result = _run_cli(
+                "calibrate",
+                str(root),
+                "--batch",
+                "--format",
+                "json",
+                "--export-fixtures",
+                str(fixtures),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["contract"], "agentshelf.calibration.v1")
+            self.assertEqual(payload["summary"]["review_pages"], 1)
+            self.assertIn("profile_rule_review", payload["summary"]["category_counts"])
+            self.assertTrue(payload["fixture_export"])
+            exported = next(item for item in payload["fixture_export"] if item["status"] == "exported")
+            html = Path(exported["fixture"]).read_text(encoding="utf-8")
+            self.assertIn("merchant@example.com", html)
+            self.assertIn("https://example.com/product", html)
+            self.assertNotIn("founder@realbrand.example", html)
+            self.assertNotIn("realbrand.example/products", html)
+
+    def test_calibrate_from_scan_results_jsonl(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            result_file = root / "results.jsonl"
+            scan = _run_cli("scan", "benchmarks/fixtures/profile_rule_gap_product.html", "--format", "jsonl")
+            self.assertEqual(scan.returncode, 0, scan.stderr)
+            result_file.write_text(scan.stdout, encoding="utf-8")
+
+            result = _run_cli("calibrate", str(result_file), "--from-results", "--format", "json")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["summary"]["pages"], 1)
+            self.assertIn("policy_schema_review", payload["summary"]["category_counts"])
+            self.assertTrue(payload["agent_next_actions"])
+
     def test_discover_reads_robots_sitemap_hints(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

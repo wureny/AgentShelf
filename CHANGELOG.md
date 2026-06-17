@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.0
+- Added `agentshelf calibrate` for real-page calibration reviews from HTML snapshots or existing scan JSON/JSONL artifacts.
+- Added calibration categories for rendered capture, contradictions, profile rules, policy schema, offer extraction, content gaps, and low-confidence snapshots.
+- Added anonymized fixture candidate export so teams can turn merchant-page false positives into reproducible benchmark cases.
+
 ## 0.12.0
 - Added applicable profile-specific rule checks for return policy schema, subscription terms, bundle component clarity, and regional shipping promises.
 - Added agent task IDs for deeper merchant remediation: `add_return_policy_schema`, `complete_subscription_terms`, `clarify_bundle_components`, and `add_regional_shipping_matrix`.

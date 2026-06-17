@@ -97,6 +97,15 @@ Run a local scheduled audit with previous/current history managed for you:
 agentshelf audit-run "snapshots/*.html" --batch --history-dir .agentshelf/runs --tasks-output agentshelf-tasks.jsonl
 ```
 
+Summarize calibration hotspots from real-page snapshots and export anonymized fixture candidates:
+
+```bash
+agentshelf calibrate "snapshots/*.html" \
+  --batch \
+  --export-fixtures calibration-fixtures \
+  --format json
+```
+
 ## Example Output
 ```text
 # AgentShelf Report: TrailBottle Pro 24oz
@@ -126,6 +135,7 @@ agentshelf agent-tasks <file-or-dir-or-glob> [options]
 agentshelf compare <raw.html> <rendered.html> [options]
 agentshelf diff <baseline-results.jsonl> <current-results.jsonl> [options]
 agentshelf audit-run <file-or-dir-or-glob> [options]
+agentshelf calibrate <file-or-dir-or-glob-or-results.jsonl> [options]
 agentshelf discover --site <url> [options]
 agentshelf discover --sitemap <url> [options]
 agentshelf snapshot <url> --output <path> [--rendered]
@@ -153,6 +163,8 @@ Options:
 `diff` compares two `agentshelf scan --format json|jsonl` outputs. It reports page-set regressions, improvements, new or resolved blocking issues, catalog additions/removals, and the next remediation tasks an agent should pick up.
 
 `audit-run` is the scheduled-job wrapper around `scan` and `diff`. It writes `<history-dir>/current-results.jsonl`, rotates the previous run into `<history-dir>/previous-results.jsonl`, archives each run as `results-<timestamp>.jsonl`, writes an `audit-diff.md` report, and can emit `agent-tasks` JSONL in the same pass.
+
+`calibrate` reviews real-page scan output for likely false-positive and false-negative categories. It can scan HTML snapshots directly or read existing `scan --format json|jsonl` artifacts with `--from-results`. Use `--export-fixtures` to write anonymized local HTML candidates plus metadata sidecars for benchmark review.
 
 `discover` reads `robots.txt` for `Sitemap:` hints or accepts an explicit sitemap URL. It filters product-like URLs and emits a URL list for `snapshot --url-file`; it does not crawl arbitrary site links.
 
@@ -194,9 +206,14 @@ agentshelf audit-run "snapshots/*.html" \
   --history-dir .agentshelf/runs \
   --tasks-output agentshelf-tasks.jsonl \
   --min-score 70
+agentshelf calibrate .agentshelf/runs/current-results.jsonl \
+  --from-results \
+  --output calibration-report.md
 ```
 
-On the first run, `audit-run` creates a baseline. On later runs, it automatically writes `.agentshelf/runs/audit-diff.md` from the last saved result set. In CI, upload `.agentshelf/runs/audit-diff.md` and `agentshelf-tasks.jsonl` as review artifacts so humans see the merchant-level regression summary and agents get machine-actionable fixes.
+On the first run, `audit-run` creates a baseline. On later runs, it automatically writes `.agentshelf/runs/audit-diff.md` from the last saved result set. In CI, upload `.agentshelf/runs/audit-diff.md`, `calibration-report.md`, and `agentshelf-tasks.jsonl` as review artifacts so humans see the merchant-level regression summary and agents get machine-actionable fixes.
+
+Use calibration reports before changing scoring rules. A common loop is: run real merchant snapshots, inspect `rendered_capture_review`, `profile_rule_review`, `policy_schema_review`, and `offer_extraction_review`, then export anonymized fixture candidates for cases that should become benchmark coverage.
 
 ## GitHub Action
 Use AgentShelf as a PR gate for product-page snapshots, generated storefront HTML, or theme fixture output.
@@ -322,6 +339,7 @@ agentshelf compare examples/js_product_raw.html examples/js_product_rendered.htm
 agentshelf discover --sitemap https://example.com/sitemap.xml --limit 10
 agentshelf scan examples/woocommerce_variable_product.html --profile woocommerce --format json
 agentshelf scan examples/headless_product_state.html --profile headless --format json
+agentshelf calibrate benchmarks/fixtures --batch --format markdown
 python3 -m pip install -e ".[render]"  # optional rendered snapshots
 ```
 
