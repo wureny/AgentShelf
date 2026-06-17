@@ -125,6 +125,42 @@ CHECKS = [
         "success": "The page includes schema hints useful for merchant feeds and agent ingestion.",
         "failure": "Add Product, Offer, rating, FAQ, shipping, or return-policy structured data hints.",
     },
+    {
+        "id": "return_policy_schema",
+        "label": "Return policy structured data",
+        "weight": 8,
+        "dimension": "policy_clarity",
+        "agent_impact": "Agents can compare buyer risk more reliably when return terms are available as structured policy metadata.",
+        "success": "Return policy copy is backed by merchant return policy structured data.",
+        "failure": "Add hasMerchantReturnPolicy metadata with return window, method, and refund terms.",
+    },
+    {
+        "id": "subscription_terms",
+        "label": "Subscription purchase terms",
+        "weight": 10,
+        "dimension": "agent_actionability",
+        "agent_impact": "Agents need cadence, price, and cancellation terms before recommending a subscription offer.",
+        "success": "Subscription or selling-plan terms are specific enough for agent comparison.",
+        "failure": "Expose subscription cadence, subscription price or discount, and cancellation terms.",
+    },
+    {
+        "id": "bundle_components",
+        "label": "Bundle component clarity",
+        "weight": 10,
+        "dimension": "offer_clarity",
+        "agent_impact": "Agents need bundle contents and bundle-level offer data to compare kits against single items.",
+        "success": "Bundle contents and bundle-level purchase terms are clear.",
+        "failure": "List bundle components and expose bundle price and availability as a coherent offer.",
+    },
+    {
+        "id": "regional_shipping_promises",
+        "label": "Regional shipping promises",
+        "weight": 10,
+        "dimension": "policy_clarity",
+        "agent_impact": "Agents need destination-specific delivery promises to avoid recommending products that miss a buyer's region or deadline.",
+        "success": "Shipping promises include region plus timing or cost.",
+        "failure": "State destination regions with delivery timing or shipping cost for each region.",
+    },
 ]
 
 DIMENSIONS = ("discoverability", "offer_clarity", "policy_clarity", "agent_actionability")
@@ -234,9 +270,12 @@ def _item_types(items: list[dict[str, Any]]) -> set[str]:
 def _schema_values(items: list[dict[str, Any]], keys: tuple[str, ...]) -> list[Any]:
     values: list[Any] = []
     for item in items:
-        for key in keys:
-            if key in item:
-                values.append(item[key])
+        for value in _walk_json(item):
+            if not isinstance(value, dict):
+                continue
+            for key in keys:
+                if key in value:
+                    values.append(value[key])
     return values
 
 
@@ -373,6 +412,9 @@ def _commerce_signals(
     variant_price_count = sum(1 for variant in variants if _variant_has_price(variant))
     variant_availability_count = sum(1 for variant in variants if _variant_has_availability(variant))
     policy_snippets = _policy_snippets(plain_text)
+    subscription = _subscription_signals(plain_text, selling_plan_groups)
+    bundle = _bundle_signals(plain_text, embedded + products)
+    regional_shipping = _regional_shipping_signals(plain_text)
     return {
         "adapter_profile": adapter_profile,
         "variant_count": len(variants),
@@ -384,6 +426,9 @@ def _commerce_signals(
         "shipping_snippets": policy_snippets["shipping"],
         "return_snippets": policy_snippets["returns"],
         "has_offer_schema": bool(offers),
+        "subscription": subscription,
+        "bundle": bundle,
+        "regional_shipping": regional_shipping,
     }
 
 
@@ -457,6 +502,101 @@ def _policy_snippets(plain_text: str) -> dict[str, list[str]]:
             if len(snippets[key]) >= 3:
                 break
     return snippets
+
+
+def _subscription_signals(plain_text: str, selling_plan_groups: list[Any]) -> dict[str, Any]:
+    intent = bool(selling_plan_groups) or bool(
+        re.search(r"\b(?:subscribe|subscription|auto-?deliver|recurring|replenishment)\b", plain_text, flags=re.IGNORECASE)
+    )
+    cadence = _first_match(
+        plain_text,
+        [
+            r"every\s+\d+\s+(?:day|days|week|weeks|month|months)",
+            r"(?:weekly|monthly|quarterly)\s+(?:delivery|subscription|shipments?)",
+            r"ships?\s+every\s+(?:week|month|\d+\s+(?:days|weeks|months))",
+        ],
+    )
+    cancellation = _first_match(
+        plain_text,
+        [r"cancel\s+(?:anytime|any time|online|before [^.]+)", r"pause\s+or\s+cancel", r"skip\s+(?:or\s+pause|a shipment)"],
+    )
+    price_or_discount = _first_match(
+        plain_text,
+        [r"save\s+\d+%", r"\d+%\s+off", r"subscription\s+price\s+\$?\s?\d+(?:\.\d{2})?", r"subscribe\s+and\s+save"],
+    )
+    return {
+        "intent": intent,
+        "selling_plan_group_count": len(selling_plan_groups),
+        "has_cadence": cadence is not None,
+        "has_cancellation": cancellation is not None,
+        "has_price_or_discount": price_or_discount is not None or bool(selling_plan_groups),
+        "evidence": [item for item in [cadence, cancellation, price_or_discount] if item],
+    }
+
+
+def _bundle_signals(plain_text: str, json_roots: list[Any]) -> dict[str, Any]:
+    intent = bool(re.search(r"\b(?:bundle|kit|set|starter pack|pack of|includes)\b", plain_text, flags=re.IGNORECASE))
+    component_count = len(
+        re.findall(
+            r"(?:includes|contains|comes with)\s+[^.]{8,160}",
+            plain_text,
+            flags=re.IGNORECASE,
+        )
+    )
+    json_component_count = 0
+    for root in json_roots:
+        for value in _walk_json(root):
+            if not isinstance(value, dict):
+                continue
+            for key in ("components", "bundleComponents", "itemsIncluded", "includedProducts"):
+                raw = value.get(key)
+                if isinstance(raw, list):
+                    json_component_count += len(raw)
+                    intent = True
+    price = _first_match(plain_text, [r"(?:bundle|kit|set)\s+price\s+\$?\s?\d+(?:\.\d{2})?", r"\$\s?\d+(?:\.\d{2})?"])
+    availability = _first_match(plain_text, [r"in stock", r"out of stock", r"available", r"sold out"])
+    return {
+        "intent": intent,
+        "component_count": max(component_count, json_component_count),
+        "has_price": price is not None,
+        "has_availability": availability is not None,
+        "evidence": [item for item in [f"{max(component_count, json_component_count)} component signal(s)" if max(component_count, json_component_count) else None, price, availability] if item],
+    }
+
+
+def _regional_shipping_signals(plain_text: str) -> dict[str, Any]:
+    regions = sorted(
+        {
+            match.group(0).upper() if len(match.group(0)) <= 3 else match.group(0).title()
+            for match in re.finditer(
+                r"\b(?:US|USA|U\.S\.|United States|Canada|EU|Europe|UK|United Kingdom|Australia|APAC|international)\b",
+                plain_text,
+                flags=re.IGNORECASE,
+            )
+        }
+    )
+    intent = bool(regions) and bool(re.search(r"\b(?:shipping|delivery|ships|arrives|dispatch)\b", plain_text, flags=re.IGNORECASE))
+    timing = _first_match(
+        plain_text,
+        [
+            r"(?:ships?|delivery|arrives|dispatch)[^.]{0,80}(?:\d+\s*-\s*\d+|\d+)\s+(?:business\s+)?days",
+            r"(?:US|USA|United States|Canada|EU|Europe|UK|United Kingdom|Australia|international)[^.]{0,80}(?:days|weeks)",
+        ],
+    )
+    cost = _first_match(
+        plain_text,
+        [
+            r"(?:free|flat-rate|flat rate)\s+(?:shipping|delivery)[^.]{0,80}",
+            r"(?:shipping|delivery)\s+(?:cost|from|starts at)\s+\$?\s?\d+(?:\.\d{2})?",
+        ],
+    )
+    return {
+        "intent": intent,
+        "regions": regions,
+        "has_timing": timing is not None,
+        "has_cost": cost is not None,
+        "evidence": [item for item in [", ".join(regions) if regions else None, timing, cost] if item],
+    }
 
 
 def _trim_repeated_prefix(text: str) -> str:
@@ -613,6 +753,70 @@ def _check_agent_answerability(plain_text: str, commerce: dict[str, Any]) -> tup
     )
 
 
+def _check_return_policy_schema(commerce: dict[str, Any]) -> tuple[bool, str | None, bool]:
+    applicable = bool(commerce["return_snippets"])
+    if not applicable:
+        return True, "No visible return-policy promise detected in this snapshot.", False
+    if commerce.get("has_return_policy_schema"):
+        return True, "hasMerchantReturnPolicy metadata present.", True
+    return False, "Visible return policy exists without hasMerchantReturnPolicy metadata.", True
+
+
+def _check_subscription_terms(commerce: dict[str, Any]) -> tuple[bool, str | None, bool]:
+    subscription = commerce["subscription"]
+    if not subscription["intent"]:
+        return True, "No subscription or selling-plan intent detected.", False
+    required = {
+        "cadence": subscription["has_cadence"],
+        "price_or_discount": subscription["has_price_or_discount"],
+        "cancellation": subscription["has_cancellation"],
+    }
+    missing = [key for key, present in required.items() if not present]
+    if not missing:
+        evidence = ", ".join(subscription["evidence"]) or f"{subscription['selling_plan_group_count']} selling plan group(s)"
+        return True, evidence, True
+    return False, f"Subscription intent detected but missing: {', '.join(missing)}.", True
+
+
+def _check_bundle_components(commerce: dict[str, Any]) -> tuple[bool, str | None, bool]:
+    bundle = commerce["bundle"]
+    if not bundle["intent"]:
+        return True, "No bundle or kit intent detected.", False
+    required = {
+        "components": bundle["component_count"] > 0,
+        "price": bundle["has_price"],
+        "availability": bundle["has_availability"],
+    }
+    missing = [key for key, present in required.items() if not present]
+    if not missing:
+        return True, ", ".join(bundle["evidence"]), True
+    return False, f"Bundle intent detected but missing: {', '.join(missing)}.", True
+
+
+def _check_regional_shipping_promises(commerce: dict[str, Any]) -> tuple[bool, str | None, bool]:
+    regional = commerce["regional_shipping"]
+    if not regional["intent"]:
+        return True, "No region-specific shipping promise detected.", False
+    required = {
+        "region": bool(regional["regions"]),
+        "timing_or_cost": regional["has_timing"] or regional["has_cost"],
+    }
+    missing = [key for key, present in required.items() if not present]
+    if not missing:
+        return True, ", ".join(regional["evidence"]), True
+    return False, f"Regional shipping promise detected but missing: {', '.join(missing)}.", True
+
+
+def _normalize_check_result(result: tuple[Any, ...]) -> tuple[bool, str | None, bool]:
+    if len(result) == 2:
+        passed, evidence = result
+        return bool(passed), evidence, True
+    if len(result) == 3:
+        passed, evidence, applicable = result
+        return bool(passed), evidence, bool(applicable)
+    raise ValueError(f"Check evaluator returned {len(result)} values; expected 2 or 3.")
+
+
 def _visible_price(plain_text: str) -> str | None:
     return _first_match(plain_text, [r"\$\s?\d+(?:\.\d{2})?", r"usd\s?\d+(?:\.\d{2})?"])
 
@@ -678,6 +882,7 @@ def scan_readiness(scan_input: ScanInput, adapter_profile: str = "auto") -> dict
     offers = _offer_values(products)
     schema_types = _item_types(jsonld_items)
     commerce = _commerce_signals(scan_input.content, plain_text, products, offers, requested_profile=adapter_profile)
+    commerce["has_return_policy_schema"] = bool(_schema_values(jsonld_items, ("hasMerchantReturnPolicy", "merchantReturnDays", "returnPolicyCategory")))
     dynamic_rendering_likely = _detect_dynamic_rendering(scan_input.content, plain_text)
     if dynamic_rendering_likely:
         warnings.append("dynamic_rendering_likely: static HTML may miss JS-rendered price, inventory, reviews, or variants.")
@@ -707,34 +912,39 @@ def scan_readiness(scan_input: ScanInput, adapter_profile: str = "auto") -> dict
         "offer_completeness": lambda: _check_offer_completeness_with_commerce(offers, jsonld_items, commerce),
         "agent_answerability": lambda: _check_agent_answerability(plain_text, commerce),
         "merchant_feed_hints": lambda: _check_merchant_feed_hints_with_commerce(jsonld_items, schema_types, commerce),
+        "return_policy_schema": lambda: _check_return_policy_schema(commerce),
+        "subscription_terms": lambda: _check_subscription_terms(commerce),
+        "bundle_components": lambda: _check_bundle_components(commerce),
+        "regional_shipping_promises": lambda: _check_regional_shipping_promises(commerce),
     }
 
     checks: list[dict[str, Any]] = []
     failed_checks: list[dict[str, Any]] = []
     passed_weight = 0
-    total_weight = sum(check["weight"] for check in CHECKS)
     dimension_totals = {dimension: 0 for dimension in DIMENSIONS}
     dimension_passed = {dimension: 0 for dimension in DIMENSIONS}
 
     for check in CHECKS:
-        passed, evidence = evaluators[check["id"]]()
-        if passed:
+        passed, evidence, applicable = _normalize_check_result(evaluators[check["id"]]())
+        if applicable and passed:
             passed_weight += check["weight"]
             dimension_passed[check["dimension"]] += check["weight"]
-        else:
+        elif applicable:
             failed_checks.append(check)
-        dimension_totals[check["dimension"]] += check["weight"]
+        if applicable:
+            dimension_totals[check["dimension"]] += check["weight"]
         checks.append(
             {
                 "id": check["id"],
                 "label": check["label"],
                 "dimension": check["dimension"],
                 "weight": check["weight"],
+                "applicable": applicable,
                 "passed": passed,
                 "evidence": evidence,
                 "agent_impact": check["agent_impact"],
-                "recommendation": None if passed else check["failure"],
-                "notes": check["success"] if passed else check["failure"],
+                "recommendation": None if passed or not applicable else check["failure"],
+                "notes": "Not applicable to this snapshot." if not applicable else check["success"] if passed else check["failure"],
             }
         )
 
@@ -742,7 +952,8 @@ def scan_readiness(scan_input: ScanInput, adapter_profile: str = "auto") -> dict
         {"check_id": check["id"], "weight": check["weight"], "recommendation": check["failure"]}
         for check in sorted(failed_checks, key=lambda item: item["weight"], reverse=True)[:5]
     ]
-    score = max(0, round((passed_weight / total_weight) * 100) - (10 * len(contradiction_issues)))
+    total_weight = sum(dimension_totals.values())
+    score = max(0, round((passed_weight / total_weight) * 100) - (10 * len(contradiction_issues))) if total_weight else 0
     dimensions = {
         dimension: round((dimension_passed[dimension] / dimension_totals[dimension]) * 100)
         if dimension_totals[dimension]
@@ -758,8 +969,9 @@ def scan_readiness(scan_input: ScanInput, adapter_profile: str = "auto") -> dict
         "band": _score_band(score),
         "dimensions": dimensions,
         "summary": {
-            "passed_checks": sum(1 for item in checks if item["passed"]),
-            "total_checks": len(checks),
+            "passed_checks": sum(1 for item in checks if item["applicable"] and item["passed"]),
+            "total_checks": sum(1 for item in checks if item["applicable"]),
+            "not_applicable_checks": sum(1 for item in checks if not item["applicable"]),
         },
         "checks": checks,
         "top_fixes": top_fixes,
@@ -781,7 +993,7 @@ def _confidence_level(warnings: list[str], checks: list[dict[str, Any]]) -> dict
             "level": "low",
             "basis": "Static HTML appears sparse or JS-rendered, so key commerce signals may be missing from the snapshot.",
         }
-    evidence_count = sum(1 for check in checks if check.get("evidence"))
+    evidence_count = sum(1 for check in checks if check.get("applicable", True) and check.get("evidence"))
     if evidence_count >= 8:
         return {"level": "high", "basis": "Most passing checks include direct visible or structured evidence."}
     return {"level": "medium", "basis": "Some checks rely on heuristic visible-text matching."}
@@ -792,11 +1004,15 @@ TASK_MAP = {
     "availability": "expose_inventory_state",
     "shipping": "add_shipping_policy_summary",
     "returns": "add_return_policy_summary",
+    "return_policy_schema": "add_return_policy_schema",
     "schema_product": "add_product_jsonld",
     "variant_readiness": "expose_variant_options",
     "offer_completeness": "complete_offer_metadata",
     "agent_answerability": "add_agent_answerable_copy",
     "merchant_feed_hints": "add_merchant_feed_metadata",
+    "subscription_terms": "complete_subscription_terms",
+    "bundle_components": "clarify_bundle_components",
+    "regional_shipping_promises": "add_regional_shipping_matrix",
 }
 
 
@@ -857,11 +1073,15 @@ def _task_area(check_id: str) -> str:
         "availability": "inventory copy, variant data, or Product Offer availability",
         "shipping": "shipping policy copy near purchase controls",
         "returns": "returns or refund policy copy near purchase controls",
+        "return_policy_schema": "Offer or Organization hasMerchantReturnPolicy JSON-LD",
         "schema_product": "application/ld+json Product schema",
         "variant_readiness": "variant picker and variant metadata",
         "offer_completeness": "Product Offer JSON-LD",
         "agent_answerability": "FAQ, product details, policy, or fit guidance sections",
         "merchant_feed_hints": "Product, Offer, rating, FAQ, shipping, or return-policy schema",
+        "subscription_terms": "selling plan data, subscription CTA, and subscription policy copy",
+        "bundle_components": "bundle contents, bundle price block, and bundle-level availability",
+        "regional_shipping_promises": "shipping policy table or destination-specific delivery copy",
     }
     return areas.get(check_id, "product page")
 
@@ -875,6 +1095,7 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         f"- Score: {bundle['score']}/100",
         f"- Readiness band: {bundle['band']}",
         f"- Passed checks: {bundle['summary']['passed_checks']}/{bundle['summary']['total_checks']}",
+        f"- Not applicable checks: {bundle['summary']['not_applicable_checks']}",
         f"- Dimension scores: {', '.join(f'{key}={value}' for key, value in bundle['dimensions'].items())}",
         f"- Confidence: {bundle['confidence']['level']} ({bundle['confidence']['basis']})",
         f"- Adapter profile: {bundle['commerce_signals']['adapter_profile']['active']} "
@@ -888,11 +1109,15 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         f"- Options: {', '.join(bundle['commerce_signals']['option_names']) or 'None detected'}",
         f"- Selling plan groups: {bundle['commerce_signals']['selling_plan_group_count']}",
         f"- Metafield-like keys: {', '.join(bundle['commerce_signals']['metafield_keys'][:8]) or 'None detected'}",
+        f"- Return policy schema: {'present' if bundle['commerce_signals']['has_return_policy_schema'] else 'missing'}",
+        f"- Subscription intent: {'yes' if bundle['commerce_signals']['subscription']['intent'] else 'no'}",
+        f"- Bundle intent: {'yes' if bundle['commerce_signals']['bundle']['intent'] else 'no'}",
+        f"- Regional shipping intent: {'yes' if bundle['commerce_signals']['regional_shipping']['intent'] else 'no'}",
         "",
         "## Checks",
     ]
     for check in bundle["checks"]:
-        status = "PASS" if check["passed"] else "FAIL"
+        status = "N/A" if not check["applicable"] else "PASS" if check["passed"] else "FAIL"
         evidence = f" Evidence: {check['evidence']}." if check["evidence"] else ""
         lines.append(f"- [{status}] {check['label']} ({check['weight']} pts): {check['notes']}{evidence} Impact: {check['agent_impact']}")
 

@@ -4,7 +4,7 @@ Open-source product page audits for AI shopping agents.
 
 AgentShelf checks whether product pages expose the signals AI shopping agents need for discovery, ranking, and purchase recommendations: product title, price, availability, shipping, returns, specs, reviews, FAQ, and Product structured data.
 
-It also reads storefront implementation signals that matter in real Shopify/DTC pages: embedded product JSON, variant arrays, selling plan groups, metafield-like keys, and policy snippets.
+It also reads storefront implementation signals that matter in real Shopify/DTC pages: embedded product JSON, variant arrays, selling plan groups, metafield-like keys, policy snippets, subscription terms, bundle contents, regional shipping promises, and return policy schema.
 
 ## Who It Helps
 - Shopify and DTC operators preparing storefronts for agentic commerce
@@ -102,10 +102,11 @@ agentshelf audit-run "snapshots/*.html" --batch --history-dir .agentshelf/runs -
 # AgentShelf Report: TrailBottle Pro 24oz
 
 ## Summary
-- Score: 93/100
+- Score: 89/100
 - Readiness band: strong
-- Passed checks: 12/13
-- Dimension scores: discoverability=100, offer_clarity=100, policy_clarity=100, agent_actionability=75
+- Passed checks: 13/15
+- Not applicable checks: 2
+- Dimension scores: discoverability=100, offer_clarity=100, policy_clarity=79, agent_actionability=75
 ```
 
 Weak pages return prioritized fixes:
@@ -241,7 +242,11 @@ JSON reports include stable fields for dashboards and CI:
     "variants_with_availability": 2,
     "option_names": ["Size", "Color"],
     "selling_plan_group_count": 1,
-    "metafield_keys": ["custom.materials"]
+    "metafield_keys": ["custom.materials"],
+    "has_return_policy_schema": true,
+    "subscription": {"intent": true, "has_cadence": true, "has_cancellation": true},
+    "bundle": {"intent": false},
+    "regional_shipping": {"intent": true, "regions": ["US"], "has_timing": true}
   },
   "top_fixes": [],
   "agent_risks": []
@@ -270,12 +275,22 @@ Adapter profiles let production users choose deterministic extraction behavior:
 - `woocommerce`: prioritize WooCommerce variation forms and `data-product_variations`.
 - `headless`: prioritize app-state JSON such as `__NEXT_DATA__`, `__NUXT__`, and initial state exports.
 
+Profile-specific checks are applicable only when AgentShelf detects the relevant merchant intent. A normal single-SKU product page is not penalized for missing subscription or bundle details. A page that advertises `Subscribe and save`, a `bundle`, or destination-specific delivery is expected to expose enough terms for an agent to act safely.
+
+Production-oriented profile rules currently cover:
+
+- return policy schema: visible return promises should be backed by `hasMerchantReturnPolicy` metadata.
+- subscription terms: subscription offers should expose cadence, price or discount, and cancellation terms.
+- bundle components: kits and bundles should list included items plus bundle-level price and availability.
+- regional shipping promises: destination-specific shipping copy should include the region plus timing or cost.
+
 ## Why This Is Not Just SEO/Schema Checking
 AgentShelf checks whether a shopping agent can make a reliable purchase recommendation, not only whether a page has rich-result metadata. The benchmark fixtures cover agent-specific failures:
 
 - variant-heavy pages where option choice matters
 - embedded storefront JSON where price, stock, subscriptions, or metafields are not visible as plain copy
 - profile-specific Shopify, WooCommerce, and headless storefront extraction contracts
+- subscription bundles with missing cancellation, component, return-schema, or regional delivery details
 - visible price or stock contradicting JSON-LD
 - JS-rendered placeholder HTML that static scanners may overtrust
 - pages with schema but no policy or fit answers

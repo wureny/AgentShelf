@@ -1,2 +1,5 @@
-{"band":"workable","blocking_issues":["schema_product"],"top_tasks":["add_product_jsonld"]}
-
+{
+  "band": "weak",
+  "blocking_issues": ["schema_product", "offer_completeness", "merchant_feed_hints"],
+  "top_tasks": ["add_product_jsonld", "complete_offer_metadata", "add_merchant_feed_metadata", "add_return_policy_schema"]
+}

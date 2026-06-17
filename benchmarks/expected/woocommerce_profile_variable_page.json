@@ -1,7 +1,7 @@
 {
   "band": "workable",
   "blocking_issues": ["specs", "schema_product"],
-  "top_tasks": ["add_product_jsonld"],
+  "top_tasks": ["add_product_jsonld", "add_return_policy_schema"],
   "profile": {"requested": "auto", "detected": "woocommerce", "active": "woocommerce"},
   "commerce_signals": {
     "variant_count": 2,

@@ -1,7 +1,7 @@
 {
-  "band": "strong",
+  "band": "workable",
   "blocking_issues": ["schema_product"],
-  "top_tasks": ["add_product_jsonld"],
+  "top_tasks": ["add_product_jsonld", "complete_subscription_terms", "add_return_policy_schema"],
   "profile": {"requested": "auto", "detected": "shopify", "active": "shopify"},
   "commerce_signals": {
     "variant_count": 2,

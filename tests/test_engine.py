@@ -12,7 +12,7 @@ SAMPLE_HTML = """<!doctype html>
   <head>
     <title>TrailBottle Pro 24oz</title>
     <script type="application/ld+json">
-      {"@context":"https://schema.org","@type":"Product","name":"TrailBottle Pro 24oz","offers":{"@type":"Offer","priceCurrency":"USD","price":"39.00","availability":"https://schema.org/InStock"}}
+      {"@context":"https://schema.org","@type":"Product","name":"TrailBottle Pro 24oz","offers":{"@type":"Offer","priceCurrency":"USD","price":"39.00","availability":"https://schema.org/InStock","seller":{"@type":"Organization","name":"TrailCo"},"hasMerchantReturnPolicy":{"@type":"MerchantReturnPolicy","merchantReturnDays":30}}}
     </script>
   </head>
   <body>
@@ -214,6 +214,58 @@ window.ShopifyAnalytics.meta = {
         self.assertEqual(bundle["commerce_signals"]["adapter_profile"]["requested"], "shopify")
         self.assertEqual(bundle["commerce_signals"]["adapter_profile"]["detected"], "generic")
         self.assertEqual(bundle["commerce_signals"]["adapter_profile"]["active"], "shopify")
+
+    def test_return_policy_schema_is_detected_inside_offer(self) -> None:
+        html = """<html><head><title>Schema Returns</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Product","name":"Schema Returns","offers":{"@type":"Offer","priceCurrency":"USD","price":"29.00","availability":"https://schema.org/InStock","seller":{"@type":"Organization","name":"Demo"},"hasMerchantReturnPolicy":{"@type":"MerchantReturnPolicy","merchantReturnDays":30}}}
+</script></head><body><h1>Schema Returns</h1><p>$29.00. In stock. Free shipping in the US. 30-day returns.</p><p>Specifications: cotton, blue.</p><p>FAQ: washable. Reviews 4.7/5.</p></body></html>"""
+        bundle = scan_readiness(parse_input(html))
+        check = next(item for item in bundle["checks"] if item["id"] == "return_policy_schema")
+
+        self.assertTrue(check["applicable"])
+        self.assertTrue(check["passed"])
+        self.assertTrue(bundle["commerce_signals"]["has_return_policy_schema"])
+
+    def test_profile_specific_rule_pack_surfaces_agent_tasks(self) -> None:
+        html = """<html><head><title>Subscribe Kit</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Product","name":"Subscribe Kit","offers":{"@type":"Offer","priceCurrency":"USD","price":"89.00","availability":"https://schema.org/InStock","seller":{"@type":"Organization","name":"Demo"}}}
+</script></head><body>
+<h1>Subscribe Kit Bundle</h1>
+<script type="application/json" id="ProductJson-template">
+{"options":[{"name":"Plan"}],"variants":[{"id":1,"price":8900,"available":true,"option1":"Monthly"}],"selling_plan_groups":[{"name":"Subscribe and save"}]}
+</script>
+<p>Bundle price $89.00. In stock. Subscribe and save.</p>
+<p>Ships to US and Canada.</p>
+<p>30-day returns.</p>
+<p>Specifications: starter kit for daily use.</p>
+<p>FAQ: works for beginners. Rating 4.8/5 from 50 reviews.</p>
+</body></html>"""
+        bundle = scan_readiness(parse_input(html))
+        contract = build_agent_contract(bundle)
+        task_ids = {task["id"] for task in contract["agent_tasks"]}
+
+        self.assertIn("complete_subscription_terms", task_ids)
+        self.assertIn("clarify_bundle_components", task_ids)
+        self.assertIn("add_regional_shipping_matrix", task_ids)
+        self.assertIn("add_return_policy_schema", task_ids)
+        self.assertTrue(next(item for item in bundle["checks"] if item["id"] == "subscription_terms")["applicable"])
+        self.assertTrue(next(item for item in bundle["checks"] if item["id"] == "bundle_components")["applicable"])
+        self.assertTrue(next(item for item in bundle["checks"] if item["id"] == "regional_shipping_promises")["applicable"])
+
+    def test_profile_specific_rules_are_not_applicable_without_intent(self) -> None:
+        bundle = scan_readiness(parse_input("<html><title>Bottle</title><h1>Bottle</h1></html>"))
+        checks = {item["id"]: item for item in bundle["checks"]}
+        contract = build_agent_contract(bundle)
+        blocking_ids = {item["id"] for item in contract["blocking_issues"]}
+
+        self.assertFalse(checks["subscription_terms"]["applicable"])
+        self.assertFalse(checks["bundle_components"]["applicable"])
+        self.assertFalse(checks["regional_shipping_promises"]["applicable"])
+        self.assertNotIn("subscription_terms", blocking_ids)
+        self.assertNotIn("bundle_components", blocking_ids)
+        self.assertNotIn("regional_shipping_promises", blocking_ids)
 
 
 class BenchmarkTests(unittest.TestCase):

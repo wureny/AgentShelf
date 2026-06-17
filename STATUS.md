@@ -1,13 +1,13 @@
 # Status
 
-- Date: 2026-06-16
+- Date: 2026-06-17
 - Phase: maintain_or_extend
 - Project path: `/Users/wurenyu/Documents/Codex/2026-06-06/intent-to-prompt-users-wurenyu-codex/projects/agentic-commerce-readiness-scanner`
 - Canonical requested root: `/Users/wurenyu/workspace`
 - Current blocker: none
 
 ## Current Milestone
-Lock storefront profile behavior with benchmark fixtures and expected outputs.
+Reduce production false positives while deepening merchant-specific rule coverage.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -33,6 +33,10 @@ Lock storefront profile behavior with benchmark fixtures and expected outputs.
 - Added storefront adapter profiles (`auto`, `generic`, `shopify`, `woocommerce`, `headless`) with CLI, config, GitHub Action, JSON, and Markdown support.
 - Added profile-specific benchmark fixtures and expected outputs for Shopify, WooCommerce, and headless storefront exports.
 - Added `docs/PROFILE_BENCHMARKS.md` to document the adapter benchmark contract.
+- Added applicable profile-specific rule packs for return policy schema, subscription terms, bundle component clarity, and regional shipping promises.
+- Added profile-rule agent tasks: `add_return_policy_schema`, `complete_subscription_terms`, `clarify_bundle_components`, and `add_regional_shipping_matrix`.
+- Added a production-style benchmark fixture for subscription bundle gaps and updated benchmark expectations for stricter agent-readiness scoring.
+- Improved JSON-LD schema extraction so nested Offer return policy metadata is detected.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -55,9 +59,10 @@ Lock storefront profile behavior with benchmark fixtures and expected outputs.
 - `agentshelf scan examples/sample_product_page.html --format markdown`
 - `agentshelf scan examples/shopify_variant_product.html --profile shopify --format json`
 - `python3 -m unittest tests.test_engine.BenchmarkTests`
+- `.venv/bin/python -m unittest tests.test_engine`
 
 ## Next Best Task
-Add deeper profile-specific rule packs for return policy schema, subscriptions, bundles, and regional shipping promises.
+Add a small real-page calibration harness that can scan a merchant URL list, summarize false-positive categories, and export anonymized fixture candidates.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

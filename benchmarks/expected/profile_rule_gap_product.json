@@ -1,0 +1,26 @@
+{
+  "band": "workable",
+  "blocking_issues": [
+    "subscription_terms",
+    "bundle_components",
+    "regional_shipping_promises"
+  ],
+  "top_tasks": [
+    "complete_subscription_terms",
+    "clarify_bundle_components",
+    "add_regional_shipping_matrix",
+    "add_return_policy_schema"
+  ],
+  "profile": {
+    "requested": "auto",
+    "detected": "shopify",
+    "active": "shopify"
+  },
+  "commerce_signals": {
+    "variant_count": 1,
+    "variants_with_price": 1,
+    "variants_with_availability": 1,
+    "selling_plan_group_count": 1,
+    "has_return_policy_schema": false
+  }
+}

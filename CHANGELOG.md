@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.0
+- Added applicable profile-specific rule checks for return policy schema, subscription terms, bundle component clarity, and regional shipping promises.
+- Added agent task IDs for deeper merchant remediation: `add_return_policy_schema`, `complete_subscription_terms`, `clarify_bundle_components`, and `add_regional_shipping_matrix`.
+- Added a benchmark fixture that locks production-style gaps for subscription bundles and regional shipping promises.
+- Improved JSON-LD schema value extraction so nested Offer return policy metadata is detected.
+
 ## 0.11.0
 - Added profile-specific benchmark fixtures for Shopify, WooCommerce, and headless storefront exports.
 - Extended benchmark expectations to lock adapter profile detection and core commerce signal counts.
