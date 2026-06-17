@@ -26,6 +26,7 @@ This project shows practical AI-commerce product thinking by turning vague "agen
 - Added labeled calibration evaluation so AgentShelf can guard rule changes against confirmed true-positive and false-positive merchant fixtures in CI.
 - Added draft label generation so merchant calibration findings can become reviewable label contracts without hand-writing JSON from scratch.
 - Added standalone calibration dashboards so non-technical operators and consultants can review page priorities, blockers, and agent tasks without reading raw JSON.
+- Added a GitHub Actions artifact workflow that uploads SARIF, dashboards, draft labels, evaluation notes, scan JSONL, and coding-agent task queues before enforcing score gates.
 - Packaged a professional open-source release with installable Python metadata, CI, contribution docs, benchmark fixtures, tests, and GitHub Action integration.
 
 ## Positioning Angle

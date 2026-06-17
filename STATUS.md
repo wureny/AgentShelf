@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Make calibration review usable for larger merchant page sets.
+Make AgentShelf CI outputs useful for both merchant reviewers and coding agents.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -47,6 +47,8 @@ Make calibration review usable for larger merchant page sets.
 - Added `examples/draft-calibration-labels.json`.
 - Added `agentshelf dashboard` to render calibration JSON as standalone HTML or Markdown review dashboards.
 - Dashboard output summarizes page priority, score, band, confidence, adapter profile, review categories, blockers, tasks, and next actions.
+- Added `.github/workflows/agentshelf-artifacts.yml` to produce SARIF, JSONL scan results, agent task queues, calibration reports, dashboards, draft labels, and evaluation notes in one CI run.
+- Added workflow regression tests so the GitHub Actions artifact example keeps covering code scanning, review artifacts, and delayed score-gate enforcement.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -74,9 +76,17 @@ Make calibration review usable for larger merchant page sets.
 - `.venv/bin/python -m unittest tests.test_cli.CliTests.test_evaluate_calibration_labels_passes_expected_findings tests.test_cli.CliTests.test_evaluate_calibration_labels_fails_false_positive_regression`
 - `.venv/bin/python -m unittest tests.test_cli.CliTests.test_draft_labels_from_calibration_report tests.test_cli.CliTests.test_evaluate_skips_draft_labels`
 - `.venv/bin/python -m unittest tests.test_cli.CliTests.test_dashboard_renders_html_from_calibration_report tests.test_cli.CliTests.test_dashboard_renders_markdown_from_calibration_report`
+- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/agentshelf-artifacts.yml"); puts "workflow-yaml-ok"'`
+- `.venv/bin/python -m unittest tests.test_workflows`
+- `.venv/bin/agentshelf scan "benchmarks/fixtures/*.html" --batch --format sarif --output /tmp/agentshelf-artifacts/agentshelf-results.sarif`
+- `.venv/bin/agentshelf scan "benchmarks/fixtures/*.html" --batch --format jsonl --output /tmp/agentshelf-artifacts/agentshelf-results.jsonl`
+- `.venv/bin/agentshelf agent-tasks "benchmarks/fixtures/*.html" --batch --output /tmp/agentshelf-artifacts/agentshelf-tasks.jsonl`
+- `.venv/bin/agentshelf calibrate /tmp/agentshelf-artifacts/agentshelf-results.jsonl --from-results --format json --output /tmp/agentshelf-artifacts/calibration-report.json`
+- `.venv/bin/agentshelf dashboard /tmp/agentshelf-artifacts/calibration-report.json --format html --output /tmp/agentshelf-artifacts/calibration-dashboard.html`
+- `.venv/bin/agentshelf draft-labels /tmp/agentshelf-artifacts/calibration-report.json --include-tasks --output /tmp/agentshelf-artifacts/draft-calibration-labels.json`
 
 ## Next Best Task
-Add GitHub Actions artifact workflow examples that upload SARIF, calibration dashboard, draft labels, and agent task JSONL together.
+Add a sample storefront snapshot generator so Shopify/Liquid, WooCommerce, and headless teams can create stable pre-merge HTML fixtures before running AgentShelf in CI.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

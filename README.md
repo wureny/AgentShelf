@@ -249,6 +249,17 @@ Use calibration reports before changing scoring rules. A common loop is: run rea
 
 When you want to turn calibration findings into regression coverage, run `draft-labels`, review the generated JSON, then change each useful label from `needs_review` to `true_positive` or `false_positive`. Draft labels are safe to commit because `evaluate` skips them until they are confirmed.
 
+For a complete GitHub Actions artifact pipeline, see [`.github/workflows/agentshelf-artifacts.yml`](.github/workflows/agentshelf-artifacts.yml). It writes:
+
+- `agentshelf-results.sarif` for GitHub code scanning annotations.
+- `agentshelf-results.jsonl` for dashboards, diffs, and later evaluation.
+- `agentshelf-tasks.jsonl` for Codex-style remediation agents.
+- `calibration-report.json` plus HTML and Markdown dashboards for merchant review.
+- `draft-calibration-labels.json` for turning review findings into confirmed labels.
+- `calibration-evaluation.md` for checking confirmed labels when they exist.
+
+The workflow intentionally uploads artifacts before enforcing the score gate. In a merchant repository, copy it, replace the default `path` with generated storefront snapshots such as `snapshots/*.html`, and add a `pull_request` trigger when the threshold is ready to block PRs.
+
 Calibration labels use this shape:
 
 ```json
@@ -298,6 +309,14 @@ jobs:
           output: agentshelf-results.sarif
           profile: auto
 ```
+
+If you want review artifacts instead of only pass/fail gating, use the included artifact workflow:
+
+```bash
+cp .github/workflows/agentshelf-artifacts.yml <storefront-repo>/.github/workflows/agentshelf-artifacts.yml
+```
+
+Run it manually first with `workflow_dispatch`. Once the dashboard and draft labels match your merchant review process, add a `pull_request` trigger and point `path` at your generated product-page snapshots.
 
 ## JSON Output
 JSON reports include stable fields for dashboards and CI:

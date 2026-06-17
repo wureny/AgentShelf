@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.17.0
+- Added a GitHub Actions artifact workflow that produces SARIF, JSONL scan results, agent task queues, calibration reports, dashboards, draft labels, and evaluation notes in one run.
+- Preserved score-gate failures until after review artifacts upload, so CI users can inspect merchant-facing fixes before a job fails.
+- Added workflow regression tests to keep the artifact pipeline aligned with the public CLI commands.
+
 ## 0.16.0
 - Added `agentshelf dashboard` to render calibration JSON reports as operator-friendly HTML or Markdown dashboards.
 - Added dashboard coverage for review queue priority, score, band, confidence, adapter profile, categories, blockers, and agent tasks.

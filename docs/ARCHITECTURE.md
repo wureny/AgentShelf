@@ -16,6 +16,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 11. Run scheduled audits with local previous/current history, timestamped archives, diff reports, and optional agent task output.
 12. Calibrate rules against real merchant snapshots by grouping likely false-positive categories and exporting anonymized fixture candidates.
 13. Render calibration dashboards for larger merchant page sets, draft labels from review findings, then evaluate rule changes against confirmed human labels before tightening CI gates.
+14. Publish CI review artifacts together: SARIF annotations, JSONL scan output, calibration dashboards, draft labels, evaluation notes, and agent task queues.
 
 ## Components
 - `src/agentshelf/engine.py`: parser, heuristic scoring engine, JSON-LD extraction, and renderers
@@ -46,6 +47,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - `dashboard` turns calibration reports into standalone HTML or Markdown review queues for merchant operators, consultants, and CI artifacts.
 - `draft-labels` converts calibration reports into editable label contracts, keeping human review lightweight while preserving a deterministic CI artifact.
 - `evaluate` compares scan artifacts with human calibration labels for checks, blockers, tasks, categories, and warnings, making rule changes safer to run in CI.
+- `.github/workflows/agentshelf-artifacts.yml` demonstrates the production PR-review loop: generate machine artifacts first, upload them for humans and coding agents, then enforce the score gate.
 - SARIF output maps failed checks into code-scanning-style findings for CI and GitHub annotations.
 - `.agentshelf.json` keeps production scan gates repeatable across local, CI, and scheduled runs.
 - Raw snapshot mode does not execute JavaScript; dynamic pages are flagged instead of silently trusted. `--rendered` handles single-page JS capture when the optional browser dependency is installed.
@@ -56,4 +58,4 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - Add deeper schema validation for variants, offers, return policy, merchant policy metadata, subscription selling plans, and bundle components.
 - Add more storefront profile packs for preorders, backorders, subscriptions with prepaid plans, B2B pricing, and marketplace sellers.
 - Add empirical benchmark runs against real agent answer quality before claiming ranking or conversion lift.
-- Add CI artifact examples for GitHub Actions that upload dashboard, draft labels, SARIF, and agent-task JSONL together.
+- Add a sample storefront fixture generator so merchants can produce stable pre-merge snapshots from Liquid, WooCommerce templates, or headless route exports.

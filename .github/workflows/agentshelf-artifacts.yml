@@ -1,0 +1,125 @@
+name: AgentShelf Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      path:
+        description: "HTML snapshot path, directory, or glob to audit."
+        required: false
+        default: "benchmarks/fixtures/*.html"
+      min_score:
+        description: "Minimum acceptable AgentShelf score."
+        required: false
+        default: "70"
+      profile:
+        description: "Storefront adapter profile."
+        required: false
+        default: "auto"
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  audit-commerce-pages:
+    runs-on: ubuntu-latest
+    env:
+      AGENTSHELF_PATH: ${{ inputs.path || 'benchmarks/fixtures/*.html' }}
+      AGENTSHELF_MIN_SCORE: ${{ inputs.min_score || '70' }}
+      AGENTSHELF_PROFILE: ${{ inputs.profile || 'auto' }}
+      AGENTSHELF_ARTIFACT_DIR: artifacts/agentshelf
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install AgentShelf
+        run: python3 -m pip install -e .
+
+      - name: Create artifact directory
+        run: mkdir -p "$AGENTSHELF_ARTIFACT_DIR"
+
+      - name: Scan pages for SARIF gate
+        id: scan_gate
+        shell: bash
+        run: |
+          set +e
+          agentshelf scan "$AGENTSHELF_PATH" \
+            --batch \
+            --profile "$AGENTSHELF_PROFILE" \
+            --format sarif \
+            --output "$AGENTSHELF_ARTIFACT_DIR/agentshelf-results.sarif" \
+            --min-score "$AGENTSHELF_MIN_SCORE"
+          scan_status=$?
+          set -e
+          echo "scan_status=$scan_status" >> "$GITHUB_OUTPUT"
+
+      - name: Write machine-readable scan results
+        run: |
+          agentshelf scan "$AGENTSHELF_PATH" \
+            --batch \
+            --profile "$AGENTSHELF_PROFILE" \
+            --format jsonl \
+            --output "$AGENTSHELF_ARTIFACT_DIR/agentshelf-results.jsonl"
+
+      - name: Write agent remediation task queue
+        run: |
+          agentshelf agent-tasks "$AGENTSHELF_PATH" \
+            --batch \
+            --profile "$AGENTSHELF_PROFILE" \
+            --output "$AGENTSHELF_ARTIFACT_DIR/agentshelf-tasks.jsonl"
+
+      - name: Build calibration report
+        run: |
+          agentshelf calibrate "$AGENTSHELF_ARTIFACT_DIR/agentshelf-results.jsonl" \
+            --from-results \
+            --format json \
+            --output "$AGENTSHELF_ARTIFACT_DIR/calibration-report.json"
+
+      - name: Render calibration dashboards
+        run: |
+          agentshelf dashboard "$AGENTSHELF_ARTIFACT_DIR/calibration-report.json" \
+            --format html \
+            --output "$AGENTSHELF_ARTIFACT_DIR/calibration-dashboard.html"
+          agentshelf dashboard "$AGENTSHELF_ARTIFACT_DIR/calibration-report.json" \
+            --format markdown \
+            --output "$AGENTSHELF_ARTIFACT_DIR/calibration-dashboard.md"
+
+      - name: Draft calibration labels
+        run: |
+          agentshelf draft-labels "$AGENTSHELF_ARTIFACT_DIR/calibration-report.json" \
+            --include-tasks \
+            --output "$AGENTSHELF_ARTIFACT_DIR/draft-calibration-labels.json"
+
+      - name: Evaluate against confirmed labels
+        continue-on-error: true
+        run: |
+          agentshelf evaluate "$AGENTSHELF_ARTIFACT_DIR/agentshelf-results.jsonl" \
+            --labels examples/calibration-labels.json \
+            --format markdown \
+            --output "$AGENTSHELF_ARTIFACT_DIR/calibration-evaluation.md"
+
+      - name: Upload SARIF to code scanning
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: ${{ env.AGENTSHELF_ARTIFACT_DIR }}/agentshelf-results.sarif
+
+      - name: Upload AgentShelf review artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agentshelf-review-artifacts
+          path: ${{ env.AGENTSHELF_ARTIFACT_DIR }}/
+          if-no-files-found: error
+
+      - name: Enforce AgentShelf score gate
+        if: always()
+        run: |
+          if [ "${{ steps.scan_gate.outputs.scan_status }}" != "0" ]; then
+            echo "AgentShelf score gate failed. Review uploaded artifacts for fixes."
+            exit "${{ steps.scan_gate.outputs.scan_status }}"
+          fi
