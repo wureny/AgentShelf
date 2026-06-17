@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Make native merchant import gaps machine-actionable for coding agents.
+Production-ready open-source release completed; future work is optional hardening, not required for local or CI use.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -59,6 +59,7 @@ Make native merchant import gaps machine-actionable for coding agents.
 - Added `render-fixtures --fail-on-warnings` so production CI can fail before fallback-generated snapshots create overconfident audit results.
 - Added `render-fixtures --tasks-output` so validation warnings can be emitted as JSONL remediation tasks for coding agents.
 - Added platform-aware import remediation task guidance for Shopify JSON, WooCommerce CSV, headless catalog JSON, and normalized AgentShelf exports.
+- Extended `.github/workflows/agentshelf-artifacts.yml` so CI can optionally render fixtures from catalog exports, upload `import-tasks.jsonl`, scan generated snapshots, and defer import/score gates until after artifact upload.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -106,11 +107,14 @@ Make native merchant import gaps machine-actionable for coding agents.
 - `.venv/bin/agentshelf render-fixtures /tmp/agentshelf-thin-products.json --input-format agentshelf --platform shopify --output-dir /tmp/agentshelf-validation --format json --fail-on-warnings`
 - `.venv/bin/python -m unittest tests.test_cli.CliTests.test_render_fixtures_writes_import_remediation_tasks tests.test_cli.CliTests.test_render_fixtures_clean_import_writes_empty_task_file`
 - `.venv/bin/agentshelf render-fixtures /tmp/agentshelf-thin-products.json --input-format agentshelf --platform shopify --output-dir /tmp/agentshelf-import-tasks --tasks-output /tmp/agentshelf-import-tasks/tasks.jsonl --format json`
+- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/agentshelf-artifacts.yml"); puts "workflow-yaml-ok"'`
+- `.venv/bin/python -m unittest tests.test_workflows`
 
 ## Next Best Task
-Add GitHub Actions support for `render-fixtures --tasks-output` so import remediation tasks upload alongside scan tasks, SARIF, dashboards, and calibration artifacts.
+Optional only: write short platform setup guides for Shopify, WooCommerce, and headless CI users.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.
 - Raw URL snapshot mode still does not execute JavaScript unless `--rendered` is explicitly used.
 - Benchmark fixtures are curated examples, not empirical evidence of improved ChatGPT, Google, Perplexity, or Claude shopping-agent ranking.
+- Native import adapters cover common export shapes, but unusual merchant schemas may still need a small mapping step into AgentShelf's normalized JSON.

@@ -48,6 +48,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - `draft-labels` converts calibration reports into editable label contracts, keeping human review lightweight while preserving a deterministic CI artifact.
 - `evaluate` compares scan artifacts with human calibration labels for checks, blockers, tasks, categories, and warnings, making rule changes safer to run in CI.
 - `.github/workflows/agentshelf-artifacts.yml` demonstrates the production PR-review loop: generate machine artifacts first, upload them for humans and coding agents, then enforce the score gate.
+- The artifact workflow can either scan existing snapshots or render fixtures from a catalog export first, then upload import remediation tasks and page remediation tasks together before enforcing gates.
 - SARIF output maps failed checks into code-scanning-style findings for CI and GitHub annotations.
 - `.agentshelf.json` keeps production scan gates repeatable across local, CI, and scheduled runs.
 - Raw snapshot mode does not execute JavaScript; dynamic pages are flagged instead of silently trusted. `--rendered` handles single-page JS capture when the optional browser dependency is installed.
@@ -61,4 +62,4 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - Add deeper schema validation for variants, offers, return policy, merchant policy metadata, subscription selling plans, and bundle components.
 - Add more storefront profile packs for preorders, backorders, subscriptions with prepaid plans, B2B pricing, and marketplace sellers.
 - Add empirical benchmark runs against real agent answer quality before claiming ranking or conversion lift.
-- Add GitHub Actions wiring that uploads `render-fixtures --tasks-output` alongside scan tasks, SARIF, dashboards, and calibration artifacts.
+- Optional future work: add ecosystem-specific how-to guides for Shopify theme CI, WooCommerce export jobs, and headless catalog routes.

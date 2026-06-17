@@ -7,6 +7,22 @@ on:
         description: "HTML snapshot path, directory, or glob to audit."
         required: false
         default: "benchmarks/fixtures/*.html"
+      catalog:
+        description: "Optional product export JSON/CSV to render into snapshots before scanning."
+        required: false
+        default: ""
+      input_format:
+        description: "Catalog format for render-fixtures: auto, agentshelf, shopify, woocommerce, or headless."
+        required: false
+        default: "auto"
+      fixture_platform:
+        description: "Fixture platform for render-fixtures: all, shopify, woocommerce, or headless."
+        required: false
+        default: "all"
+      fail_on_import_warnings:
+        description: "Fail after artifact upload when render-fixtures validation warnings are present."
+        required: false
+        default: "false"
       min_score:
         description: "Minimum acceptable AgentShelf score."
         required: false
@@ -26,6 +42,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AGENTSHELF_PATH: ${{ inputs.path || 'benchmarks/fixtures/*.html' }}
+      AGENTSHELF_CATALOG_PATH: ${{ inputs.catalog || '' }}
+      AGENTSHELF_INPUT_FORMAT: ${{ inputs.input_format || 'auto' }}
+      AGENTSHELF_FIXTURE_PLATFORM: ${{ inputs.fixture_platform || 'all' }}
+      AGENTSHELF_FAIL_ON_IMPORT_WARNINGS: ${{ inputs.fail_on_import_warnings || 'false' }}
       AGENTSHELF_MIN_SCORE: ${{ inputs.min_score || '70' }}
       AGENTSHELF_PROFILE: ${{ inputs.profile || 'auto' }}
       AGENTSHELF_ARTIFACT_DIR: artifacts/agentshelf
@@ -42,12 +62,41 @@ jobs:
       - name: Create artifact directory
         run: mkdir -p "$AGENTSHELF_ARTIFACT_DIR"
 
+      - name: Render storefront fixtures from catalog export
+        id: import_gate
+        shell: bash
+        run: |
+          set +e
+          import_status=0
+          touch "$AGENTSHELF_ARTIFACT_DIR/import-tasks.jsonl"
+          if [ -n "$AGENTSHELF_CATALOG_PATH" ]; then
+            args=(
+              render-fixtures "$AGENTSHELF_CATALOG_PATH"
+              --input-format "$AGENTSHELF_INPUT_FORMAT"
+              --platform "$AGENTSHELF_FIXTURE_PLATFORM"
+              --output-dir "$AGENTSHELF_ARTIFACT_DIR/generated-snapshots"
+              --manifest "$AGENTSHELF_ARTIFACT_DIR/render-fixtures-manifest.json"
+              --tasks-output "$AGENTSHELF_ARTIFACT_DIR/import-tasks.jsonl"
+              --format json
+            )
+            if [ "$AGENTSHELF_FAIL_ON_IMPORT_WARNINGS" = "true" ]; then
+              args+=(--fail-on-warnings)
+            fi
+            agentshelf "${args[@]}" > "$AGENTSHELF_ARTIFACT_DIR/render-fixtures-summary.json"
+            import_status=$?
+            echo "AGENTSHELF_SCAN_PATH=$AGENTSHELF_ARTIFACT_DIR/generated-snapshots" >> "$GITHUB_ENV"
+          else
+            echo "AGENTSHELF_SCAN_PATH=$AGENTSHELF_PATH" >> "$GITHUB_ENV"
+          fi
+          set -e
+          echo "import_status=$import_status" >> "$GITHUB_OUTPUT"
+
       - name: Scan pages for SARIF gate
         id: scan_gate
         shell: bash
         run: |
           set +e
-          agentshelf scan "$AGENTSHELF_PATH" \
+          agentshelf scan "$AGENTSHELF_SCAN_PATH" \
             --batch \
             --profile "$AGENTSHELF_PROFILE" \
             --format sarif \
@@ -59,7 +108,7 @@ jobs:
 
       - name: Write machine-readable scan results
         run: |
-          agentshelf scan "$AGENTSHELF_PATH" \
+          agentshelf scan "$AGENTSHELF_SCAN_PATH" \
             --batch \
             --profile "$AGENTSHELF_PROFILE" \
             --format jsonl \
@@ -67,7 +116,7 @@ jobs:
 
       - name: Write agent remediation task queue
         run: |
-          agentshelf agent-tasks "$AGENTSHELF_PATH" \
+          agentshelf agent-tasks "$AGENTSHELF_SCAN_PATH" \
             --batch \
             --profile "$AGENTSHELF_PROFILE" \
             --output "$AGENTSHELF_ARTIFACT_DIR/agentshelf-tasks.jsonl"
@@ -119,6 +168,10 @@ jobs:
       - name: Enforce AgentShelf score gate
         if: always()
         run: |
+          if [ "${{ steps.import_gate.outputs.import_status }}" != "0" ]; then
+            echo "AgentShelf import validation gate failed. Review import-tasks.jsonl and render-fixtures-manifest.json."
+            exit "${{ steps.import_gate.outputs.import_status }}"
+          fi
           if [ "${{ steps.scan_gate.outputs.scan_status }}" != "0" ]; then
             echo "AgentShelf score gate failed. Review uploaded artifacts for fixes."
             exit "${{ steps.scan_gate.outputs.scan_status }}"

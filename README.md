@@ -309,6 +309,7 @@ When you want to turn calibration findings into regression coverage, run `draft-
 
 For a complete GitHub Actions artifact pipeline, see [`.github/workflows/agentshelf-artifacts.yml`](.github/workflows/agentshelf-artifacts.yml). It writes:
 
+- `render-fixtures-manifest.json`, `render-fixtures-summary.json`, and `import-tasks.jsonl` when a catalog export is provided.
 - `agentshelf-results.sarif` for GitHub code scanning annotations.
 - `agentshelf-results.jsonl` for dashboards, diffs, and later evaluation.
 - `agentshelf-tasks.jsonl` for Codex-style remediation agents.
@@ -317,6 +318,19 @@ For a complete GitHub Actions artifact pipeline, see [`.github/workflows/agentsh
 - `calibration-evaluation.md` for checking confirmed labels when they exist.
 
 The workflow intentionally uploads artifacts before enforcing the score gate. In a merchant repository, copy it, replace the default `path` with generated storefront snapshots such as `snapshots/*.html`, and add a `pull_request` trigger when the threshold is ready to block PRs.
+
+It can also render fixtures from a merchant export before scanning:
+
+```yaml
+with:
+  catalog: "exports/woocommerce-products.csv"
+  input_format: woocommerce
+  fixture_platform: woocommerce
+  fail_on_import_warnings: "true"
+  min-score: "85"
+```
+
+When `catalog` is set, the workflow uploads both import-level tasks (`import-tasks.jsonl`) and page-level tasks (`agentshelf-tasks.jsonl`), then fails only after artifacts are available for review.
 
 Calibration labels use this shape:
 
@@ -374,7 +388,7 @@ If you want review artifacts instead of only pass/fail gating, use the included 
 cp .github/workflows/agentshelf-artifacts.yml <storefront-repo>/.github/workflows/agentshelf-artifacts.yml
 ```
 
-Run it manually first with `workflow_dispatch`. Once the dashboard and draft labels match your merchant review process, add a `pull_request` trigger and point `path` at your generated product-page snapshots.
+Run it manually first with `workflow_dispatch`. Once the dashboard and draft labels match your merchant review process, add a `pull_request` trigger and point either `path` at your generated product-page snapshots or `catalog` at a product export that AgentShelf should render before scanning.
 
 ## JSON Output
 JSON reports include stable fields for dashboards and CI:
