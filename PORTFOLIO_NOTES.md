@@ -25,6 +25,7 @@ This project shows practical AI-commerce product thinking by turning vague "agen
 - Added a real-page calibration workflow that groups likely false-positive categories and exports anonymized merchant fixtures for repeatable benchmark improvement.
 - Added labeled calibration evaluation so AgentShelf can guard rule changes against confirmed true-positive and false-positive merchant fixtures in CI.
 - Added draft label generation so merchant calibration findings can become reviewable label contracts without hand-writing JSON from scratch.
+- Added standalone calibration dashboards so non-technical operators and consultants can review page priorities, blockers, and agent tasks without reading raw JSON.
 - Packaged a professional open-source release with installable Python metadata, CI, contribution docs, benchmark fixtures, tests, and GitHub Action integration.
 
 ## Positioning Angle

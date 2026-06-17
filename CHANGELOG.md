@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.16.0
+- Added `agentshelf dashboard` to render calibration JSON reports as operator-friendly HTML or Markdown dashboards.
+- Added dashboard coverage for review queue priority, score, band, confidence, adapter profile, categories, blockers, and agent tasks.
+- Documented dashboard usage for merchant calibration review artifacts.
+
 ## 0.15.0
 - Added `agentshelf draft-labels` to convert calibration JSON reports into editable draft calibration label files.
 - Added support for `needs_review` draft labels; `evaluate` skips draft labels until humans mark them true-positive or false-positive.

@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Make calibration labeling faster and safer for real merchant page sets.
+Make calibration review usable for larger merchant page sets.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -45,6 +45,8 @@ Make calibration labeling faster and safer for real merchant page sets.
 - Added `agentshelf draft-labels` to convert calibration JSON reports into editable draft label contracts.
 - Added support for `needs_review` draft labels; `evaluate` skips them until they are confirmed.
 - Added `examples/draft-calibration-labels.json`.
+- Added `agentshelf dashboard` to render calibration JSON as standalone HTML or Markdown review dashboards.
+- Dashboard output summarizes page priority, score, band, confidence, adapter profile, review categories, blockers, tasks, and next actions.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -71,9 +73,10 @@ Make calibration labeling faster and safer for real merchant page sets.
 - `.venv/bin/python -m unittest tests.test_cli.CliTests.test_calibrate_from_html_batch_exports_anonymized_fixtures tests.test_cli.CliTests.test_calibrate_from_scan_results_jsonl`
 - `.venv/bin/python -m unittest tests.test_cli.CliTests.test_evaluate_calibration_labels_passes_expected_findings tests.test_cli.CliTests.test_evaluate_calibration_labels_fails_false_positive_regression`
 - `.venv/bin/python -m unittest tests.test_cli.CliTests.test_draft_labels_from_calibration_report tests.test_cli.CliTests.test_evaluate_skips_draft_labels`
+- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_dashboard_renders_html_from_calibration_report tests.test_cli.CliTests.test_dashboard_renders_markdown_from_calibration_report`
 
 ## Next Best Task
-Add a compact HTML/Markdown calibration dashboard for larger merchant page sets so operators can review labels without reading raw JSON.
+Add GitHub Actions artifact workflow examples that upload SARIF, calibration dashboard, draft labels, and agent task JSONL together.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

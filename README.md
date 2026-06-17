@@ -106,6 +106,9 @@ agentshelf calibrate "snapshots/*.html" \
   --format json
 agentshelf draft-labels calibration-report.json \
   --output draft-calibration-labels.json
+agentshelf dashboard calibration-report.json \
+  --format html \
+  --output calibration-dashboard.html
 ```
 
 Evaluate a rule change against human calibration labels:
@@ -148,6 +151,7 @@ agentshelf diff <baseline-results.jsonl> <current-results.jsonl> [options]
 agentshelf audit-run <file-or-dir-or-glob> [options]
 agentshelf calibrate <file-or-dir-or-glob-or-results.jsonl> [options]
 agentshelf draft-labels <calibration-report.json> [options]
+agentshelf dashboard <calibration-report.json> [options]
 agentshelf evaluate <results.json-or-jsonl> --labels <labels.json> [options]
 agentshelf discover --site <url> [options]
 agentshelf discover --sitemap <url> [options]
@@ -180,6 +184,8 @@ Options:
 `calibrate` reviews real-page scan output for likely false-positive and false-negative categories. It can scan HTML snapshots directly or read existing `scan --format json|jsonl` artifacts with `--from-results`. Use `--export-fixtures` to write anonymized local HTML candidates plus metadata sidecars for benchmark review.
 
 `draft-labels` turns `calibrate --format json` output into editable draft labels. Draft labels use `verdict: needs_review` and are skipped by `evaluate` until a human changes them to `true_positive` or `false_positive`.
+
+`dashboard` renders `calibrate --format json` output as standalone HTML or Markdown. Use it as a CI artifact or merchant-facing review queue when the page set is too large for raw JSON.
 
 `evaluate` compares scan results against a human label file. Use it after calibration reviews to lock confirmed true positives and false positives, then run it in CI with `--fail-on-regressions` before changing rules or thresholds.
 
@@ -227,6 +233,9 @@ agentshelf calibrate .agentshelf/runs/current-results.jsonl \
   --from-results \
   --format json \
   --output calibration-report.json
+agentshelf dashboard calibration-report.json \
+  --format html \
+  --output calibration-dashboard.html
 agentshelf draft-labels calibration-report.json \
   --output draft-calibration-labels.json
 agentshelf evaluate .agentshelf/runs/current-results.jsonl \
@@ -234,7 +243,7 @@ agentshelf evaluate .agentshelf/runs/current-results.jsonl \
   --fail-on-regressions
 ```
 
-On the first run, `audit-run` creates a baseline. On later runs, it automatically writes `.agentshelf/runs/audit-diff.md` from the last saved result set. In CI, upload `.agentshelf/runs/audit-diff.md`, `calibration-report.md`, and `agentshelf-tasks.jsonl` as review artifacts so humans see the merchant-level regression summary and agents get machine-actionable fixes.
+On the first run, `audit-run` creates a baseline. On later runs, it automatically writes `.agentshelf/runs/audit-diff.md` from the last saved result set. In CI, upload `.agentshelf/runs/audit-diff.md`, `calibration-dashboard.html`, `draft-calibration-labels.json`, and `agentshelf-tasks.jsonl` as review artifacts so humans see the merchant-level regression summary and agents get machine-actionable fixes.
 
 Use calibration reports before changing scoring rules. A common loop is: run real merchant snapshots, inspect `rendered_capture_review`, `profile_rule_review`, `policy_schema_review`, and `offer_extraction_review`, then export anonymized fixture candidates for cases that should become benchmark coverage.
 
@@ -392,6 +401,7 @@ agentshelf scan examples/woocommerce_variable_product.html --profile woocommerce
 agentshelf scan examples/headless_product_state.html --profile headless --format json
 agentshelf calibrate benchmarks/fixtures --batch --format markdown
 agentshelf calibrate benchmarks/fixtures --batch --format json --output calibration-report.json
+agentshelf dashboard calibration-report.json --format markdown
 agentshelf draft-labels calibration-report.json --output draft-calibration-labels.json
 agentshelf evaluate calibration-results.jsonl --labels examples/calibration-labels.json
 python3 -m pip install -e ".[render]"  # optional rendered snapshots

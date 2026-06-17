@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import glob
 import hashlib
+import html
 import json
 import re
 import shutil
@@ -20,7 +21,7 @@ from agentshelf.engine import ADAPTER_PROFILES, build_agent_contract, parse_inpu
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.15 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.16 (+https://github.com/wureny/AgentShelf)"
 RENDER_EXTRA_MESSAGE = (
     "Rendered snapshots require the optional Playwright extra. "
     "Install it with `python3 -m pip install 'agentshelf[render]'` and then run "
@@ -1438,6 +1439,158 @@ def _build_draft_labels(calibration: dict, max_pages: int, max_labels: int, incl
     }
 
 
+def _dashboard_category_names(page: dict) -> list[str]:
+    return sorted({category["category"] for category in page.get("review_categories", [])})
+
+
+def _render_dashboard_markdown(calibration: dict) -> str:
+    summary = calibration["summary"]
+    lines = [
+        "# AgentShelf Calibration Dashboard",
+        "",
+        "## Summary",
+        f"- Source: `{calibration['source']}`",
+        f"- Pages: {summary['pages']}",
+        f"- Pages needing review: {summary['review_pages']}",
+        f"- Bands: {', '.join(f'{key}={value}' for key, value in summary['bands'].items())}",
+        f"- Confidence: {', '.join(f'{key}={value}' for key, value in summary['confidence'].items())}",
+        "",
+        "## Category Counts",
+    ]
+    if summary["category_counts"]:
+        for category, count in summary["category_counts"].items():
+            lines.append(f"- {category}: {count}")
+    else:
+        lines.append("- None")
+    lines.extend(
+        [
+            "",
+            "## Review Queue",
+            "| Priority | Score | Band | Title | Categories | Blocking issues | Agent tasks |",
+            "| ---: | ---: | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for page in calibration.get("pages", []):
+        categories = ", ".join(_dashboard_category_names(page)) or "None"
+        blockers = ", ".join(page.get("blocking_issue_ids", [])) or "None"
+        tasks = ", ".join(page.get("agent_task_ids", [])) or "None"
+        lines.append(
+            f"| {page['priority']} | {page['score']} | {page['band']} | "
+            f"{page['title']} | {categories} | {blockers} | {tasks} |"
+        )
+    lines.extend(["", "## Next Actions"])
+    for action in calibration.get("agent_next_actions", []):
+        lines.append(f"- {action}")
+    return "\n".join(lines) + "\n"
+
+
+def _html_escape(value: object) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def _render_dashboard_html(calibration: dict) -> str:
+    summary = calibration["summary"]
+    category_cards = "\n".join(
+        f"<div class='metric'><span>{_html_escape(category)}</span><strong>{count}</strong></div>"
+        for category, count in summary["category_counts"].items()
+    ) or "<div class='metric'><span>No review categories</span><strong>0</strong></div>"
+    rows = []
+    for page in calibration.get("pages", []):
+        categories = "".join(f"<span class='tag'>{_html_escape(category)}</span>" for category in _dashboard_category_names(page))
+        blockers = "".join(f"<span class='pill danger'>{_html_escape(item)}</span>" for item in page.get("blocking_issue_ids", []))
+        tasks = "".join(f"<span class='pill'>{_html_escape(item)}</span>" for item in page.get("agent_task_ids", []))
+        source = _html_escape(page["source"])
+        rows.append(
+            "<article class='page-card'>"
+            f"<div class='page-head'><div><h2>{_html_escape(page['title'])}</h2><p>{source}</p></div>"
+            f"<div class='score'><strong>{page['score']}</strong><span>{_html_escape(page['band'])}</span></div></div>"
+            f"<div class='meta'><span>Priority {_html_escape(page['priority'])}</span>"
+            f"<span>Confidence {_html_escape(page['confidence']['level'])}</span>"
+            f"<span>Profile {_html_escape(page['adapter_profile']['active'])}</span></div>"
+            f"<div class='section'><h3>Review categories</h3><div>{categories or '<span class=\"muted\">None</span>'}</div></div>"
+            f"<div class='section'><h3>Blocking issues</h3><div>{blockers or '<span class=\"muted\">None</span>'}</div></div>"
+            f"<div class='section'><h3>Agent tasks</h3><div>{tasks or '<span class=\"muted\">None</span>'}</div></div>"
+            "</article>"
+        )
+    actions = "\n".join(f"<li>{_html_escape(action)}</li>" for action in calibration.get("agent_next_actions", []))
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentShelf Calibration Dashboard</title>
+  <style>
+    :root {{
+      --ink: #171512;
+      --muted: #6c655d;
+      --paper: #f7f0e4;
+      --card: #fffaf2;
+      --line: #dfd0bc;
+      --accent: #0f766e;
+      --danger: #b42318;
+    }}
+    body {{
+      margin: 0;
+      font-family: Georgia, 'Times New Roman', serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, .16), transparent 34rem),
+        linear-gradient(135deg, #fbf5ea, var(--paper));
+    }}
+    main {{ max-width: 1120px; margin: 0 auto; padding: 48px 24px; }}
+    header {{ border-bottom: 2px solid var(--ink); padding-bottom: 24px; margin-bottom: 28px; }}
+    h1 {{ font-size: clamp(2.2rem, 6vw, 5rem); line-height: .92; margin: 0 0 14px; letter-spacing: -.05em; }}
+    h2 {{ margin: 0; font-size: 1.35rem; }}
+    h3 {{ margin: 0 0 8px; color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; font-family: ui-sans-serif, system-ui, sans-serif; }}
+    p {{ color: var(--muted); }}
+    .summary {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 22px 0; }}
+    .metric {{ background: var(--card); border: 1px solid var(--line); padding: 14px; box-shadow: 4px 4px 0 rgba(23,21,18,.08); }}
+    .metric span {{ display: block; color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif; font-size: .82rem; }}
+    .metric strong {{ font-size: 1.9rem; }}
+    .grid {{ display: grid; gap: 18px; }}
+    .page-card {{ background: rgba(255,250,242,.88); border: 1px solid var(--line); padding: 18px; }}
+    .page-head {{ display: flex; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 12px; }}
+    .page-head p {{ margin: 6px 0 0; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .78rem; }}
+    .score {{ min-width: 82px; text-align: center; background: var(--ink); color: var(--paper); padding: 10px; }}
+    .score strong {{ display: block; font-size: 1.8rem; }}
+    .score span {{ font-family: ui-sans-serif, system-ui, sans-serif; font-size: .78rem; text-transform: uppercase; }}
+    .meta {{ display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }}
+    .meta span, .tag, .pill {{ display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; margin: 2px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .78rem; background: white; }}
+    .tag {{ border-color: rgba(15,118,110,.35); color: var(--accent); }}
+    .pill.danger {{ color: var(--danger); border-color: rgba(180,35,24,.35); }}
+    .section {{ margin-top: 12px; }}
+    .muted {{ color: var(--muted); }}
+    .actions {{ background: var(--ink); color: var(--paper); padding: 18px; margin-top: 24px; }}
+    .actions h2, .actions p {{ color: var(--paper); }}
+    @media (max-width: 700px) {{ .page-head {{ flex-direction: column; }} .score {{ width: fit-content; }} }}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>AgentShelf Calibration Dashboard</h1>
+      <p>Source: <code>{_html_escape(calibration['source'])}</code></p>
+    </header>
+    <section class="summary">
+      <div class="metric"><span>Pages</span><strong>{summary['pages']}</strong></div>
+      <div class="metric"><span>Needs review</span><strong>{summary['review_pages']}</strong></div>
+      <div class="metric"><span>Strong</span><strong>{summary['bands'].get('strong', 0)}</strong></div>
+      <div class="metric"><span>Weak or not ready</span><strong>{summary['bands'].get('weak', 0) + summary['bands'].get('not_ready', 0)}</strong></div>
+      {category_cards}
+    </section>
+    <section class="grid">
+      {''.join(rows)}
+    </section>
+    <section class="actions">
+      <h2>Agent Next Actions</h2>
+      <ul>{actions}</ul>
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
 def _render_discovery(payload: dict, output_format: str) -> str:
     if output_format == "json":
         return json.dumps(payload, indent=2) + "\n"
@@ -1557,6 +1710,11 @@ def build_parser() -> argparse.ArgumentParser:
     draft_labels.add_argument("--max-pages", type=int, default=10, help="Maximum calibration pages to convert into labels.")
     draft_labels.add_argument("--max-labels", type=int, default=100, help="Maximum draft labels to emit.")
     draft_labels.add_argument("--include-tasks", action="store_true", help="Also draft labels for agent task ids.")
+
+    dashboard = subcommands.add_parser("dashboard", help="Render a calibration report as an operator-friendly dashboard.")
+    dashboard.add_argument("calibration", type=Path, help="JSON output from `agentshelf calibrate --format json`.")
+    dashboard.add_argument("--format", choices=("html", "markdown"), default="html", help="Dashboard output format.")
+    dashboard.add_argument("--output", type=Path, help="Optional dashboard output path.")
 
     discover = subcommands.add_parser("discover", help="Discover product-like URLs from robots.txt sitemap hints or a sitemap URL.")
     discover.add_argument("--site", help="Storefront root URL. AgentShelf reads robots.txt for Sitemap hints.")
@@ -1693,6 +1851,14 @@ def main() -> int:
                 include_tasks=args.include_tasks,
             )
             rendered = json.dumps(payload, indent=2) + "\n"
+            exit_code = 0
+        elif args.command == "dashboard":
+            calibration = _load_calibration_report(args.calibration)
+            rendered = (
+                _render_dashboard_html(calibration)
+                if args.format == "html"
+                else _render_dashboard_markdown(calibration)
+            )
             exit_code = 0
         elif args.command == "discover":
             payload = _discover_urls(

@@ -496,6 +496,39 @@ class CliTests(unittest.TestCase):
             self.assertEqual(payload["summary"]["skipped_labels"], 1)
             self.assertEqual(payload["summary"]["failed"], 0)
 
+    def test_dashboard_renders_html_from_calibration_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            calibration = root / "calibration.json"
+            dashboard = root / "dashboard.html"
+            calibrate = _run_cli("calibrate", "benchmarks/fixtures/profile_rule_gap_product.html", "--format", "json")
+            self.assertEqual(calibrate.returncode, 0, calibrate.stderr)
+            calibration.write_text(calibrate.stdout, encoding="utf-8")
+
+            result = _run_cli("dashboard", str(calibration), "--format", "html", "--output", str(dashboard))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            html = dashboard.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", html)
+            self.assertIn("AgentShelf Calibration Dashboard", html)
+            self.assertIn("Daily Ritual Subscribe Kit", html)
+            self.assertIn("profile_rule_review", html)
+
+    def test_dashboard_renders_markdown_from_calibration_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            calibration = root / "calibration.json"
+            calibrate = _run_cli("calibrate", "benchmarks/fixtures/profile_rule_gap_product.html", "--format", "json")
+            self.assertEqual(calibrate.returncode, 0, calibrate.stderr)
+            calibration.write_text(calibrate.stdout, encoding="utf-8")
+
+            result = _run_cli("dashboard", str(calibration), "--format", "markdown")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("# AgentShelf Calibration Dashboard", result.stdout)
+            self.assertIn("## Review Queue", result.stdout)
+            self.assertIn("subscription_terms", result.stdout)
+
     def test_discover_reads_robots_sitemap_hints(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
