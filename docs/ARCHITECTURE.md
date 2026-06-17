@@ -53,10 +53,11 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - Raw snapshot mode does not execute JavaScript; dynamic pages are flagged instead of silently trusted. `--rendered` handles single-page JS capture when the optional browser dependency is installed.
 - `snapshot --url-file` supports real merchant URL lists without introducing site-wide crawling behavior.
 - `render-fixtures` gives merchants and coding agents a deterministic pre-merge path when product data is available before deployment, avoiding live crawling and browser installs for every PR. Native import adapters normalize Shopify JSON, WooCommerce CSV, and generic headless catalog JSON into one fixture contract before rendering platform-shaped HTML.
+- Import validation lives before rendering, so missing native-export fields become manifest warnings and optional CI failures instead of being hidden by generated fallback copy.
 - `discover` consumes sitemap metadata rather than crawling arbitrary links, keeping audits predictable and polite.
 
 ## Extension Path
 - Add deeper schema validation for variants, offers, return policy, merchant policy metadata, subscription selling plans, and bundle components.
 - Add more storefront profile packs for preorders, backorders, subscriptions with prepaid plans, B2B pricing, and marketplace sellers.
 - Add empirical benchmark runs against real agent answer quality before claiming ranking or conversion lift.
-- Add schema contract docs and validation warnings for required import fields so agents can fix export pipelines before generated snapshots become misleading.
+- Add a machine-readable remediation plan for import warnings so coding agents can edit export jobs or catalog mappers before rerunning fixture generation.

@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Make native merchant exports usable as AgentShelf pre-merge audit inputs.
+Make native merchant import gaps visible and CI-gated before generated snapshots are trusted.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -55,6 +55,8 @@ Make native merchant exports usable as AgentShelf pre-merge audit inputs.
 - Added `render-fixtures --input-format auto|agentshelf|shopify|woocommerce|headless`.
 - Added native import adapters for Shopify product JSON, WooCommerce product CSV, and generic headless catalog JSON.
 - Added native export examples: `examples/shopify-products.json`, `examples/woocommerce-products.csv`, and `examples/headless-catalog.json`.
+- Added import validation in `render-fixtures` manifests for missing price, currency, availability, variants, shipping, returns, specs, and variant option context.
+- Added `render-fixtures --fail-on-warnings` so production CI can fail before fallback-generated snapshots create overconfident audit results.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -98,9 +100,11 @@ Make native merchant exports usable as AgentShelf pre-merge audit inputs.
 - `.venv/bin/agentshelf render-fixtures examples/woocommerce-products.csv --input-format woocommerce --platform woocommerce --output-dir /tmp/agentshelf-native/woocommerce --format json`
 - `.venv/bin/agentshelf render-fixtures examples/headless-catalog.json --input-format headless --platform headless --output-dir /tmp/agentshelf-native/headless --format json`
 - `.venv/bin/agentshelf scan /tmp/agentshelf-native --batch --format jsonl --min-score 85`
+- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_render_fixtures_manifest_includes_validation_status tests.test_cli.CliTests.test_render_fixtures_warns_for_missing_import_fields tests.test_cli.CliTests.test_render_fixtures_fail_on_warnings_returns_nonzero`
+- `.venv/bin/agentshelf render-fixtures /tmp/agentshelf-thin-products.json --input-format agentshelf --platform shopify --output-dir /tmp/agentshelf-validation --format json --fail-on-warnings`
 
 ## Next Best Task
-Add import contract validation and warning output so missing native-export fields are caught before fixtures produce overconfident audit results.
+Add machine-readable import remediation tasks so coding agents can fix export jobs or catalog mapping code from validation warnings.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

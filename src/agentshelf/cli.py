@@ -22,7 +22,7 @@ from agentshelf.engine import ADAPTER_PROFILES, build_agent_contract, parse_inpu
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.19 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.20 (+https://github.com/wureny/AgentShelf)"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -356,7 +356,24 @@ def _normalize_fixture_product(item: dict, index: int) -> dict:
     )
     product["availability"] = str(product.get("availability") or _availability_from_variants(product) or "in_stock")
     product["variants"] = _normalize_variants(product)
+    product["_source_fields"] = _source_field_flags(item)
     return product
+
+
+def _source_field_flags(item: dict) -> dict[str, bool]:
+    variants = item.get("variants")
+    has_variants = isinstance(variants, list) and bool(variants)
+    return {
+        "title": bool(item.get("title") or item.get("name")),
+        "price": any(item.get(key) not in (None, "") for key in ("price", "regular_price", "sale_price", "pricing", "priceRange"))
+        or _first_variant_value(item, "price") not in (None, ""),
+        "currency": any(item.get(key) not in (None, "") for key in ("currency", "currencyCode")),
+        "availability": any(item.get(key) not in (None, "") for key in ("availability", "available", "availableForSale")),
+        "variants": has_variants,
+        "shipping": any(item.get(key) not in (None, "") for key in ("shipping", "shippingPolicy")),
+        "returns": any(item.get(key) not in (None, "") for key in ("returns", "returnPolicy")),
+        "specs": bool(item.get("specs") or item.get("metafields")),
+    }
 
 
 def _looks_like_shopify_product(item: object) -> bool:
@@ -416,6 +433,16 @@ def _extract_shopify_products(payload: object) -> list[dict]:
                 "metafields": item.get("metafields") if isinstance(item.get("metafields"), dict) else {},
                 "shipping": item.get("shipping") or "Ships in 3-5 business days.",
                 "returns": item.get("returns") or "30-day returns accepted for unused items.",
+                "_source_fields": {
+                    "title": bool(item.get("title")),
+                    "price": _first_variant_price(variants) is not None,
+                    "currency": bool(item.get("currency")),
+                    "availability": any(variant.get("available") is not None for variant in item.get("variants") or []),
+                    "variants": bool(variants),
+                    "shipping": bool(item.get("shipping")),
+                    "returns": bool(item.get("returns")),
+                    "specs": bool(item.get("metafields")),
+                },
             }
         )
     return normalized
@@ -511,6 +538,16 @@ def _normalize_woocommerce_product(row: dict, variations: list[dict], by_id: dic
         "shipping": _csv_value(row, "Shipping", "shipping") or "Ships in 3-5 business days.",
         "returns": _csv_value(row, "Returns", "returns") or "30-day returns accepted for unused items.",
         "specs": _woocommerce_options(row),
+        "_source_fields": {
+            "title": bool(_csv_value(row, "Name", "name")),
+            "price": any(_price_value(_csv_value(source, "Regular price", "Sale price", "Price", "regular_price", "sale_price", "price")) for source in source_rows),
+            "currency": bool(_csv_value(row, "Currency", "currency")),
+            "availability": any(_csv_value(source, "In stock?", "Stock", "stock_status", "in_stock") for source in source_rows),
+            "variants": bool(variations) or _csv_value(row, "Type", "type").lower() == "simple",
+            "shipping": bool(_csv_value(row, "Shipping", "shipping")),
+            "returns": bool(_csv_value(row, "Returns", "returns")),
+            "specs": bool(_woocommerce_options(row)),
+        },
     }
 
 
@@ -609,6 +646,16 @@ def _normalize_headless_product(item: dict, index: int) -> dict:
         "shipping": item.get("shipping") or item.get("shippingPolicy") or "Ships in 3-5 business days.",
         "returns": item.get("returns") or item.get("returnPolicy") or "30-day returns accepted for unused items.",
         "specs": item.get("specs") if isinstance(item.get("specs"), dict) else {},
+        "_source_fields": {
+            "title": bool(item.get("title") or item.get("name")),
+            "price": _price_value(price) is not None or _first_variant_price(normalized_variants) is not None,
+            "currency": bool(_currency_value(price) or item.get("currency") or item.get("currencyCode")),
+            "availability": any(key in item for key in ("availableForSale", "available")),
+            "variants": bool(normalized_variants),
+            "shipping": bool(item.get("shipping") or item.get("shippingPolicy")),
+            "returns": bool(item.get("returns") or item.get("returnPolicy")),
+            "specs": isinstance(item.get("specs"), dict) and bool(item.get("specs")),
+        },
     }
 
 
@@ -718,7 +765,7 @@ def _option_definitions(product: dict) -> list[dict]:
 
 
 def _variant_with_option_fields(variant: dict) -> dict:
-    payload = dict(variant)
+    payload = {key: value for key, value in variant.items() if not str(key).startswith("_")}
     for key, value in variant["options"].items():
         normalized_key = _slugify(str(key)).replace("-", "_")
         if normalized_key:
@@ -936,6 +983,7 @@ def _render_storefront_fixtures(
     input_format: str = "auto",
 ) -> dict:
     products, detected_format = _load_fixture_products(products_path, input_format=input_format)
+    validation = _validate_fixture_products(products)
     output_dir.mkdir(parents=True, exist_ok=True)
     snapshots = []
     for product in products:
@@ -960,6 +1008,7 @@ def _render_storefront_fixtures(
         "output_dir": str(output_dir),
         "platforms": platforms,
         "count": len(snapshots),
+        "validation": validation,
         "snapshots": snapshots,
         "batch_scan_command": f"agentshelf scan {output_dir} --batch --format jsonl",
     }
@@ -978,6 +1027,7 @@ def _render_fixture_summary(manifest: dict, output_format: str) -> str:
         f"- Source: `{manifest['source']}`",
         f"- Output dir: `{manifest['output_dir']}`",
         f"- Snapshots: {manifest['count']}",
+        f"- Validation warnings: {manifest['validation']['warning_count']}",
         f"- Batch scan: `{manifest['batch_scan_command']}`",
         "",
         "| Platform | Product | Path |",
@@ -985,7 +1035,72 @@ def _render_fixture_summary(manifest: dict, output_format: str) -> str:
     ]
     for item in manifest["snapshots"]:
         lines.append(f"| {item['platform']} | {item['product']} | `{item['path']}` |")
+    if manifest["validation"]["warnings"]:
+        lines.extend(["", "## Import Warnings"])
+        for warning in manifest["validation"]["warnings"]:
+            lines.append(
+                f"- `{warning['severity']}` {warning['product']}: {warning['message']} "
+                f"({warning['field']}; action: {warning['action']})"
+            )
     return "\n".join(lines) + "\n"
+
+
+def _validate_fixture_products(products: list[dict]) -> dict:
+    warnings = []
+    for product in products:
+        fields = product.get("_source_fields") if isinstance(product.get("_source_fields"), dict) else {}
+        product_name = product.get("title") or product.get("handle") or "unknown product"
+        checks = [
+            ("price", "Product export did not include an explicit price; fixture generation used a fallback price.", "Add product or variant price to the export."),
+            ("currency", "Product export did not include currency; fixture generation used USD.", "Add currency or currencyCode to the export."),
+            ("availability", "Product export did not include stock or availability state; fixture generation inferred availability.", "Export available, availableForSale, stock, or inventory fields."),
+            ("shipping", "Product export did not include shipping policy text; fixture generation used generic shipping copy.", "Add shipping or shippingPolicy to the export."),
+            ("returns", "Product export did not include return policy text; fixture generation used generic return copy.", "Add returns or returnPolicy to the export."),
+            ("specs", "Product export did not include specs or metafields; generated pages may be thin for fit questions.", "Add specs, metafields, attributes, or product facts."),
+        ]
+        for field, message, action in checks:
+            if not fields.get(field):
+                warnings.append(_validation_warning(product_name, field, message, action))
+        variants = product.get("variants") if isinstance(product.get("variants"), list) else []
+        if not fields.get("variants") or not variants:
+            warnings.append(
+                _validation_warning(
+                    product_name,
+                    "variants",
+                    "Product export did not include variants; fixture generation created a default variant.",
+                    "Export variant rows or nodes with option, price, and stock context.",
+                )
+            )
+        for index, variant in enumerate(variants, start=1):
+            label = f"{product_name} variant {index}"
+            if variant.get("price") in (None, "", "0.00"):
+                warnings.append(_validation_warning(label, "variant.price", "Variant is missing price.", "Add variant price."))
+            if not variant.get("options"):
+                warnings.append(
+                    _validation_warning(
+                        label,
+                        "variant.options",
+                        "Variant has no option labels; agents may not know size, color, or configuration.",
+                        "Add variant option names and values.",
+                    )
+                )
+            if variant.get("available") is None:
+                warnings.append(_validation_warning(label, "variant.available", "Variant is missing stock state.", "Add available or stock fields."))
+    return {
+        "warning_count": len(warnings),
+        "warnings": warnings,
+        "status": "warning" if warnings else "ok",
+    }
+
+
+def _validation_warning(product: object, field: str, message: str, action: str) -> dict:
+    return {
+        "severity": "warning",
+        "product": str(product),
+        "field": field,
+        "message": message,
+        "action": action,
+    }
 
 
 def _load_target(target: str, adapter_profile: str = "auto") -> dict:
@@ -2469,6 +2584,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="all",
         help="Storefront fixture shape to render.",
     )
+    render_fixtures.add_argument(
+        "--fail-on-warnings",
+        action="store_true",
+        help="Return non-zero when import validation warnings are present.",
+    )
     render_fixtures.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Summary output format.")
     return parser
 
@@ -2641,7 +2761,7 @@ def main() -> int:
                 input_format=args.input_format,
             )
             rendered = _render_fixture_summary(payload, args.format)
-            exit_code = 0
+            exit_code = 1 if args.fail_on_warnings and payload["validation"]["warning_count"] else 0
         else:
             parser.error(f"Unsupported command: {args.command}")
     except (OSError, ValueError) as exc:

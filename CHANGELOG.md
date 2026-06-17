@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.20.0
+- Added import validation to `render-fixtures` manifests so missing native-export fields are visible before generated snapshots are trusted.
+- Added `render-fixtures --fail-on-warnings` for CI pipelines that should fail when exports omit price, currency, stock, variants, shipping, returns, specs, or variant option context.
+- Added tests for validation manifests, warning output, and warning-gated fixture generation.
+
 ## 0.19.0
 - Added native `render-fixtures --input-format` import adapters for Shopify product JSON, WooCommerce product CSV, and generic headless catalog JSON.
 - Added native export examples for Shopify, WooCommerce, and headless GraphQL-style catalogs.

@@ -29,6 +29,7 @@ This project shows practical AI-commerce product thinking by turning vague "agen
 - Added a GitHub Actions artifact workflow that uploads SARIF, dashboards, draft labels, evaluation notes, scan JSONL, and coding-agent task queues before enforcing score gates.
 - Added product-export-to-fixture generation for Shopify, WooCommerce, and headless HTML snapshots, giving real storefront teams a low-ops pre-merge audit path without live crawling.
 - Added native import adapters for Shopify product JSON, WooCommerce CSV, and generic headless catalog JSON so merchant teams can use existing exports without hand-normalizing data first.
+- Added import validation and `--fail-on-warnings` so CI can reject incomplete merchant exports before generated fallback copy creates misleading audit confidence.
 - Packaged a professional open-source release with installable Python metadata, CI, contribution docs, benchmark fixtures, tests, and GitHub Action integration.
 
 ## Positioning Angle

@@ -916,6 +916,96 @@ class CliTests(unittest.TestCase):
             payload = json.loads(result.stdout)
             self.assertEqual(payload["input_format"], "woocommerce")
 
+    def test_render_fixtures_manifest_includes_validation_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "snapshots"
+            manifest = Path(tmpdir) / "manifest.json"
+
+            result = _run_cli(
+                "render-fixtures",
+                "examples/shopify-products.json",
+                "--input-format",
+                "shopify",
+                "--platform",
+                "shopify",
+                "--output-dir",
+                str(output_dir),
+                "--manifest",
+                str(manifest),
+                "--format",
+                "json",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["validation"]["status"], "ok")
+            self.assertEqual(payload["validation"]["warning_count"], 0)
+            self.assertEqual(json.loads(manifest.read_text(encoding="utf-8"))["validation"]["status"], "ok")
+
+    def test_render_fixtures_warns_for_missing_import_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            products = root / "thin-products.json"
+            products.write_text(
+                json.dumps(
+                    {
+                        "products": [
+                            {
+                                "title": "Thin Product",
+                                "handle": "thin-product",
+                                "price": "12.00",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = _run_cli(
+                "render-fixtures",
+                str(products),
+                "--input-format",
+                "agentshelf",
+                "--platform",
+                "shopify",
+                "--output-dir",
+                str(root / "snapshots"),
+                "--format",
+                "json",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            fields = {warning["field"] for warning in payload["validation"]["warnings"]}
+            self.assertEqual(payload["validation"]["status"], "warning")
+            self.assertIn("shipping", fields)
+            self.assertIn("returns", fields)
+            self.assertIn("variants", fields)
+
+    def test_render_fixtures_fail_on_warnings_returns_nonzero(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            products = root / "thin-products.json"
+            products.write_text(json.dumps({"products": [{"title": "Thin Product", "price": "12.00"}]}), encoding="utf-8")
+
+            result = _run_cli(
+                "render-fixtures",
+                str(products),
+                "--input-format",
+                "agentshelf",
+                "--platform",
+                "shopify",
+                "--output-dir",
+                str(root / "snapshots"),
+                "--format",
+                "json",
+                "--fail-on-warnings",
+            )
+
+            self.assertEqual(result.returncode, 1)
+            payload = json.loads(result.stdout)
+            self.assertGreater(payload["validation"]["warning_count"], 0)
+
     def test_rendered_snapshot_missing_extra_has_actionable_error(self) -> None:
         original_import = __import__
 

@@ -99,7 +99,8 @@ agentshelf render-fixtures examples/shopify-products.json \
 agentshelf render-fixtures examples/woocommerce-products.csv \
   --input-format woocommerce \
   --platform woocommerce \
-  --output-dir snapshots/woocommerce
+  --output-dir snapshots/woocommerce \
+  --fail-on-warnings
 agentshelf render-fixtures examples/headless-catalog.json \
   --input-format headless \
   --platform headless \
@@ -184,7 +185,7 @@ agentshelf discover --site <url> [options]
 agentshelf discover --sitemap <url> [options]
 agentshelf snapshot <url> --output <path> [--rendered]
 agentshelf snapshot --url-file <urls.txt> --output-dir <dir> [--manifest <path>]
-agentshelf render-fixtures <products.json-or-csv> [--input-format auto|agentshelf|shopify|woocommerce|headless] [--platform shopify|woocommerce|headless|all]
+agentshelf render-fixtures <products.json-or-csv> [--input-format auto|agentshelf|shopify|woocommerce|headless] [--platform shopify|woocommerce|headless|all] [--fail-on-warnings]
 ```
 
 Options:
@@ -203,7 +204,7 @@ Options:
 
 `snapshot` fetches raw HTML with the standard library by default. Use `--rendered` for a Playwright-backed single-page capture when product data is injected by JavaScript. Rendered mode is optional so the base CLI stays lightweight.
 
-`render-fixtures` turns product exports into deterministic Shopify, WooCommerce, and headless HTML snapshots. It accepts AgentShelf's normalized product JSON, Shopify product JSON, WooCommerce product CSV, and generic headless catalog JSON. Use it in CI when you can export catalog data or template data before deployment but do not want live crawling or browser capture in every PR.
+`render-fixtures` turns product exports into deterministic Shopify, WooCommerce, and headless HTML snapshots. It accepts AgentShelf's normalized product JSON, Shopify product JSON, WooCommerce product CSV, and generic headless catalog JSON. Use it in CI when you can export catalog data or template data before deployment but do not want live crawling or browser capture in every PR. The output manifest includes import validation warnings for missing price, currency, stock, variants, shipping, returns, specs, or variant option context; add `--fail-on-warnings` when those gaps should fail CI before scan results are trusted.
 
 `compare` shows whether rendered capture unlocks agent-readiness signals that raw HTML misses. It reports score deltas, dimension deltas, newly visible evidence, regressions, and an agent recommendation.
 
@@ -293,7 +294,8 @@ agentshelf render-fixtures examples/woocommerce-products.csv \
   --input-format auto \
   --platform woocommerce \
   --output-dir snapshots/woocommerce \
-  --manifest snapshots/woocommerce/manifest.json
+  --manifest snapshots/woocommerce/manifest.json \
+  --fail-on-warnings
 agentshelf scan snapshots/woocommerce --batch --profile woocommerce --format jsonl --min-score 85
 ```
 
@@ -445,6 +447,28 @@ Production-oriented profile rules currently cover:
 
 Each product should include enough purchase-decision data for an agent to answer price, stock, delivery, return, fit, and variant questions.
 
+The manifest includes a validation block:
+
+```json
+{
+  "validation": {
+    "status": "warning",
+    "warning_count": 2,
+    "warnings": [
+      {
+        "severity": "warning",
+        "product": "TrailBottle Pro 24oz",
+        "field": "shipping",
+        "message": "Product export did not include shipping policy text; fixture generation used generic shipping copy.",
+        "action": "Add shipping or shippingPolicy to the export."
+      }
+    ]
+  }
+}
+```
+
+Use `--fail-on-warnings` in production CI so missing import data fails before fallback text creates overconfident snapshots.
+
 ```json
 {
   "products": [
@@ -505,7 +529,7 @@ agentshelf compare examples/js_product_raw.html examples/js_product_rendered.htm
 agentshelf discover --sitemap https://example.com/sitemap.xml --limit 10
 agentshelf render-fixtures examples/storefront-products.json --platform all --output-dir snapshots --manifest snapshots/manifest.json
 agentshelf render-fixtures examples/shopify-products.json --input-format shopify --platform shopify --output-dir snapshots/shopify
-agentshelf render-fixtures examples/woocommerce-products.csv --input-format woocommerce --platform woocommerce --output-dir snapshots/woocommerce
+agentshelf render-fixtures examples/woocommerce-products.csv --input-format woocommerce --platform woocommerce --output-dir snapshots/woocommerce --fail-on-warnings
 agentshelf render-fixtures examples/headless-catalog.json --input-format headless --platform headless --output-dir snapshots/headless
 agentshelf scan examples/woocommerce_variable_product.html --profile woocommerce --format json
 agentshelf scan examples/headless_product_state.html --profile headless --format json
