@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Make storefront-specific extraction configurable for production CI and agent workflows.
+Lock storefront profile behavior with benchmark fixtures and expected outputs.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -31,6 +31,8 @@ Make storefront-specific extraction configurable for production CI and agent wor
 - Added embedded commerce signal extraction for Shopify/theme-style product JSON, variants, selling plan groups, metafield-like keys, and policy snippets.
 - Upgraded price, inventory, variant readiness, offer completeness, specs, policy, agent answerability, and merchant-feed checks to use storefront commerce evidence.
 - Added storefront adapter profiles (`auto`, `generic`, `shopify`, `woocommerce`, `headless`) with CLI, config, GitHub Action, JSON, and Markdown support.
+- Added profile-specific benchmark fixtures and expected outputs for Shopify, WooCommerce, and headless storefront exports.
+- Added `docs/PROFILE_BENCHMARKS.md` to document the adapter benchmark contract.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -52,9 +54,10 @@ Make storefront-specific extraction configurable for production CI and agent wor
 - `agentshelf audit-run "snapshots/*.html" --batch --history-dir .agentshelf/runs --tasks-output agentshelf-tasks.jsonl`
 - `agentshelf scan examples/sample_product_page.html --format markdown`
 - `agentshelf scan examples/shopify_variant_product.html --profile shopify --format json`
+- `python3 -m unittest tests.test_engine.BenchmarkTests`
 
 ## Next Best Task
-Add profile-specific benchmark fixtures and docs for WooCommerce and headless storefront exports.
+Add deeper profile-specific rule packs for return policy schema, subscriptions, bundles, and regional shipping promises.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

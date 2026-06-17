@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.0
+- Added profile-specific benchmark fixtures for Shopify, WooCommerce, and headless storefront exports.
+- Extended benchmark expectations to lock adapter profile detection and core commerce signal counts.
+- Added profile benchmark documentation for production CI and agent workflows.
+
 ## 0.10.0
 - Added storefront adapter profiles: `auto`, `generic`, `shopify`, `woocommerce`, and `headless`.
 - Added profile detection metadata to `commerce_signals` so agents can see requested, detected, and active extraction profiles.

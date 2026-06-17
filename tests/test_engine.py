@@ -240,6 +240,13 @@ class BenchmarkTests(unittest.TestCase):
                 self.assertIn(issue_id, issue_ids, fixture.name)
             for task_id in expected["top_tasks"]:
                 self.assertIn(task_id, task_ids, fixture.name)
+            if "profile" in expected:
+                profile = bundle["commerce_signals"]["adapter_profile"]
+                for key, value in expected["profile"].items():
+                    self.assertEqual(profile[key], value, fixture.name)
+            if "commerce_signals" in expected:
+                for key, value in expected["commerce_signals"].items():
+                    self.assertEqual(bundle["commerce_signals"][key], value, fixture.name)
 
 
 if __name__ == "__main__":

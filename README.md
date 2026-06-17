@@ -275,6 +275,7 @@ AgentShelf checks whether a shopping agent can make a reliable purchase recommen
 
 - variant-heavy pages where option choice matters
 - embedded storefront JSON where price, stock, subscriptions, or metafields are not visible as plain copy
+- profile-specific Shopify, WooCommerce, and headless storefront extraction contracts
 - visible price or stock contradicting JSON-LD
 - JS-rendered placeholder HTML that static scanners may overtrust
 - pages with schema but no policy or fit answers
@@ -284,7 +285,10 @@ Run the benchmark set:
 
 ```bash
 agentshelf scan benchmarks/fixtures --batch --format jsonl
+python3 -m unittest tests.test_engine.BenchmarkTests
 ```
+
+See [Profile Benchmarks](docs/PROFILE_BENCHMARKS.md) for the adapter-specific fixture contract.
 
 ## Current Non-Goals
 - arbitrary site-wide crawling

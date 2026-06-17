@@ -1,0 +1,13 @@
+{
+  "band": "workable",
+  "blocking_issues": ["specs", "schema_product"],
+  "top_tasks": ["add_product_jsonld"],
+  "profile": {"requested": "auto", "detected": "headless", "active": "headless"},
+  "commerce_signals": {
+    "variant_count": 2,
+    "variants_with_price": 2,
+    "variants_with_availability": 2,
+    "selling_plan_group_count": 0,
+    "metafield_keys": []
+  }
+}
