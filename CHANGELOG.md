@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.0
+- Added `agentshelf draft-labels` to convert calibration JSON reports into editable draft calibration label files.
+- Added support for `needs_review` draft labels; `evaluate` skips draft labels until humans mark them true-positive or false-positive.
+- Added `examples/draft-calibration-labels.json` to document the label authoring workflow.
+
 ## 0.14.0
 - Added `agentshelf evaluate` for CI-friendly evaluation of scan results against human calibration labels.
 - Added calibration label support for checks, blocking issues, agent tasks, calibration categories, and warnings.

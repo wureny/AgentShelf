@@ -104,6 +104,8 @@ agentshelf calibrate "snapshots/*.html" \
   --batch \
   --export-fixtures calibration-fixtures \
   --format json
+agentshelf draft-labels calibration-report.json \
+  --output draft-calibration-labels.json
 ```
 
 Evaluate a rule change against human calibration labels:
@@ -145,6 +147,7 @@ agentshelf compare <raw.html> <rendered.html> [options]
 agentshelf diff <baseline-results.jsonl> <current-results.jsonl> [options]
 agentshelf audit-run <file-or-dir-or-glob> [options]
 agentshelf calibrate <file-or-dir-or-glob-or-results.jsonl> [options]
+agentshelf draft-labels <calibration-report.json> [options]
 agentshelf evaluate <results.json-or-jsonl> --labels <labels.json> [options]
 agentshelf discover --site <url> [options]
 agentshelf discover --sitemap <url> [options]
@@ -175,6 +178,8 @@ Options:
 `audit-run` is the scheduled-job wrapper around `scan` and `diff`. It writes `<history-dir>/current-results.jsonl`, rotates the previous run into `<history-dir>/previous-results.jsonl`, archives each run as `results-<timestamp>.jsonl`, writes an `audit-diff.md` report, and can emit `agent-tasks` JSONL in the same pass.
 
 `calibrate` reviews real-page scan output for likely false-positive and false-negative categories. It can scan HTML snapshots directly or read existing `scan --format json|jsonl` artifacts with `--from-results`. Use `--export-fixtures` to write anonymized local HTML candidates plus metadata sidecars for benchmark review.
+
+`draft-labels` turns `calibrate --format json` output into editable draft labels. Draft labels use `verdict: needs_review` and are skipped by `evaluate` until a human changes them to `true_positive` or `false_positive`.
 
 `evaluate` compares scan results against a human label file. Use it after calibration reviews to lock confirmed true positives and false positives, then run it in CI with `--fail-on-regressions` before changing rules or thresholds.
 
@@ -220,7 +225,10 @@ agentshelf audit-run "snapshots/*.html" \
   --min-score 70
 agentshelf calibrate .agentshelf/runs/current-results.jsonl \
   --from-results \
-  --output calibration-report.md
+  --format json \
+  --output calibration-report.json
+agentshelf draft-labels calibration-report.json \
+  --output draft-calibration-labels.json
 agentshelf evaluate .agentshelf/runs/current-results.jsonl \
   --labels examples/calibration-labels.json \
   --fail-on-regressions
@@ -229,6 +237,8 @@ agentshelf evaluate .agentshelf/runs/current-results.jsonl \
 On the first run, `audit-run` creates a baseline. On later runs, it automatically writes `.agentshelf/runs/audit-diff.md` from the last saved result set. In CI, upload `.agentshelf/runs/audit-diff.md`, `calibration-report.md`, and `agentshelf-tasks.jsonl` as review artifacts so humans see the merchant-level regression summary and agents get machine-actionable fixes.
 
 Use calibration reports before changing scoring rules. A common loop is: run real merchant snapshots, inspect `rendered_capture_review`, `profile_rule_review`, `policy_schema_review`, and `offer_extraction_review`, then export anonymized fixture candidates for cases that should become benchmark coverage.
+
+When you want to turn calibration findings into regression coverage, run `draft-labels`, review the generated JSON, then change each useful label from `needs_review` to `true_positive` or `false_positive`. Draft labels are safe to commit because `evaluate` skips them until they are confirmed.
 
 Calibration labels use this shape:
 
@@ -381,6 +391,8 @@ agentshelf discover --sitemap https://example.com/sitemap.xml --limit 10
 agentshelf scan examples/woocommerce_variable_product.html --profile woocommerce --format json
 agentshelf scan examples/headless_product_state.html --profile headless --format json
 agentshelf calibrate benchmarks/fixtures --batch --format markdown
+agentshelf calibrate benchmarks/fixtures --batch --format json --output calibration-report.json
+agentshelf draft-labels calibration-report.json --output draft-calibration-labels.json
 agentshelf evaluate calibration-results.jsonl --labels examples/calibration-labels.json
 python3 -m pip install -e ".[render]"  # optional rendered snapshots
 ```
@@ -394,6 +406,7 @@ python3 -m pip install -e ".[render]"  # optional rendered snapshots
 - [WooCommerce variable product sample page](examples/woocommerce_variable_product.html)
 - [Headless app-state sample page](examples/headless_product_state.html)
 - [Calibration labels example](examples/calibration-labels.json)
+- [Draft calibration labels example](examples/draft-calibration-labels.json)
 - [Sample report](outputs/sample_report.md)
 
 ## License

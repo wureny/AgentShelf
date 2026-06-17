@@ -20,7 +20,7 @@ from agentshelf.engine import ADAPTER_PROFILES, build_agent_contract, parse_inpu
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.14 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.15 (+https://github.com/wureny/AgentShelf)"
 RENDER_EXTRA_MESSAGE = (
     "Rendered snapshots require the optional Playwright extra. "
     "Install it with `python3 -m pip install 'agentshelf[render]'` and then run "
@@ -1163,6 +1163,8 @@ def _load_calibration_labels(path: Path) -> dict:
             raise ValueError(f"Invalid label {index}: id is required.")
         expected = label.get("expected")
         verdict = label.get("verdict")
+        if verdict == "needs_review":
+            expected = expected or "present"
         if expected is None and verdict == "true_positive":
             expected = "present"
         if expected is None and verdict == "false_positive":
@@ -1177,6 +1179,7 @@ def _load_calibration_labels(path: Path) -> dict:
                 "id": label_id,
                 "expected": expected,
                 "verdict": verdict,
+                "status": label.get("status"),
                 "note": label.get("note"),
             }
         )
@@ -1231,6 +1234,9 @@ def _build_calibration_evaluation(results: list[dict], labels_payload: dict, key
     evaluated = []
     missing_pages = []
     for label in labels_payload["labels"]:
+        if label.get("verdict") == "needs_review" or label.get("status") == "draft":
+            evaluated.append({**label, "actual": "skipped", "passed": True, "skipped": True})
+            continue
         match_key, match_value = _label_key(label, key)
         bundle = indexes[match_key].get(match_value)
         if bundle is None and match_key == "source":
@@ -1257,7 +1263,8 @@ def _build_calibration_evaluation(results: list[dict], labels_payload: dict, key
                 },
             }
         )
-    failures = [item for item in evaluated if not item["passed"]]
+    scored = [item for item in evaluated if not item.get("skipped")]
+    failures = [item for item in scored if not item["passed"]]
     false_positive_regressions = [
         item
         for item in failures
@@ -1268,13 +1275,15 @@ def _build_calibration_evaluation(results: list[dict], labels_payload: dict, key
         for item in failures
         if item.get("verdict") == "true_positive" or item.get("expected") == "present"
     ]
-    passed = len(evaluated) - len(failures)
-    total = len(evaluated)
+    passed = len(scored) - len(failures)
+    total = len(scored)
     return {
         "contract": "agentshelf.calibration_evaluation.v1",
         "labels_contract": labels_payload["contract"],
         "summary": {
-            "labels": total,
+            "labels": len(evaluated),
+            "scored_labels": total,
+            "skipped_labels": len(evaluated) - total,
             "passed": passed,
             "failed": len(failures),
             "accuracy": round(passed / total, 4) if total else 0,
@@ -1284,11 +1293,13 @@ def _build_calibration_evaluation(results: list[dict], labels_payload: dict, key
         },
         "failures": failures,
         "results": evaluated,
-        "agent_next_actions": _evaluation_next_actions(failures),
+        "agent_next_actions": _evaluation_next_actions(failures, skipped_count=len(evaluated) - total, scored_count=total),
     }
 
 
-def _evaluation_next_actions(failures: list[dict]) -> list[str]:
+def _evaluation_next_actions(failures: list[dict], skipped_count: int = 0, scored_count: int = 0) -> list[str]:
+    if skipped_count and not scored_count:
+        return ["All labels are still draft needs_review labels; review them and mark useful labels true_positive or false_positive before using this as a CI gate."]
     if not failures:
         return ["All labeled calibration expectations passed; this rule set is safe against the current labeled fixtures."]
     actions = []
@@ -1311,6 +1322,8 @@ def _render_calibration_evaluation_markdown(payload: dict) -> str:
         "",
         "## Summary",
         f"- Labels: {summary['labels']}",
+        f"- Scored labels: {summary['scored_labels']}",
+        f"- Skipped draft labels: {summary['skipped_labels']}",
         f"- Passed: {summary['passed']}",
         f"- Failed: {summary['failed']}",
         f"- Accuracy: {summary['accuracy']:.2%}",
@@ -1333,6 +1346,96 @@ def _render_calibration_evaluation_markdown(payload: dict) -> str:
     for action in payload["agent_next_actions"]:
         lines.append(f"- {action}")
     return "\n".join(lines) + "\n"
+
+
+def _load_calibration_report(path: Path) -> dict:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid calibration report {path}: {exc.msg}.") from exc
+    if not isinstance(payload, dict) or payload.get("contract") != "agentshelf.calibration.v1":
+        raise ValueError(f"{path} is not an AgentShelf calibration JSON report. Use `agentshelf calibrate --format json`.")
+    pages = payload.get("pages")
+    if not isinstance(pages, list):
+        raise ValueError(f"Invalid calibration report {path}: pages must be an array.")
+    return payload
+
+
+def _draft_label(source: str, kind: str, label_id: str, note: str, title: str | None = None) -> dict:
+    label = {
+        "source": source,
+        "kind": kind,
+        "id": label_id,
+        "verdict": "needs_review",
+        "expected": "present",
+        "status": "draft",
+        "note": note,
+    }
+    if title:
+        label["title"] = title
+    return label
+
+
+def _build_draft_labels(calibration: dict, max_pages: int, max_labels: int, include_tasks: bool) -> dict:
+    labels = []
+    for page in calibration.get("pages", [])[:max_pages]:
+        source = page["source"]
+        title = page.get("title")
+        for category in page.get("review_categories", []):
+            labels.append(
+                _draft_label(
+                    source,
+                    "category",
+                    category["category"],
+                    f"Review suggested label `{category['suggested_label']}`: {category['reason']}",
+                    title=title,
+                )
+            )
+        for issue_id in page.get("blocking_issue_ids", []):
+            labels.append(
+                _draft_label(
+                    source,
+                    "blocking_issue",
+                    issue_id,
+                    "Confirm whether this blocking issue is a true positive or false positive for this merchant page.",
+                    title=title,
+                )
+            )
+        if include_tasks:
+            for task_id in page.get("agent_task_ids", []):
+                labels.append(
+                    _draft_label(
+                        source,
+                        "agent_task",
+                        task_id,
+                        "Confirm whether this agent remediation task should remain actionable for this page.",
+                        title=title,
+                    )
+                )
+        if len(labels) >= max_labels:
+            break
+    deduped = []
+    seen = set()
+    for label in labels:
+        key = (label["source"], label["kind"], label["id"])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(label)
+        if len(deduped) >= max_labels:
+            break
+    return {
+        "contract": "agentshelf.calibration_labels.v1",
+        "source_calibration": calibration.get("source"),
+        "status": "draft",
+        "instructions": [
+            "Review each draft label against the source page or anonymized fixture.",
+            "Change verdict to true_positive when the finding should remain present.",
+            "Change verdict to false_positive when the finding should be absent after a rule fix.",
+            "Remove labels that are not useful for future regression checks.",
+        ],
+        "labels": deduped,
+    }
 
 
 def _render_discovery(payload: dict, output_format: str) -> str:
@@ -1447,6 +1550,13 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
     evaluate.add_argument("--output", type=Path, help="Optional output file path.")
     evaluate.add_argument("--fail-on-regressions", action="store_true", help="Return non-zero when any labeled expectation fails.")
+
+    draft_labels = subcommands.add_parser("draft-labels", help="Create draft calibration labels from a calibration JSON report.")
+    draft_labels.add_argument("calibration", type=Path, help="JSON output from `agentshelf calibrate --format json`.")
+    draft_labels.add_argument("--output", type=Path, help="Optional label JSON output path.")
+    draft_labels.add_argument("--max-pages", type=int, default=10, help="Maximum calibration pages to convert into labels.")
+    draft_labels.add_argument("--max-labels", type=int, default=100, help="Maximum draft labels to emit.")
+    draft_labels.add_argument("--include-tasks", action="store_true", help="Also draft labels for agent task ids.")
 
     discover = subcommands.add_parser("discover", help="Discover product-like URLs from robots.txt sitemap hints or a sitemap URL.")
     discover.add_argument("--site", help="Storefront root URL. AgentShelf reads robots.txt for Sitemap hints.")
@@ -1570,6 +1680,20 @@ def main() -> int:
             payload = _build_calibration_evaluation(results, labels, key=args.key)
             rendered = json.dumps(payload, indent=2) + "\n" if args.format == "json" else _render_calibration_evaluation_markdown(payload)
             exit_code = 1 if args.fail_on_regressions and payload["summary"]["failed"] else 0
+        elif args.command == "draft-labels":
+            if args.max_pages < 1:
+                raise ValueError("--max-pages must be at least 1.")
+            if args.max_labels < 1:
+                raise ValueError("--max-labels must be at least 1.")
+            calibration = _load_calibration_report(args.calibration)
+            payload = _build_draft_labels(
+                calibration,
+                max_pages=args.max_pages,
+                max_labels=args.max_labels,
+                include_tasks=args.include_tasks,
+            )
+            rendered = json.dumps(payload, indent=2) + "\n"
+            exit_code = 0
         elif args.command == "discover":
             payload = _discover_urls(
                 site=args.site,

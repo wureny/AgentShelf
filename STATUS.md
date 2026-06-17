@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Evaluate rule changes against labeled calibration fixtures before tightening production gates.
+Make calibration labeling faster and safer for real merchant page sets.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -42,6 +42,9 @@ Evaluate rule changes against labeled calibration fixtures before tightening pro
 - Added anonymized fixture export for local HTML candidates plus metadata sidecars.
 - Added `agentshelf evaluate` to compare scan results against human calibration labels for checks, blocking issues, agent tasks, categories, and warnings.
 - Added `examples/calibration-labels.json` as a true-positive and false-positive label contract example.
+- Added `agentshelf draft-labels` to convert calibration JSON reports into editable draft label contracts.
+- Added support for `needs_review` draft labels; `evaluate` skips them until they are confirmed.
+- Added `examples/draft-calibration-labels.json`.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -67,9 +70,10 @@ Evaluate rule changes against labeled calibration fixtures before tightening pro
 - `.venv/bin/python -m unittest tests.test_engine`
 - `.venv/bin/python -m unittest tests.test_cli.CliTests.test_calibrate_from_html_batch_exports_anonymized_fixtures tests.test_cli.CliTests.test_calibrate_from_scan_results_jsonl`
 - `.venv/bin/python -m unittest tests.test_cli.CliTests.test_evaluate_calibration_labels_passes_expected_findings tests.test_cli.CliTests.test_evaluate_calibration_labels_fails_false_positive_regression`
+- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_draft_labels_from_calibration_report tests.test_cli.CliTests.test_evaluate_skips_draft_labels`
 
 ## Next Best Task
-Add label authoring helpers that convert selected calibration findings into draft labels, reducing manual editing for real merchant calibration runs.
+Add a compact HTML/Markdown calibration dashboard for larger merchant page sets so operators can review labels without reading raw JSON.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

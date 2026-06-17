@@ -1,0 +1,32 @@
+{
+  "contract": "agentshelf.calibration_labels.v1",
+  "status": "draft",
+  "instructions": [
+    "Review each draft label against the source page or anonymized fixture.",
+    "Change verdict to true_positive when the finding should remain present.",
+    "Change verdict to false_positive when the finding should be absent after a rule fix.",
+    "Remove labels that are not useful for future regression checks."
+  ],
+  "labels": [
+    {
+      "source": "benchmarks/fixtures/profile_rule_gap_product.html",
+      "title": "Daily Ritual Subscribe Kit",
+      "kind": "category",
+      "id": "profile_rule_review",
+      "verdict": "needs_review",
+      "expected": "present",
+      "status": "draft",
+      "note": "Review suggested label `verify_subscription_terms`: Subscription intent detected but missing: cadence, cancellation."
+    },
+    {
+      "source": "benchmarks/fixtures/profile_rule_gap_product.html",
+      "title": "Daily Ritual Subscribe Kit",
+      "kind": "blocking_issue",
+      "id": "subscription_terms",
+      "verdict": "needs_review",
+      "expected": "present",
+      "status": "draft",
+      "note": "Confirm whether this blocking issue is a true positive or false positive for this merchant page."
+    }
+  ]
+}
