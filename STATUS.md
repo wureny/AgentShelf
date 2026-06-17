@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Production-ready open-source release completed; future work is optional hardening, not required for local or CI use.
+Production-ready open-source release completed; current focus is release-readiness hardening for the GitHub Action, Marketplace copy, and coding-agent remediation loop.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -60,6 +60,11 @@ Production-ready open-source release completed; future work is optional hardenin
 - Added `render-fixtures --tasks-output` so validation warnings can be emitted as JSONL remediation tasks for coding agents.
 - Added platform-aware import remediation task guidance for Shopify JSON, WooCommerce CSV, headless catalog JSON, and normalized AgentShelf exports.
 - Extended `.github/workflows/agentshelf-artifacts.yml` so CI can optionally render fixtures from catalog exports, upload `import-tasks.jsonl`, scan generated snapshots, and defer import/score gates until after artifact upload.
+- Improved `action.yml` Marketplace-facing metadata, input descriptions, branding, and GitHub Step Summary output.
+- Added a copyable PR gate workflow at `docs/workflows/agentshelf-pr-gate.yml`.
+- Updated README with production posture, recommended Action rollout, SARIF example, failure-output example, and Codex/coding-agent remediation guidance.
+- Added stderr failure summaries for `scan`, `agent-audit --fail-on-blockers`, and `audit-run` gates while preserving JSON/SARIF machine output.
+- Added tests for Action metadata, copyable workflow, and CLI gate failure summaries.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -109,9 +114,13 @@ Production-ready open-source release completed; future work is optional hardenin
 - `.venv/bin/agentshelf render-fixtures /tmp/agentshelf-thin-products.json --input-format agentshelf --platform shopify --output-dir /tmp/agentshelf-import-tasks --tasks-output /tmp/agentshelf-import-tasks/tasks.jsonl --format json`
 - `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/agentshelf-artifacts.yml"); puts "workflow-yaml-ok"'`
 - `.venv/bin/python -m unittest tests.test_workflows`
+- `/opt/homebrew/bin/python3.11 -m unittest discover -s tests`
+- `ruby -e 'require "yaml"; YAML.load_file("action.yml"); YAML.load_file("docs/workflows/agentshelf-pr-gate.yml"); puts "yaml ok"'`
+- `git diff --check`
+- `PYTHONPATH=src /opt/homebrew/bin/python3.11 -m agentshelf.cli scan examples/weak_product_page.html --format json --output /private/tmp/agentshelf-weak.json --min-score 70`
 
 ## Next Best Task
-Optional only: write short platform setup guides for Shopify, WooCommerce, and headless CI users.
+Draft a `v0.1.0` GitHub release with the Action usage snippet, but delay Marketplace publication until the Action is dogfooded against one real storefront fixture repository.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

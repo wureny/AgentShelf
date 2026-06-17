@@ -58,6 +58,29 @@ class CliTests(unittest.TestCase):
     def test_min_score_returns_non_zero(self) -> None:
         result = _run_cli("scan", "examples/weak_product_page.html", "--min-score", "70")
         self.assertEqual(result.returncode, 1)
+        self.assertIn("AgentShelf gate failed.", result.stderr)
+        self.assertIn("Pages to fix:", result.stderr)
+        self.assertIn("agentshelf agent-tasks", result.stderr)
+
+    def test_min_score_with_output_keeps_report_file_and_writes_stderr_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "report.json"
+            result = _run_cli(
+                "scan",
+                "examples/weak_product_page.html",
+                "--format",
+                "json",
+                "--output",
+                str(output),
+                "--min-score",
+                "70",
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stdout, "")
+            self.assertIn("AgentShelf gate failed.", result.stderr)
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["band"], "not_ready")
 
     def test_scan_uses_json_config_when_present(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -128,6 +151,8 @@ class CliTests(unittest.TestCase):
     def test_agent_audit_fail_on_blockers(self) -> None:
         result = _run_cli("agent-audit", "examples/weak_product_page.html", "--fail-on-blockers")
         self.assertEqual(result.returncode, 1)
+        self.assertIn("agent-audit blocker gate failed", result.stderr)
+        self.assertIn("agent_tasks", result.stderr)
 
     def test_agent_tasks_jsonl(self) -> None:
         result = _run_cli("agent-tasks", "examples/weak_product_page.html")

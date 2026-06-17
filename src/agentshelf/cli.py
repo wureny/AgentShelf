@@ -8,6 +8,7 @@ import html
 import json
 import re
 import shutil
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
@@ -2517,6 +2518,70 @@ def _fails_threshold(result: dict, min_score: int | None, fail_on: str | None) -
     return False
 
 
+def _fix_text(fix: object) -> str:
+    if isinstance(fix, dict):
+        return str(fix.get("recommendation") or fix.get("id") or fix)
+    return str(fix)
+
+
+def _format_scan_gate_failure(results: list[dict], min_score: int | None, fail_on: str | None) -> str:
+    failed = [item for item in results if _fails_threshold(item, min_score, fail_on)]
+    if not failed:
+        return ""
+    lines = [
+        "AgentShelf gate failed.",
+        f"Failed pages: {len(failed)} of {len(results)}",
+    ]
+    if min_score is not None:
+        lines.append(f"Minimum score: {min_score}")
+    if fail_on is not None:
+        lines.append(f"Fail-on band: {fail_on}")
+    lines.append("")
+    lines.append("Pages to fix:")
+    for item in failed[:5]:
+        page = item.get("page", {})
+        title = page.get("title") or "Untitled page"
+        source = page.get("source") or "unknown source"
+        lines.append(f"- {title} ({source}): score {item['score']}/100, band {item['band']}")
+        for fix in item.get("top_fixes", [])[:3]:
+            lines.append(f"  - {_fix_text(fix)}")
+    if len(failed) > 5:
+        lines.append(f"- ...and {len(failed) - 5} more page(s).")
+    lines.extend(
+        [
+            "",
+            "Next steps:",
+            "- Read the report output for evidence and exact failed checks.",
+            "- Run `agentshelf agent-tasks <path> --batch --output agentshelf-tasks.jsonl` for coding-agent remediation tasks.",
+            "- Re-run the same scan after fixing product data, templates, or generated snapshots.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def _format_agent_blocker_failure(contract: dict) -> str:
+    blockers = [issue for issue in contract.get("blocking_issues", []) if issue.get("severity") == "high"]
+    if not blockers:
+        return ""
+    lines = [
+        "AgentShelf agent-audit blocker gate failed.",
+        f"High-severity blockers: {len(blockers)}",
+        "",
+        "Top blockers:",
+    ]
+    for issue in blockers[:5]:
+        lines.append(f"- {issue.get('id', 'unknown')}: {issue.get('reason', 'No reason provided.')}")
+    lines.extend(
+        [
+            "",
+            "Next steps:",
+            "- Use the `agent_tasks` JSON array as the implementation queue.",
+            "- Re-run `agentshelf agent-audit <path> --fail-on-blockers` after fixes.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="agentshelf",
@@ -2688,6 +2753,7 @@ def main() -> int:
         parser.print_help()
         return 2
 
+    failure_summary = ""
     try:
         if args.command == "scan":
             config = _load_config(args.config)
@@ -2710,11 +2776,15 @@ def main() -> int:
             results = [_load_scan(path, adapter_profile=args.profile) for path in paths]
             rendered = _render_results(results, args.format, batch)
             exit_code = 1 if any(_fails_threshold(item, args.min_score, args.fail_on) for item in results) else 0
+            if exit_code:
+                failure_summary = _format_scan_gate_failure(results, args.min_score, args.fail_on)
         elif args.command == "agent-audit":
             bundle = _load_target(args.target, adapter_profile=args.profile)
             contract = build_agent_contract(bundle, contract=args.contract)
             rendered = json.dumps(contract, indent=2) + "\n"
             exit_code = 1 if args.fail_on_blockers and any(issue["severity"] == "high" for issue in contract["blocking_issues"]) else 0
+            if exit_code:
+                failure_summary = _format_agent_blocker_failure(contract)
         elif args.command == "agent-tasks":
             paths = _resolve_inputs(args.path, args.batch)
             if len(paths) > 1 and not args.batch:
@@ -2749,6 +2819,14 @@ def main() -> int:
             )
             rendered = json.dumps(payload, indent=2) + "\n" if args.format == "json" else markdown
             exit_code = 1 if payload["threshold_failed"] else 0
+            if exit_code:
+                failure_summary = (
+                    "AgentShelf scheduled audit gate failed.\n"
+                    f"Current results: {payload['current_results']}\n"
+                    f"Diff report: {payload['diff_report']}\n"
+                    f"Tasks output: {payload['tasks_output'] or 'not requested'}\n"
+                    "Next step: inspect the diff report and run `agentshelf agent-tasks` for remediation tasks.\n"
+                )
         elif args.command == "calibrate":
             if args.max_fixtures < 1:
                 raise ValueError("--max-fixtures must be at least 1.")
@@ -2863,6 +2941,8 @@ def main() -> int:
         output.write_text(rendered, encoding="utf-8")
     else:
         print(rendered, end="")
+    if failure_summary:
+        sys.stderr.write(failure_summary)
 
     return exit_code
 

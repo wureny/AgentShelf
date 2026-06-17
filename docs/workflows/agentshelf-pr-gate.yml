@@ -1,0 +1,37 @@
+name: AgentShelf PR Gate
+
+on:
+  pull_request:
+    paths:
+      - "snapshots/**/*.html"
+      - "theme-fixtures/**/*.html"
+      - ".agentshelf.json"
+      - ".github/workflows/agentshelf-pr-gate.yml"
+
+jobs:
+  audit-commerce-pages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Audit product-page snapshots
+        uses: wureny/AgentShelf@v0.1.0
+        with:
+          path: "snapshots/**/*.html"
+          min-score: "70"
+          fail-on: not_ready
+          format: markdown
+          output: agentshelf-report.md
+          profile: auto
+
+      - name: Upload AgentShelf report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agentshelf-report
+          path: agentshelf-report.md
+          if-no-files-found: warn

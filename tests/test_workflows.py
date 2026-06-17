@@ -8,6 +8,40 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class WorkflowArtifactTests(unittest.TestCase):
+    def test_action_metadata_is_marketplace_ready_and_writes_step_summary(self) -> None:
+        action = (ROOT / "action.yml").read_text(encoding="utf-8")
+
+        required_snippets = [
+            "description: CI gate for product pages",
+            "author: Alix",
+            "branding:",
+            "icon: check-circle",
+            "color: green",
+            "GITHUB_STEP_SUMMARY",
+            "AgentShelf commerce audit",
+            "agent-tasks",
+            "exit \"$status\"",
+        ]
+        for snippet in required_snippets:
+            with self.subTest(snippet=snippet):
+                self.assertIn(snippet, action)
+
+    def test_copyable_pr_gate_workflow_uses_pinned_action_and_artifact_upload(self) -> None:
+        workflow = (ROOT / "docs/workflows/agentshelf-pr-gate.yml").read_text(encoding="utf-8")
+
+        required_snippets = [
+            "uses: wureny/AgentShelf@v0.1.0",
+            "actions/setup-python@v5",
+            "python-version: \"3.11\"",
+            "path: \"snapshots/**/*.html\"",
+            "fail-on: not_ready",
+            "actions/upload-artifact@v4",
+            "if: always()",
+        ]
+        for snippet in required_snippets:
+            with self.subTest(snippet=snippet):
+                self.assertIn(snippet, workflow)
+
     def test_artifact_workflow_exports_review_and_agent_outputs(self) -> None:
         workflow = (ROOT / ".github/workflows/agentshelf-artifacts.yml").read_text(encoding="utf-8")
 

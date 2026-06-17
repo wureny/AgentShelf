@@ -1,31 +1,35 @@
 name: AgentShelf
-description: Audit product-page snapshots for AI shopping-agent readiness.
+description: CI gate for product pages, storefront snapshots, and catalog fixtures that need to be readable by AI shopping agents.
+author: Alix
+branding:
+  icon: check-circle
+  color: green
 inputs:
   path:
-    description: File, directory, or glob to scan.
+    description: HTML snapshot file, directory, or glob to scan. Use generated storefront snapshots or theme fixture output, not a live URL.
     required: true
   config:
-    description: Optional AgentShelf JSON config path.
+    description: Optional AgentShelf JSON config path for repeatable gates across local and CI runs.
     required: false
     default: ""
   min-score:
-    description: Minimum score required for every scanned page.
+    description: Minimum AgentShelf score required for every scanned page. The action fails when any page is below this score.
     required: false
     default: "70"
   fail-on:
-    description: "Optional readiness band gate: weak or not_ready."
+    description: "Optional readiness band gate. Use weak or not_ready to fail on low-readiness pages even when no score threshold is set."
     required: false
     default: ""
   format:
-    description: "Output format: markdown, json, jsonl, or sarif."
+    description: "Report format: markdown for humans, json/jsonl for automation, or sarif for GitHub code scanning upload."
     required: false
     default: markdown
   output:
-    description: Report output path.
+    description: Report output path inside the workflow workspace.
     required: false
     default: agentshelf-report.md
   profile:
-    description: "Storefront adapter profile: auto, generic, shopify, woocommerce, or headless."
+    description: "Storefront adapter profile: auto, generic, shopify, woocommerce, or headless. Pin this in production when the storefront type is known."
     required: false
     default: auto
 runs:
@@ -56,4 +60,38 @@ runs:
         if [ -z "${{ inputs.config }}" ] || [ "${{ inputs.output }}" != "agentshelf-report.md" ]; then
           args+=(--output "${{ inputs.output }}")
         fi
+        set +e
         agentshelf "${args[@]}"
+        status=$?
+        set -e
+
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          {
+            echo "## AgentShelf commerce audit"
+            echo
+            echo "- Target: \`${{ inputs.path }}\`"
+            echo "- Profile: \`${{ inputs.profile }}\`"
+            echo "- Minimum score: \`${{ inputs.min-score }}\`"
+            if [ -n "${{ inputs.fail-on }}" ]; then
+              echo "- Fail-on band: \`${{ inputs.fail-on }}\`"
+            fi
+            if [ "$status" -eq 0 ]; then
+              echo "- Result: passed"
+            else
+              echo "- Result: failed"
+              echo
+              echo "Review the workflow log for the AgentShelf gate summary and inspect \`${{ inputs.output }}\` for evidence."
+              echo "For coding-agent remediation, run \`agentshelf agent-tasks ${{ inputs.path }} --batch --output agentshelf-tasks.jsonl\`."
+            fi
+            if [ -f "${{ inputs.output }}" ]; then
+              echo
+              echo "Report: \`${{ inputs.output }}\`"
+              if [ "${{ inputs.format }}" = "markdown" ]; then
+                echo
+                sed -n '1,160p' "${{ inputs.output }}"
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        exit "$status"

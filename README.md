@@ -6,10 +6,21 @@ AgentShelf checks whether product pages expose the signals AI shopping agents ne
 
 It also reads storefront implementation signals that matter in real Shopify/DTC pages: embedded product JSON, variant arrays, selling plan groups, metafield-like keys, policy snippets, subscription terms, bundle contents, regional shipping promises, and return policy schema.
 
+## Production Posture
+AgentShelf is ready for production dogfooding in CI when you can provide one of these inputs:
+
+- generated product-page HTML snapshots from your storefront build
+- stable theme fixture HTML committed or produced during CI
+- Shopify, WooCommerce, headless, or normalized catalog exports rendered with `agentshelf render-fixtures`
+- raw or rendered snapshots captured by a scheduled job before the PR gate runs
+
+It is not a fully managed crawler, hosted Shopify app, or checkout automation system. Treat the score as an explainable CI signal, not a claim that a specific external shopping agent will rank the product higher. The mature production loop is: generate or capture snapshots, run `agentshelf scan`, upload human-readable evidence, emit `agentshelf agent-tasks` for coding agents, and tighten thresholds after a few real merchant review cycles.
+
 ## Who It Helps
 - Shopify and DTC operators preparing storefronts for agentic commerce
 - AI commerce consultants doing quick storefront readiness audits
 - indie commerce founders validating whether product pages are machine-readable
+- Codex-style coding agents that need deterministic remediation tasks instead of prose-only audit notes
 
 ## 5-Minute Quickstart
 ```bash
@@ -359,7 +370,14 @@ Calibration labels use this shape:
 Supported label kinds are `check`, `blocking_issue`, `agent_task`, `category`, and `warning`. `true_positive` means the finding should remain present; `false_positive` means it should be absent after the rule is fixed.
 
 ## GitHub Action
-Use AgentShelf as a PR gate for product-page snapshots, generated storefront HTML, or theme fixture output.
+Use AgentShelf as a PR gate for product-page snapshots, generated storefront HTML, or theme fixture output. The Action is intentionally local-input first: it audits files produced by your build or fixture job, then fails the PR only after writing a report and a GitHub Step Summary.
+
+Recommended first rollout:
+
+1. Start with `format: markdown` and `min-score: "70"` so humans can inspect failures.
+2. Upload `agentshelf-report.md` as an artifact on every run.
+3. Add `agentshelf agent-tasks` or the full artifact workflow when you want Codex-style agents to fix pages automatically.
+4. Pin a release tag such as `wureny/AgentShelf@v0.1.0` once the first release exists. Use `@main` only while testing this repository.
 
 ```yaml
 name: AgentShelf
@@ -372,23 +390,77 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: wureny/AgentShelf@main
+
+      - uses: actions/setup-python@v5
         with:
-          path: "examples/*.html"
+          python-version: "3.11"
+
+      - name: Audit product-page snapshots
+        uses: wureny/AgentShelf@v0.1.0
+        with:
+          path: "snapshots/**/*.html"
           min-score: "70"
           fail-on: not_ready
-          format: sarif
-          output: agentshelf-results.sarif
+          format: markdown
+          output: agentshelf-report.md
           profile: auto
+
+      - name: Upload AgentShelf report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agentshelf-report
+          path: agentshelf-report.md
+          if-no-files-found: warn
 ```
 
-If you want review artifacts instead of only pass/fail gating, use the included artifact workflow:
+See [docs/workflows/agentshelf-pr-gate.yml](docs/workflows/agentshelf-pr-gate.yml) for a copyable PR gate.
+
+Use SARIF when you want GitHub code scanning annotations:
+
+```yaml
+- name: Audit product-page snapshots
+  uses: wureny/AgentShelf@v0.1.0
+  with:
+    path: "snapshots/**/*.html"
+    min-score: "85"
+    format: sarif
+    output: agentshelf-results.sarif
+
+- uses: github/codeql-action/upload-sarif@v3
+  if: always()
+  with:
+    sarif_file: agentshelf-results.sarif
+```
+
+When the gate fails, AgentShelf writes a short failure summary to the workflow log:
+
+```text
+AgentShelf gate failed.
+Failed pages: 1 of 4
+Minimum score: 70
+
+Pages to fix:
+- TrailBottle Landing Page (snapshots/trailbottle.html): score 31/100, band not_ready
+  - Expose a machine-readable price near the purchase controls.
+  - State whether the item is in stock, backordered, or unavailable.
+  - Add delivery timing or shipping-cost guidance near checkout intent.
+
+Next steps:
+- Read the report output for evidence and exact failed checks.
+- Run `agentshelf agent-tasks <path> --batch --output agentshelf-tasks.jsonl` for coding-agent remediation tasks.
+- Re-run the same scan after fixing product data, templates, or generated snapshots.
+```
+
+If you want review artifacts, calibration dashboards, SARIF, JSONL results, and coding-agent task queues in one workflow, use the included artifact workflow:
 
 ```bash
 cp .github/workflows/agentshelf-artifacts.yml <storefront-repo>/.github/workflows/agentshelf-artifacts.yml
 ```
 
 Run it manually first with `workflow_dispatch`. Once the dashboard and draft labels match your merchant review process, add a `pull_request` trigger and point either `path` at your generated product-page snapshots or `catalog` at a product export that AgentShelf should render before scanning.
+
+For Codex or another coding agent, the most useful artifact is `agentshelf-tasks.jsonl`. Each row names the page, the task id, the reason, the likely file or page area, and an acceptance check. That lets an agent edit templates or catalog mappers without reverse-engineering a prose report.
 
 ## JSON Output
 JSON reports include stable fields for dashboards and CI:
