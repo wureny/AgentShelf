@@ -1,0 +1,42 @@
+{
+  "products": [
+    {
+      "id": 1001,
+      "title": "TrailBottle Pro 24oz",
+      "handle": "trailbottle-pro-24oz",
+      "vendor": "North Ridge Supply",
+      "body_html": "<p>Insulated stainless steel bottle for hiking, commuting, and long day trips.</p>",
+      "currency": "USD",
+      "shipping": "Ships in 2 business days. Free US shipping on qualifying orders.",
+      "returns": "30-day returns accepted for unused bottles in original packaging.",
+      "metafields": {
+        "custom.material": "18/8 stainless steel",
+        "custom.capacity": "24oz"
+      },
+      "options": [
+        {"name": "Size"},
+        {"name": "Color"}
+      ],
+      "variants": [
+        {
+          "id": 2001,
+          "title": "24oz / Moss",
+          "sku": "TB24-MOSS",
+          "price": "39.00",
+          "inventory_quantity": 24,
+          "option1": "24oz",
+          "option2": "Moss"
+        },
+        {
+          "id": 2002,
+          "title": "24oz / Slate",
+          "sku": "TB24-SLATE",
+          "price": "39.00",
+          "inventory_quantity": 18,
+          "option1": "24oz",
+          "option2": "Slate"
+        }
+      ]
+    }
+  ]
+}

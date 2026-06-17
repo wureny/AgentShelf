@@ -797,6 +797,125 @@ class CliTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("missing `title`", result.stderr)
 
+    def test_render_fixtures_imports_native_shopify_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "shopify"
+            render = _run_cli(
+                "render-fixtures",
+                "examples/shopify-products.json",
+                "--input-format",
+                "shopify",
+                "--platform",
+                "shopify",
+                "--output-dir",
+                str(output_dir),
+                "--format",
+                "json",
+            )
+            self.assertEqual(render.returncode, 0, render.stderr)
+            manifest = json.loads(render.stdout)
+            self.assertEqual(manifest["input_format"], "shopify")
+
+            scan = _run_cli(
+                "scan",
+                str(output_dir / "trailbottle-pro-24oz.shopify.html"),
+                "--profile",
+                "shopify",
+                "--format",
+                "json",
+                "--min-score",
+                "85",
+            )
+            self.assertEqual(scan.returncode, 0, scan.stderr)
+            payload = json.loads(scan.stdout)
+            self.assertEqual(payload["commerce_signals"]["adapter_profile"]["active"], "shopify")
+            self.assertGreaterEqual(payload["score"], 85)
+
+    def test_render_fixtures_imports_native_woocommerce_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "woocommerce"
+            render = _run_cli(
+                "render-fixtures",
+                "examples/woocommerce-products.csv",
+                "--input-format",
+                "woocommerce",
+                "--platform",
+                "woocommerce",
+                "--output-dir",
+                str(output_dir),
+                "--format",
+                "json",
+            )
+            self.assertEqual(render.returncode, 0, render.stderr)
+            manifest = json.loads(render.stdout)
+            self.assertEqual(manifest["input_format"], "woocommerce")
+
+            scan = _run_cli(
+                "scan",
+                str(output_dir / "trailbottle-pro-24oz.woocommerce.html"),
+                "--profile",
+                "woocommerce",
+                "--format",
+                "json",
+                "--min-score",
+                "85",
+            )
+            self.assertEqual(scan.returncode, 0, scan.stderr)
+            payload = json.loads(scan.stdout)
+            self.assertEqual(payload["commerce_signals"]["adapter_profile"]["active"], "woocommerce")
+            self.assertGreaterEqual(payload["score"], 85)
+
+    def test_render_fixtures_imports_native_headless_catalog_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "headless"
+            render = _run_cli(
+                "render-fixtures",
+                "examples/headless-catalog.json",
+                "--input-format",
+                "headless",
+                "--platform",
+                "headless",
+                "--output-dir",
+                str(output_dir),
+                "--format",
+                "json",
+            )
+            self.assertEqual(render.returncode, 0, render.stderr)
+            manifest = json.loads(render.stdout)
+            self.assertEqual(manifest["input_format"], "headless")
+
+            scan = _run_cli(
+                "scan",
+                str(output_dir / "trailbottle-pro-24oz.headless.html"),
+                "--profile",
+                "headless",
+                "--format",
+                "json",
+                "--min-score",
+                "85",
+            )
+            self.assertEqual(scan.returncode, 0, scan.stderr)
+            payload = json.loads(scan.stdout)
+            self.assertEqual(payload["commerce_signals"]["adapter_profile"]["active"], "headless")
+            self.assertGreaterEqual(payload["score"], 85)
+
+    def test_render_fixtures_auto_detects_woocommerce_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "auto"
+            result = _run_cli(
+                "render-fixtures",
+                "examples/woocommerce-products.csv",
+                "--platform",
+                "woocommerce",
+                "--output-dir",
+                str(output_dir),
+                "--format",
+                "json",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["input_format"], "woocommerce")
+
     def test_rendered_snapshot_missing_extra_has_actionable_error(self) -> None:
         original_import = __import__
 

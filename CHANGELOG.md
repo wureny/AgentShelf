@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.19.0
+- Added native `render-fixtures --input-format` import adapters for Shopify product JSON, WooCommerce product CSV, and generic headless catalog JSON.
+- Added native export examples for Shopify, WooCommerce, and headless GraphQL-style catalogs.
+- Added tests proving native merchant exports can render platform snapshots and pass scan gates without manually reshaping into AgentShelf's normalized product JSON.
+
 ## 0.18.0
 - Added `agentshelf render-fixtures` to generate deterministic Shopify, WooCommerce, and headless HTML snapshots from a simple product JSON export.
 - Added `examples/storefront-products.json` as a merchant-readable catalog export example for local and CI fixture generation.

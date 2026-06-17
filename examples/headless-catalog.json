@@ -1,0 +1,62 @@
+{
+  "data": {
+    "products": {
+      "edges": [
+        {
+          "node": {
+            "id": "gid://catalog/Product/9001",
+            "title": "TrailBottle Pro 24oz",
+            "handle": "trailbottle-pro-24oz",
+            "vendor": "North Ridge Supply",
+            "descriptionHtml": "<p>Insulated stainless steel bottle for hiking, commuting, and long day trips.</p>",
+            "availableForSale": true,
+            "shippingPolicy": "Ships in 2 business days. Free US shipping on qualifying orders.",
+            "returnPolicy": "30-day returns accepted for unused bottles in original packaging.",
+            "priceRange": {
+              "minVariantPrice": {
+                "amount": "39.00",
+                "currencyCode": "USD"
+              }
+            },
+            "specs": {
+              "Capacity": "24oz",
+              "Material": "18/8 stainless steel"
+            },
+            "variants": {
+              "nodes": [
+                {
+                  "id": "gid://catalog/ProductVariant/9001",
+                  "title": "24oz / Moss",
+                  "sku": "TB24-MOSS",
+                  "availableForSale": true,
+                  "price": {
+                    "amount": "39.00",
+                    "currencyCode": "USD"
+                  },
+                  "selectedOptions": [
+                    {"name": "Size", "value": "24oz"},
+                    {"name": "Color", "value": "Moss"}
+                  ]
+                },
+                {
+                  "id": "gid://catalog/ProductVariant/9002",
+                  "title": "24oz / Slate",
+                  "sku": "TB24-SLATE",
+                  "availableForSale": true,
+                  "price": {
+                    "amount": "39.00",
+                    "currencyCode": "USD"
+                  },
+                  "selectedOptions": [
+                    {"name": "Size", "value": "24oz"},
+                    {"name": "Color", "value": "Slate"}
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

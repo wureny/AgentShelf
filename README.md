@@ -89,6 +89,23 @@ agentshelf render-fixtures examples/storefront-products.json \
 agentshelf scan snapshots --batch --format jsonl --output agentshelf-results.jsonl
 ```
 
+Import native merchant exports without reshaping first:
+
+```bash
+agentshelf render-fixtures examples/shopify-products.json \
+  --input-format shopify \
+  --platform shopify \
+  --output-dir snapshots/shopify
+agentshelf render-fixtures examples/woocommerce-products.csv \
+  --input-format woocommerce \
+  --platform woocommerce \
+  --output-dir snapshots/woocommerce
+agentshelf render-fixtures examples/headless-catalog.json \
+  --input-format headless \
+  --platform headless \
+  --output-dir snapshots/headless
+```
+
 Compare raw vs rendered snapshots:
 
 ```bash
@@ -167,7 +184,7 @@ agentshelf discover --site <url> [options]
 agentshelf discover --sitemap <url> [options]
 agentshelf snapshot <url> --output <path> [--rendered]
 agentshelf snapshot --url-file <urls.txt> --output-dir <dir> [--manifest <path>]
-agentshelf render-fixtures <products.json> [--platform shopify|woocommerce|headless|all]
+agentshelf render-fixtures <products.json-or-csv> [--input-format auto|agentshelf|shopify|woocommerce|headless] [--platform shopify|woocommerce|headless|all]
 ```
 
 Options:
@@ -186,7 +203,7 @@ Options:
 
 `snapshot` fetches raw HTML with the standard library by default. Use `--rendered` for a Playwright-backed single-page capture when product data is injected by JavaScript. Rendered mode is optional so the base CLI stays lightweight.
 
-`render-fixtures` turns a product JSON export into deterministic Shopify, WooCommerce, and headless HTML snapshots. Use it in CI when you can export catalog data or template data before deployment but do not want live crawling or browser capture in every PR.
+`render-fixtures` turns product exports into deterministic Shopify, WooCommerce, and headless HTML snapshots. It accepts AgentShelf's normalized product JSON, Shopify product JSON, WooCommerce product CSV, and generic headless catalog JSON. Use it in CI when you can export catalog data or template data before deployment but do not want live crawling or browser capture in every PR.
 
 `compare` shows whether rendered capture unlocks agent-readiness signals that raw HTML misses. It reports score deltas, dimension deltas, newly visible evidence, regressions, and an agent recommendation.
 
@@ -268,6 +285,17 @@ agentshelf agent-tasks snapshots --batch --output agentshelf-tasks.jsonl
 ```
 
 This is the lowest-ops path for coding agents: generate deterministic storefront-shaped HTML, run AgentShelf, then edit product data or templates until `agentshelf-tasks.jsonl` has no high-priority tasks.
+
+Native merchant export audit:
+
+```bash
+agentshelf render-fixtures examples/woocommerce-products.csv \
+  --input-format auto \
+  --platform woocommerce \
+  --output-dir snapshots/woocommerce \
+  --manifest snapshots/woocommerce/manifest.json
+agentshelf scan snapshots/woocommerce --batch --profile woocommerce --format jsonl --min-score 85
+```
 
 On the first run, `audit-run` creates a baseline. On later runs, it automatically writes `.agentshelf/runs/audit-diff.md` from the last saved result set. In CI, upload `.agentshelf/runs/audit-diff.md`, `calibration-dashboard.html`, `draft-calibration-labels.json`, and `agentshelf-tasks.jsonl` as review artifacts so humans see the merchant-level regression summary and agents get machine-actionable fixes.
 
@@ -407,7 +435,15 @@ Production-oriented profile rules currently cover:
 - regional shipping promises: destination-specific shipping copy should include the region plus timing or cost.
 
 ## Storefront Fixture Input
-`render-fixtures` accepts a JSON list or an object with a `products` list. Each product should include enough purchase-decision data for an agent to answer price, stock, delivery, return, fit, and variant questions.
+`render-fixtures` accepts:
+
+- `--input-format agentshelf`: a JSON list or an object with a `products` list.
+- `--input-format shopify`: Shopify product JSON as `{product: ...}`, `{products: [...]}`, or a product list.
+- `--input-format woocommerce`: WooCommerce product CSV with parent variable products and variation rows.
+- `--input-format headless`: generic catalog JSON using `products`, `items`, `nodes`, `edges`, `data.products`, or `catalog.products`.
+- `--input-format auto`: `.csv` files are treated as WooCommerce; JSON is inspected for Shopify or headless markers before falling back to AgentShelf's normalized shape.
+
+Each product should include enough purchase-decision data for an agent to answer price, stock, delivery, return, fit, and variant questions.
 
 ```json
 {
@@ -468,6 +504,9 @@ agentshelf agent-tasks examples --batch
 agentshelf compare examples/js_product_raw.html examples/js_product_rendered.html --format json
 agentshelf discover --sitemap https://example.com/sitemap.xml --limit 10
 agentshelf render-fixtures examples/storefront-products.json --platform all --output-dir snapshots --manifest snapshots/manifest.json
+agentshelf render-fixtures examples/shopify-products.json --input-format shopify --platform shopify --output-dir snapshots/shopify
+agentshelf render-fixtures examples/woocommerce-products.csv --input-format woocommerce --platform woocommerce --output-dir snapshots/woocommerce
+agentshelf render-fixtures examples/headless-catalog.json --input-format headless --platform headless --output-dir snapshots/headless
 agentshelf scan examples/woocommerce_variable_product.html --profile woocommerce --format json
 agentshelf scan examples/headless_product_state.html --profile headless --format json
 agentshelf calibrate benchmarks/fixtures --batch --format markdown
@@ -487,6 +526,9 @@ python3 -m pip install -e ".[render]"  # optional rendered snapshots
 - [WooCommerce variable product sample page](examples/woocommerce_variable_product.html)
 - [Headless app-state sample page](examples/headless_product_state.html)
 - [Storefront product export example](examples/storefront-products.json)
+- [Shopify product export example](examples/shopify-products.json)
+- [WooCommerce CSV export example](examples/woocommerce-products.csv)
+- [Headless catalog export example](examples/headless-catalog.json)
 - [Calibration labels example](examples/calibration-labels.json)
 - [Draft calibration labels example](examples/draft-calibration-labels.json)
 - [Sample report](outputs/sample_report.md)

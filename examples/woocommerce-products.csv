@@ -1,0 +1,4 @@
+ID,Type,SKU,Name,Published,In stock?,Regular price,Description,Short description,Categories,Parent,Attribute 1 name,Attribute 1 value(s),Attribute 2 name,Attribute 2 value(s),Shipping,Returns
+3001,variable,TB24,TrailBottle Pro 24oz,1,1,39.00,"Insulated stainless steel bottle for hiking, commuting, and long day trips.","Keeps drinks cold for 24 hours.",Bottles,,Size,24oz,Color,"Moss | Slate","Ships in 2 business days. Free US shipping on qualifying orders.","30-day returns accepted for unused bottles in original packaging."
+3002,variation,TB24-MOSS,TrailBottle Pro 24oz - Moss,1,1,39.00,,,,3001,Size,24oz,Color,Moss,,
+3003,variation,TB24-SLATE,TrailBottle Pro 24oz - Slate,1,1,39.00,,,,3001,Size,24oz,Color,Slate,,

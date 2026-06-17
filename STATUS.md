@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Make stable pre-merge storefront snapshot generation available for real merchant CI workflows.
+Make native merchant exports usable as AgentShelf pre-merge audit inputs.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -52,6 +52,9 @@ Make stable pre-merge storefront snapshot generation available for real merchant
 - Added `agentshelf render-fixtures` to turn product JSON exports into deterministic Shopify, WooCommerce, and headless HTML snapshots.
 - Added `examples/storefront-products.json` as a realistic catalog export shape for merchants and coding agents.
 - Added tests proving generated platform snapshots are scannable with matching adapter profiles and pass an `85` score gate.
+- Added `render-fixtures --input-format auto|agentshelf|shopify|woocommerce|headless`.
+- Added native import adapters for Shopify product JSON, WooCommerce product CSV, and generic headless catalog JSON.
+- Added native export examples: `examples/shopify-products.json`, `examples/woocommerce-products.csv`, and `examples/headless-catalog.json`.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -90,9 +93,14 @@ Make stable pre-merge storefront snapshot generation available for real merchant
 - `.venv/bin/python -m unittest tests.test_cli.CliTests.test_render_fixtures_writes_platform_snapshots_and_manifest tests.test_cli.CliTests.test_render_fixtures_outputs_are_scannable_by_profile tests.test_cli.CliTests.test_render_fixtures_rejects_missing_title`
 - `.venv/bin/agentshelf render-fixtures examples/storefront-products.json --platform all --output-dir /tmp/agentshelf-generated-snapshots --manifest /tmp/agentshelf-generated-snapshots/manifest.json --format json`
 - `.venv/bin/agentshelf scan /tmp/agentshelf-generated-snapshots --batch --format jsonl --min-score 85`
+- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_render_fixtures_imports_native_shopify_json tests.test_cli.CliTests.test_render_fixtures_imports_native_woocommerce_csv tests.test_cli.CliTests.test_render_fixtures_imports_native_headless_catalog_json tests.test_cli.CliTests.test_render_fixtures_auto_detects_woocommerce_csv`
+- `.venv/bin/agentshelf render-fixtures examples/shopify-products.json --input-format shopify --platform shopify --output-dir /tmp/agentshelf-native/shopify --format json`
+- `.venv/bin/agentshelf render-fixtures examples/woocommerce-products.csv --input-format woocommerce --platform woocommerce --output-dir /tmp/agentshelf-native/woocommerce --format json`
+- `.venv/bin/agentshelf render-fixtures examples/headless-catalog.json --input-format headless --platform headless --output-dir /tmp/agentshelf-native/headless --format json`
+- `.venv/bin/agentshelf scan /tmp/agentshelf-native --batch --format jsonl --min-score 85`
 
 ## Next Best Task
-Add native import adapters for common merchant exports: Shopify product JSON, WooCommerce product CSV, and generic headless catalog API JSON.
+Add import contract validation and warning output so missing native-export fields are caught before fixtures produce overconfident audit results.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

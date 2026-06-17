@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import glob
 import hashlib
 import html
@@ -21,8 +22,9 @@ from agentshelf.engine import ADAPTER_PROFILES, build_agent_contract, parse_inpu
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.18 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.19 (+https://github.com/wureny/AgentShelf)"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
+FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
     "Rendered snapshots require the optional Playwright extra. "
     "Install it with `python3 -m pip install 'agentshelf[render]'` and then run "
@@ -287,30 +289,374 @@ def _slugify(value: str, fallback: str = "product") -> str:
     return slug[:80] or fallback
 
 
-def _load_fixture_products(path: Path) -> list[dict]:
+def _load_fixture_products(path: Path, input_format: str = "auto") -> tuple[list[dict], str]:
+    requested_format = input_format.lower()
+    if requested_format not in FIXTURE_INPUT_FORMATS:
+        raise ValueError(f"Unsupported fixture input format: {input_format}.")
+    detected_format = _detect_fixture_input_format(path, requested_format)
+    if detected_format == "woocommerce":
+        raw_products = _load_woocommerce_products(path)
+    else:
+        raw_products = _load_json_fixture_products(path, detected_format)
+    return [_normalize_fixture_product(item, index) for index, item in enumerate(raw_products, start=1)], detected_format
+
+
+def _detect_fixture_input_format(path: Path, requested_format: str) -> str:
+    if requested_format != "auto":
+        return requested_format
+    if path.suffix.lower() == ".csv":
+        return "woocommerce"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid product export JSON {path}: {exc.msg}.") from exc
-    products = payload.get("products") if isinstance(payload, dict) else payload
+    if isinstance(payload, dict):
+        if "shopify_product_export" in payload or "product" in payload and _looks_like_shopify_product(payload["product"]):
+            return "shopify"
+        if "data" in payload or "catalog" in payload or "items" in payload:
+            return "headless"
+        products = payload.get("products")
+        if isinstance(products, list) and any(_looks_like_shopify_product(item) for item in products if isinstance(item, dict)):
+            return "shopify"
+    return "agentshelf"
+
+
+def _load_json_fixture_products(path: Path, input_format: str) -> list[dict]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid product export JSON {path}: {exc.msg}.") from exc
+    if input_format == "shopify":
+        products = _extract_shopify_products(payload)
+    elif input_format == "headless":
+        products = _extract_headless_products(payload)
+    else:
+        products = payload.get("products") if isinstance(payload, dict) else payload
     if not isinstance(products, list) or not products:
         raise ValueError("Product export must be a non-empty JSON list or an object with a non-empty `products` list.")
+    return products
+
+
+def _normalize_fixture_product(item: dict, index: int) -> dict:
+    if not isinstance(item, dict):
+        raise ValueError(f"Product #{index} must be a JSON object.")
+    title = str(item.get("title") or item.get("name") or "").strip()
+    if not title:
+        raise ValueError(f"Product #{index} is missing `title`.")
+    product = dict(item)
+    product["title"] = title
+    product["handle"] = _slugify(str(product.get("handle") or product.get("slug") or title), fallback=f"product-{index}")
+    product["currency"] = str(product.get("currency") or product.get("currencyCode") or "USD").upper()
+    product["price"] = str(
+        _price_value(product.get("price"))
+        or _price_value(product.get("regular_price"))
+        or _price_value(product.get("sale_price"))
+        or _first_variant_value(product, "price")
+        or "0.00"
+    )
+    product["availability"] = str(product.get("availability") or _availability_from_variants(product) or "in_stock")
+    product["variants"] = _normalize_variants(product)
+    return product
+
+
+def _looks_like_shopify_product(item: object) -> bool:
+    return isinstance(item, dict) and (
+        "body_html" in item
+        or "vendor" in item
+        or any(isinstance(variant, dict) and any(key.startswith("option") for key in variant) for variant in item.get("variants", []))
+    )
+
+
+def _extract_shopify_products(payload: object) -> list[dict]:
+    if isinstance(payload, dict) and isinstance(payload.get("product"), dict):
+        raw_products = [payload["product"]]
+    elif isinstance(payload, dict) and isinstance(payload.get("products"), list):
+        raw_products = payload["products"]
+    elif isinstance(payload, list):
+        raw_products = payload
+    else:
+        raise ValueError("Shopify input must be a product object, a {product: ...} object, a {products: [...]} object, or a list.")
     normalized = []
-    for index, item in enumerate(products, start=1):
+    for index, item in enumerate(raw_products, start=1):
         if not isinstance(item, dict):
-            raise ValueError(f"Product #{index} must be a JSON object.")
-        title = str(item.get("title") or item.get("name") or "").strip()
-        if not title:
-            raise ValueError(f"Product #{index} is missing `title`.")
-        product = dict(item)
-        product["title"] = title
-        product["handle"] = _slugify(str(product.get("handle") or title), fallback=f"product-{index}")
-        product["currency"] = str(product.get("currency") or "USD").upper()
-        product["price"] = str(product.get("price") or _first_variant_value(product, "price") or "0.00")
-        product["availability"] = str(product.get("availability") or _availability_from_variants(product) or "in_stock")
-        product["variants"] = _normalize_variants(product)
-        normalized.append(product)
+            raise ValueError(f"Shopify product #{index} must be a JSON object.")
+        variants = []
+        for variant_index, variant in enumerate(item.get("variants") or [], start=1):
+            if not isinstance(variant, dict):
+                continue
+            options = {}
+            for option_index in range(1, 4):
+                value = variant.get(f"option{option_index}")
+                if value not in (None, ""):
+                    option_name = _shopify_option_name(item, option_index)
+                    options[option_name] = value
+            variants.append(
+                {
+                    "id": variant.get("id") or f"{item.get('handle') or item.get('title')}-{variant_index}",
+                    "title": variant.get("title") or " / ".join(str(value) for value in options.values()) or f"Variant {variant_index}",
+                    "sku": variant.get("sku") or f"{item.get('handle') or 'product'}-{variant_index}",
+                    "price": _price_value(variant.get("price")) or "0.00",
+                    "available": _shopify_variant_available(variant),
+                    "options": options,
+                }
+            )
+        normalized.append(
+            {
+                "id": item.get("id"),
+                "title": item.get("title"),
+                "handle": item.get("handle"),
+                "brand": item.get("vendor"),
+                "seller": item.get("vendor"),
+                "description": _strip_html(str(item.get("body_html") or item.get("description") or "")),
+                "price": _first_variant_price(variants) or "0.00",
+                "currency": item.get("currency") or "USD",
+                "availability": "in_stock" if any(variant["available"] for variant in variants) else "out_of_stock",
+                "variants": variants,
+                "specs": item.get("metafields") if isinstance(item.get("metafields"), dict) else {},
+                "metafields": item.get("metafields") if isinstance(item.get("metafields"), dict) else {},
+                "shipping": item.get("shipping") or "Ships in 3-5 business days.",
+                "returns": item.get("returns") or "30-day returns accepted for unused items.",
+            }
+        )
     return normalized
+
+
+def _shopify_option_name(product: dict, index: int) -> str:
+    options = product.get("options")
+    if isinstance(options, list) and len(options) >= index:
+        option = options[index - 1]
+        if isinstance(option, dict) and option.get("name"):
+            return str(option["name"])
+        if isinstance(option, str):
+            return option
+    return f"Option {index}"
+
+
+def _shopify_variant_available(variant: dict) -> bool:
+    if variant.get("available") is not None:
+        return bool(variant["available"])
+    if variant.get("inventory_quantity") is not None:
+        try:
+            return int(variant["inventory_quantity"]) > 0 or str(variant.get("inventory_policy", "")).lower() == "continue"
+        except (TypeError, ValueError):
+            return True
+    return True
+
+
+def _first_variant_price(variants: list[dict]) -> str | None:
+    for variant in variants:
+        if variant.get("price") not in (None, "", "0.00"):
+            return str(variant["price"])
+    return None
+
+
+def _load_woocommerce_products(path: Path) -> list[dict]:
+    rows = list(csv.DictReader(path.read_text(encoding="utf-8-sig").splitlines()))
+    if not rows:
+        raise ValueError("WooCommerce CSV input has no rows.")
+    by_id = {str(row.get("ID") or row.get("id") or "").strip(): row for row in rows if str(row.get("ID") or row.get("id") or "").strip()}
+    variation_rows_by_parent: dict[str, list[dict]] = {}
+    products = []
+    for row in rows:
+        row_type = _csv_value(row, "Type", "type").lower()
+        parent = _csv_value(row, "Parent", "parent")
+        if row_type == "variation" or parent:
+            variation_rows_by_parent.setdefault(parent, []).append(row)
+            continue
+        products.append(row)
+    normalized = []
+    for index, row in enumerate(products, start=1):
+        product_id = _csv_value(row, "ID", "id")
+        variations = variation_rows_by_parent.get(product_id, [])
+        if not variations and _csv_value(row, "Type", "type").lower() == "simple":
+            variations = [row]
+        normalized.append(_normalize_woocommerce_product(row, variations, by_id, index))
+    if not normalized and variation_rows_by_parent:
+        for index, (parent, variations) in enumerate(variation_rows_by_parent.items(), start=1):
+            parent_row = by_id.get(parent) or variations[0]
+            normalized.append(_normalize_woocommerce_product(parent_row, variations, by_id, index))
+    return normalized
+
+
+def _normalize_woocommerce_product(row: dict, variations: list[dict], by_id: dict[str, dict], index: int) -> dict:
+    title = _csv_value(row, "Name", "name") or f"WooCommerce Product {index}"
+    handle = _csv_value(row, "Slug", "slug") or title
+    currency = _csv_value(row, "Currency", "currency") or "USD"
+    variant_payloads = []
+    source_rows = variations or [row]
+    for variant_index, variant in enumerate(source_rows, start=1):
+        parent_id = _csv_value(variant, "Parent", "parent")
+        parent_row = by_id.get(parent_id, row)
+        options = _woocommerce_options(variant or parent_row)
+        variant_payloads.append(
+            {
+                "id": _csv_value(variant, "ID", "id") or f"{handle}-{variant_index}",
+                "title": _csv_value(variant, "Name", "name") or " / ".join(options.values()) or title,
+                "sku": _csv_value(variant, "SKU", "sku") or f"{_slugify(handle)}-{variant_index}",
+                "price": _price_value(_csv_value(variant, "Regular price", "Sale price", "Price", "regular_price", "sale_price", "price")) or _price_value(_csv_value(row, "Regular price", "Sale price", "Price")) or "0.00",
+                "available": _woocommerce_in_stock(variant),
+                "options": options,
+            }
+        )
+    return {
+        "title": title,
+        "handle": handle,
+        "brand": _csv_value(row, "Brands", "Brand", "brand") or "Store",
+        "seller": _csv_value(row, "Brands", "Brand", "brand") or "Store",
+        "description": _strip_html(_csv_value(row, "Description", "Short description", "description", "short_description")),
+        "price": _first_variant_price(variant_payloads) or "0.00",
+        "currency": currency,
+        "availability": "in_stock" if any(variant["available"] for variant in variant_payloads) else "out_of_stock",
+        "variants": variant_payloads,
+        "shipping": _csv_value(row, "Shipping", "shipping") or "Ships in 3-5 business days.",
+        "returns": _csv_value(row, "Returns", "returns") or "30-day returns accepted for unused items.",
+        "specs": _woocommerce_options(row),
+    }
+
+
+def _woocommerce_options(row: dict) -> dict:
+    options = {}
+    for index in range(1, 8):
+        name = _csv_value(row, f"Attribute {index} name", f"attribute_{index}_name")
+        values = _csv_value(row, f"Attribute {index} value(s)", f"Attribute {index} values", f"attribute_{index}_values")
+        if name and values:
+            options[name] = values.split("|")[0].strip()
+    return options
+
+
+def _woocommerce_in_stock(row: dict) -> bool:
+    value = _csv_value(row, "In stock?", "Stock", "stock_status", "in_stock").strip().lower()
+    if value in {"0", "no", "false", "outofstock", "out of stock"}:
+        return False
+    return True
+
+
+def _csv_value(row: dict, *keys: str) -> str:
+    lower_map = {str(key).strip().lower(): value for key, value in row.items()}
+    for key in keys:
+        value = lower_map.get(key.strip().lower())
+        if value not in (None, ""):
+            return str(value).strip()
+    return ""
+
+
+def _extract_headless_products(payload: object) -> list[dict]:
+    candidates = _headless_candidate_lists(payload)
+    for candidate in candidates:
+        if candidate:
+            return [_normalize_headless_product(item, index) for index, item in enumerate(candidate, start=1) if isinstance(item, dict)]
+    raise ValueError("Headless input must include a product list under products, items, nodes, edges, catalog.products, or data.products.")
+
+
+def _headless_candidate_lists(payload: object) -> list[list[dict]]:
+    candidates: list[list[dict]] = []
+    if isinstance(payload, list):
+        candidates.append(payload)
+    if isinstance(payload, dict):
+        for key in ("products", "items", "nodes"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                candidates.append([_edge_node(item) for item in value])
+            elif isinstance(value, dict):
+                candidates.extend(_headless_candidate_lists(value))
+        for key in ("edges",):
+            value = payload.get(key)
+            if isinstance(value, list):
+                candidates.append([_edge_node(item) for item in value])
+        for key in ("data", "catalog"):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                candidates.extend(_headless_candidate_lists(value))
+    return candidates
+
+
+def _edge_node(item: object) -> dict:
+    if isinstance(item, dict) and isinstance(item.get("node"), dict):
+        return item["node"]
+    return item if isinstance(item, dict) else {}
+
+
+def _normalize_headless_product(item: dict, index: int) -> dict:
+    price = item.get("price") or item.get("priceRange") or item.get("pricing") or {}
+    variants = item.get("variants") or item.get("variantNodes") or []
+    if isinstance(variants, dict):
+        variants = variants.get("nodes") or variants.get("edges") or []
+    normalized_variants = []
+    for variant_index, raw_variant in enumerate(variants if isinstance(variants, list) else [], start=1):
+        variant = _edge_node(raw_variant)
+        options = variant.get("options") if isinstance(variant.get("options"), dict) else _selected_options(variant)
+        variant_price = variant.get("price") or variant.get("priceV2") or price
+        normalized_variants.append(
+            {
+                "id": variant.get("id") or f"{item.get('slug') or item.get('handle') or item.get('title')}-{variant_index}",
+                "title": variant.get("title") or " / ".join(str(value) for value in options.values()) or f"Variant {variant_index}",
+                "sku": variant.get("sku") or f"{item.get('slug') or item.get('handle') or 'product'}-{variant_index}",
+                "price": _price_value(variant_price) or _price_value(price) or "0.00",
+                "available": bool(variant.get("availableForSale", variant.get("available", True))),
+                "options": options,
+            }
+        )
+    return {
+        "title": item.get("title") or item.get("name"),
+        "handle": item.get("handle") or item.get("slug"),
+        "brand": item.get("brand") or item.get("vendor"),
+        "seller": item.get("seller") or item.get("vendor") or item.get("brand"),
+        "description": _strip_html(str(item.get("description") or item.get("descriptionHtml") or "")),
+        "price": _price_value(price) or _first_variant_price(normalized_variants) or "0.00",
+        "currency": _currency_value(price) or item.get("currency") or item.get("currencyCode") or "USD",
+        "availability": "in_stock" if item.get("availableForSale", item.get("available", True)) else "out_of_stock",
+        "variants": normalized_variants,
+        "shipping": item.get("shipping") or item.get("shippingPolicy") or "Ships in 3-5 business days.",
+        "returns": item.get("returns") or item.get("returnPolicy") or "30-day returns accepted for unused items.",
+        "specs": item.get("specs") if isinstance(item.get("specs"), dict) else {},
+    }
+
+
+def _selected_options(variant: dict) -> dict:
+    selected = variant.get("selectedOptions")
+    if isinstance(selected, list):
+        return {
+            str(item.get("name")): item.get("value")
+            for item in selected
+            if isinstance(item, dict) and item.get("name") and item.get("value") is not None
+        }
+    return {}
+
+
+def _price_value(value: object) -> str | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, (int, float)):
+        return f"{value:.2f}"
+    if isinstance(value, str):
+        cleaned = value.strip().replace("$", "").replace(",", "")
+        return cleaned or None
+    if isinstance(value, dict):
+        for key in ("amount", "value", "price", "minVariantPrice", "regular_price", "sale_price"):
+            nested = value.get(key)
+            if isinstance(nested, dict):
+                nested_price = _price_value(nested)
+                if nested_price:
+                    return nested_price
+            elif nested not in (None, ""):
+                return _price_value(nested)
+    return None
+
+
+def _currency_value(value: object) -> str | None:
+    if isinstance(value, dict):
+        for key in ("currencyCode", "currency", "currency_code"):
+            if value.get(key):
+                return str(value[key]).upper()
+        for nested in value.values():
+            currency = _currency_value(nested)
+            if currency:
+                return currency
+    return None
+
+
+def _strip_html(value: str) -> str:
+    return re.sub(r"<[^>]+>", " ", value).strip()
 
 
 def _first_variant_value(product: dict, key: str) -> object | None:
@@ -587,8 +933,9 @@ def _render_storefront_fixtures(
     output_dir: Path,
     platforms: list[str],
     manifest_path: Path | None,
+    input_format: str = "auto",
 ) -> dict:
-    products = _load_fixture_products(products_path)
+    products, detected_format = _load_fixture_products(products_path, input_format=input_format)
     output_dir.mkdir(parents=True, exist_ok=True)
     snapshots = []
     for product in products:
@@ -609,6 +956,7 @@ def _render_storefront_fixtures(
     manifest = {
         "contract": "agentshelf.storefront_fixtures.v1",
         "source": str(products_path),
+        "input_format": detected_format,
         "output_dir": str(output_dir),
         "platforms": platforms,
         "count": len(snapshots),
@@ -2110,6 +2458,12 @@ def build_parser() -> argparse.ArgumentParser:
     render_fixtures.add_argument("--output-dir", type=Path, default=Path("snapshots"), help="Directory for generated HTML snapshots.")
     render_fixtures.add_argument("--manifest", type=Path, help="Optional JSON manifest path.")
     render_fixtures.add_argument(
+        "--input-format",
+        choices=FIXTURE_INPUT_FORMATS,
+        default="auto",
+        help="Catalog export shape to import before rendering fixtures.",
+    )
+    render_fixtures.add_argument(
         "--platform",
         choices=(*FIXTURE_PLATFORMS, "all"),
         default="all",
@@ -2284,6 +2638,7 @@ def main() -> int:
                 output_dir=args.output_dir,
                 platforms=platforms,
                 manifest_path=args.manifest,
+                input_format=args.input_format,
             )
             rendered = _render_fixture_summary(payload, args.format)
             exit_code = 0
