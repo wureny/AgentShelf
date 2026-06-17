@@ -729,6 +729,74 @@ class CliTests(unittest.TestCase):
                 server.server_close()
                 os.chdir(old_cwd)
 
+    def test_render_fixtures_writes_platform_snapshots_and_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            output_dir = root / "snapshots"
+            manifest = root / "manifest.json"
+
+            result = _run_cli(
+                "render-fixtures",
+                "examples/storefront-products.json",
+                "--output-dir",
+                str(output_dir),
+                "--manifest",
+                str(manifest),
+                "--format",
+                "json",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["contract"], "agentshelf.storefront_fixtures.v1")
+            self.assertEqual(payload["count"], 3)
+            self.assertEqual({item["platform"] for item in payload["snapshots"]}, {"shopify", "woocommerce", "headless"})
+            self.assertTrue(manifest.exists())
+            self.assertTrue((output_dir / "trailbottle-pro-24oz.shopify.html").exists())
+            self.assertTrue((output_dir / "trailbottle-pro-24oz.woocommerce.html").exists())
+            self.assertTrue((output_dir / "trailbottle-pro-24oz.headless.html").exists())
+
+    def test_render_fixtures_outputs_are_scannable_by_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "snapshots"
+            render = _run_cli(
+                "render-fixtures",
+                "examples/storefront-products.json",
+                "--output-dir",
+                str(output_dir),
+                "--platform",
+                "all",
+            )
+            self.assertEqual(render.returncode, 0, render.stderr)
+
+            for platform in ("shopify", "woocommerce", "headless"):
+                with self.subTest(platform=platform):
+                    scan = _run_cli(
+                        "scan",
+                        str(output_dir / f"trailbottle-pro-24oz.{platform}.html"),
+                        "--profile",
+                        platform,
+                        "--format",
+                        "json",
+                        "--min-score",
+                        "85",
+                    )
+                    self.assertEqual(scan.returncode, 0, scan.stderr)
+                    payload = json.loads(scan.stdout)
+                    self.assertGreaterEqual(payload["score"], 85)
+                    self.assertEqual(payload["commerce_signals"]["adapter_profile"]["active"], platform)
+
+    def test_render_fixtures_rejects_missing_title(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            products = root / "products.json"
+            products.write_text(json.dumps({"products": [{"price": "12.00"}]}), encoding="utf-8")
+
+            result = _run_cli("render-fixtures", str(products), "--output-dir", str(root / "snapshots"))
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("missing `title`", result.stderr)
+
     def test_rendered_snapshot_missing_extra_has_actionable_error(self) -> None:
         original_import = __import__
 

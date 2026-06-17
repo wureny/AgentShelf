@@ -21,7 +21,8 @@ from agentshelf.engine import ADAPTER_PROFILES, build_agent_contract, parse_inpu
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.17 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.18 (+https://github.com/wureny/AgentShelf)"
+FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
     "Rendered snapshots require the optional Playwright extra. "
     "Install it with `python3 -m pip install 'agentshelf[render]'` and then run "
@@ -278,6 +279,365 @@ def _write_text_atomic(path: Path, text: str) -> None:
     tmp_path = path.with_name(f".{path.name}.tmp")
     tmp_path.write_text(text, encoding="utf-8")
     tmp_path.replace(path)
+
+
+def _slugify(value: str, fallback: str = "product") -> str:
+    slug = "".join(char.lower() if char.isalnum() else "-" for char in value).strip("-")
+    slug = re.sub(r"-+", "-", slug)
+    return slug[:80] or fallback
+
+
+def _load_fixture_products(path: Path) -> list[dict]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid product export JSON {path}: {exc.msg}.") from exc
+    products = payload.get("products") if isinstance(payload, dict) else payload
+    if not isinstance(products, list) or not products:
+        raise ValueError("Product export must be a non-empty JSON list or an object with a non-empty `products` list.")
+    normalized = []
+    for index, item in enumerate(products, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"Product #{index} must be a JSON object.")
+        title = str(item.get("title") or item.get("name") or "").strip()
+        if not title:
+            raise ValueError(f"Product #{index} is missing `title`.")
+        product = dict(item)
+        product["title"] = title
+        product["handle"] = _slugify(str(product.get("handle") or title), fallback=f"product-{index}")
+        product["currency"] = str(product.get("currency") or "USD").upper()
+        product["price"] = str(product.get("price") or _first_variant_value(product, "price") or "0.00")
+        product["availability"] = str(product.get("availability") or _availability_from_variants(product) or "in_stock")
+        product["variants"] = _normalize_variants(product)
+        normalized.append(product)
+    return normalized
+
+
+def _first_variant_value(product: dict, key: str) -> object | None:
+    variants = product.get("variants")
+    if isinstance(variants, list):
+        for variant in variants:
+            if isinstance(variant, dict) and variant.get(key) not in (None, ""):
+                return variant[key]
+    return None
+
+
+def _availability_from_variants(product: dict) -> str | None:
+    variants = product.get("variants")
+    if not isinstance(variants, list):
+        return None
+    for variant in variants:
+        if isinstance(variant, dict) and variant.get("available") is True:
+            return "in_stock"
+    return "out_of_stock" if variants else None
+
+
+def _normalize_variants(product: dict) -> list[dict]:
+    variants = product.get("variants")
+    if not isinstance(variants, list) or not variants:
+        variants = [
+            {
+                "id": f"{product['handle']}-default",
+                "title": "Default",
+                "sku": str(product.get("sku") or product["handle"]).upper(),
+                "price": product["price"],
+                "available": product["availability"] not in {"out_of_stock", "sold_out", "unavailable"},
+                "options": product.get("options") if isinstance(product.get("options"), dict) else {},
+            }
+        ]
+    normalized = []
+    for index, variant in enumerate(variants, start=1):
+        if not isinstance(variant, dict):
+            raise ValueError(f"Variant #{index} for {product['title']} must be a JSON object.")
+        options = variant.get("options") if isinstance(variant.get("options"), dict) else {}
+        normalized.append(
+            {
+                "id": variant.get("id") or f"{product['handle']}-{index}",
+                "title": variant.get("title") or " / ".join(str(value) for value in options.values()) or f"Variant {index}",
+                "sku": variant.get("sku") or f"{product['handle']}-{index}",
+                "price": str(variant.get("price") or product["price"]),
+                "available": bool(variant.get("available", product["availability"] not in {"out_of_stock", "sold_out", "unavailable"})),
+                "options": options,
+            }
+        )
+    return normalized
+
+
+def _option_definitions(product: dict) -> list[dict]:
+    values: dict[str, set[str]] = {}
+    for variant in product["variants"]:
+        for key, value in variant["options"].items():
+            values.setdefault(str(key), set()).add(str(value))
+    return [{"name": key, "values": sorted(items)} for key, items in sorted(values.items())]
+
+
+def _variant_with_option_fields(variant: dict) -> dict:
+    payload = dict(variant)
+    for key, value in variant["options"].items():
+        normalized_key = _slugify(str(key)).replace("-", "_")
+        if normalized_key:
+            payload[normalized_key] = value
+    return payload
+
+
+def _schema_availability(product: dict) -> str:
+    value = str(product.get("availability") or "").lower()
+    if value in {"out_of_stock", "sold_out", "unavailable"}:
+        return "https://schema.org/OutOfStock"
+    if value in {"preorder", "pre_order"}:
+        return "https://schema.org/PreOrder"
+    return "https://schema.org/InStock"
+
+
+def _json_script(data: object, *, script_id: str | None = None, script_type: str = "application/json") -> str:
+    attrs = [f'type="{script_type}"']
+    if script_id:
+        attrs.append(f'id="{html.escape(script_id, quote=True)}"')
+    return f"<script {' '.join(attrs)}>\n{json.dumps(data, indent=2)}\n</script>"
+
+
+def _product_jsonld(product: dict) -> dict:
+    offers = []
+    for variant in product["variants"]:
+        offers.append(
+            {
+                "@type": "Offer",
+                "sku": variant["sku"],
+                "price": variant["price"],
+                "priceCurrency": product["currency"],
+                "availability": "https://schema.org/InStock" if variant["available"] else "https://schema.org/OutOfStock",
+                "seller": {"@type": "Organization", "name": product.get("seller") or "Store"},
+            }
+        )
+    payload: dict[str, object] = {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": product["title"],
+        "description": product.get("description") or product["title"],
+        "sku": product.get("sku") or product["handle"],
+        "brand": {"@type": "Brand", "name": product.get("brand") or product.get("seller") or "Store"},
+        "offers": offers[0] if len(offers) == 1 else offers,
+    }
+    reviews = product.get("reviews")
+    if isinstance(reviews, dict) and reviews.get("rating") and reviews.get("count"):
+        payload["aggregateRating"] = {
+            "@type": "AggregateRating",
+            "ratingValue": reviews["rating"],
+            "reviewCount": reviews["count"],
+        }
+    if product.get("returns"):
+        payload["hasMerchantReturnPolicy"] = {
+            "@type": "MerchantReturnPolicy",
+            "applicableCountry": product.get("return_country") or "US",
+            "returnPolicyCategory": "https://schema.org/MerchantReturnFiniteReturnWindow",
+            "merchantReturnDays": product.get("return_days") or 30,
+        }
+    return payload
+
+
+def _render_visible_product_sections(product: dict) -> str:
+    specs = product.get("specs") if isinstance(product.get("specs"), dict) else {}
+    faq = product.get("faq") if isinstance(product.get("faq"), list) else []
+    specs_html = "\n".join(
+        f"<li><strong>{html.escape(str(key))}:</strong> {html.escape(str(value))}</li>"
+        for key, value in specs.items()
+    )
+    faq_html = "\n".join(
+        f"<dt>{html.escape(str(item.get('question', 'Question')))}</dt><dd>{html.escape(str(item.get('answer', 'Answer')))}</dd>"
+        for item in faq
+        if isinstance(item, dict)
+    )
+    variants_html = "\n".join(
+        "<li>"
+        f"{html.escape(str(variant['title']))}: {html.escape(product['currency'])} {html.escape(str(variant['price']))} "
+        f"({'in stock' if variant['available'] else 'out of stock'})"
+        "</li>"
+        for variant in product["variants"]
+    )
+    return f"""
+<main>
+  <h1>{html.escape(product["title"])}</h1>
+  <p class="price">{html.escape(product["currency"])} {html.escape(str(product["price"]))}</p>
+  <p class="availability">{'In stock' if product["availability"] != "out_of_stock" else "Out of stock"}</p>
+  <p class="description">{html.escape(str(product.get("description") or product["title"]))}</p>
+  <section class="variants"><h2>Options and variants</h2><ul>{variants_html}</ul></section>
+  <section class="shipping"><h2>Shipping</h2><p>{html.escape(str(product.get("shipping") or "Ships in 3-5 business days."))}</p></section>
+  <section class="returns"><h2>Returns</h2><p>{html.escape(str(product.get("returns") or "30-day returns accepted for unused items."))}</p></section>
+  <section class="specs"><h2>Specifications</h2><ul>{specs_html}</ul></section>
+  <section class="reviews"><h2>Reviews</h2><p>{html.escape(_review_copy(product))}</p></section>
+  <section class="faq"><h2>FAQ</h2><dl>{faq_html}</dl></section>
+</main>"""
+
+
+def _review_copy(product: dict) -> str:
+    reviews = product.get("reviews")
+    if isinstance(reviews, dict) and reviews.get("rating") and reviews.get("count"):
+        return f"Rated {reviews['rating']} from {reviews['count']} customer reviews."
+    return "Customer reviews are available on the product page."
+
+
+def _render_shopify_fixture(product: dict) -> str:
+    shopify_product = {
+        "id": product.get("id") or product["handle"],
+        "handle": product["handle"],
+        "title": product["title"],
+        "vendor": product.get("seller") or product.get("brand") or "Store",
+        "options": _option_definitions(product),
+        "variants": [
+            _variant_with_option_fields(
+                {
+                    "id": variant["id"],
+                    "title": variant["title"],
+                    "sku": variant["sku"],
+                    "price": variant["price"],
+                    "available": variant["available"],
+                    "options": variant["options"],
+                }
+            )
+            for variant in product["variants"]
+        ],
+        "selling_plan_groups": product.get("selling_plan_groups") or [],
+        "metafields": product.get("metafields") or product.get("specs") or {},
+    }
+    return _fixture_document(
+        product,
+        body=f"""
+<body data-platform="shopify" class="template-product">
+  {_render_visible_product_sections(product)}
+  {_json_script(shopify_product, script_id="ProductJson-template")}
+</body>""",
+    )
+
+
+def _render_woocommerce_fixture(product: dict) -> str:
+    variations = [
+        {
+            "variation_id": variant["id"],
+            "sku": variant["sku"],
+            "display_price": variant["price"],
+            "is_in_stock": variant["available"],
+            "attributes": {f"attribute_{_slugify(str(key))}": value for key, value in variant["options"].items()},
+        }
+        for variant in product["variants"]
+    ]
+    return _fixture_document(
+        product,
+        body=f"""
+<body data-platform="woocommerce" class="single-product woocommerce">
+  {_render_visible_product_sections(product)}
+  <form class="variations_form cart" data-product_variations="{html.escape(json.dumps(variations), quote=True)}"></form>
+</body>""",
+    )
+
+
+def _render_headless_fixture(product: dict) -> str:
+    next_data = {
+        "props": {
+            "pageProps": {
+                "product": {
+                    "handle": product["handle"],
+                    "title": product["title"],
+                    "price": {"amount": product["price"], "currencyCode": product["currency"]},
+                    "availableForSale": product["availability"] != "out_of_stock",
+                    "options": _option_definitions(product),
+                    "variants": [_variant_with_option_fields(variant) for variant in product["variants"]],
+                    "shipping": product.get("shipping"),
+                    "returns": product.get("returns"),
+                }
+            }
+        }
+    }
+    return _fixture_document(
+        product,
+        body=f"""
+<body data-platform="headless">
+  <div id="__next">{_render_visible_product_sections(product)}</div>
+  {_json_script(next_data, script_id="__NEXT_DATA__")}
+</body>""",
+    )
+
+
+def _fixture_document(product: dict, body: str) -> str:
+    jsonld = _json_script(_product_jsonld(product), script_type="application/ld+json")
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{html.escape(product["title"])}</title>
+  <meta name="description" content="{html.escape(str(product.get("description") or product["title"]), quote=True)}">
+  {jsonld}
+</head>
+{body}
+</html>
+"""
+
+
+def _render_fixture_for_platform(product: dict, platform: str) -> str:
+    if platform == "shopify":
+        return _render_shopify_fixture(product)
+    if platform == "woocommerce":
+        return _render_woocommerce_fixture(product)
+    if platform == "headless":
+        return _render_headless_fixture(product)
+    raise ValueError(f"Unsupported fixture platform: {platform}.")
+
+
+def _render_storefront_fixtures(
+    products_path: Path,
+    output_dir: Path,
+    platforms: list[str],
+    manifest_path: Path | None,
+) -> dict:
+    products = _load_fixture_products(products_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    snapshots = []
+    for product in products:
+        for platform in platforms:
+            filename = f"{product['handle']}.{platform}.html"
+            path = output_dir / filename
+            path.write_text(_render_fixture_for_platform(product, platform), encoding="utf-8")
+            snapshots.append(
+                {
+                    "product": product["title"],
+                    "handle": product["handle"],
+                    "platform": platform,
+                    "path": str(path),
+                    "profile": platform,
+                    "scan_command": f"agentshelf scan {path} --profile {platform} --format markdown",
+                }
+            )
+    manifest = {
+        "contract": "agentshelf.storefront_fixtures.v1",
+        "source": str(products_path),
+        "output_dir": str(output_dir),
+        "platforms": platforms,
+        "count": len(snapshots),
+        "snapshots": snapshots,
+        "batch_scan_command": f"agentshelf scan {output_dir} --batch --format jsonl",
+    }
+    if manifest_path:
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return manifest
+
+
+def _render_fixture_summary(manifest: dict, output_format: str) -> str:
+    if output_format == "json":
+        return json.dumps(manifest, indent=2) + "\n"
+    lines = [
+        "# AgentShelf Storefront Fixtures",
+        "",
+        f"- Source: `{manifest['source']}`",
+        f"- Output dir: `{manifest['output_dir']}`",
+        f"- Snapshots: {manifest['count']}",
+        f"- Batch scan: `{manifest['batch_scan_command']}`",
+        "",
+        "| Platform | Product | Path |",
+        "| --- | --- | --- |",
+    ]
+    for item in manifest["snapshots"]:
+        lines.append(f"| {item['platform']} | {item['product']} | `{item['path']}` |")
+    return "\n".join(lines) + "\n"
 
 
 def _load_target(target: str, adapter_profile: str = "auto") -> dict:
@@ -1744,6 +2104,18 @@ def build_parser() -> argparse.ArgumentParser:
         default="networkidle",
         help="Playwright page load state for --rendered snapshots.",
     )
+
+    render_fixtures = subcommands.add_parser("render-fixtures", help="Render stable storefront HTML fixtures from a product JSON export.")
+    render_fixtures.add_argument("products", type=Path, help="JSON list or {products: [...]} catalog export.")
+    render_fixtures.add_argument("--output-dir", type=Path, default=Path("snapshots"), help="Directory for generated HTML snapshots.")
+    render_fixtures.add_argument("--manifest", type=Path, help="Optional JSON manifest path.")
+    render_fixtures.add_argument(
+        "--platform",
+        choices=(*FIXTURE_PLATFORMS, "all"),
+        default="all",
+        help="Storefront fixture shape to render.",
+    )
+    render_fixtures.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Summary output format.")
     return parser
 
 
@@ -1905,14 +2277,25 @@ def main() -> int:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(html, encoding="utf-8")
             return 0
+        elif args.command == "render-fixtures":
+            platforms = list(FIXTURE_PLATFORMS) if args.platform == "all" else [args.platform]
+            payload = _render_storefront_fixtures(
+                products_path=args.products,
+                output_dir=args.output_dir,
+                platforms=platforms,
+                manifest_path=args.manifest,
+            )
+            rendered = _render_fixture_summary(payload, args.format)
+            exit_code = 0
         else:
             parser.error(f"Unsupported command: {args.command}")
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
 
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(rendered, encoding="utf-8")
+    output = getattr(args, "output", None)
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(rendered, encoding="utf-8")
     else:
         print(rendered, end="")
 

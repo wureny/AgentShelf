@@ -7,7 +7,7 @@
 - Current blocker: none
 
 ## Current Milestone
-Make AgentShelf CI outputs useful for both merchant reviewers and coding agents.
+Make stable pre-merge storefront snapshot generation available for real merchant CI workflows.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -49,6 +49,9 @@ Make AgentShelf CI outputs useful for both merchant reviewers and coding agents.
 - Dashboard output summarizes page priority, score, band, confidence, adapter profile, review categories, blockers, tasks, and next actions.
 - Added `.github/workflows/agentshelf-artifacts.yml` to produce SARIF, JSONL scan results, agent task queues, calibration reports, dashboards, draft labels, and evaluation notes in one CI run.
 - Added workflow regression tests so the GitHub Actions artifact example keeps covering code scanning, review artifacts, and delayed score-gate enforcement.
+- Added `agentshelf render-fixtures` to turn product JSON exports into deterministic Shopify, WooCommerce, and headless HTML snapshots.
+- Added `examples/storefront-products.json` as a realistic catalog export shape for merchants and coding agents.
+- Added tests proving generated platform snapshots are scannable with matching adapter profiles and pass an `85` score gate.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -84,9 +87,12 @@ Make AgentShelf CI outputs useful for both merchant reviewers and coding agents.
 - `.venv/bin/agentshelf calibrate /tmp/agentshelf-artifacts/agentshelf-results.jsonl --from-results --format json --output /tmp/agentshelf-artifacts/calibration-report.json`
 - `.venv/bin/agentshelf dashboard /tmp/agentshelf-artifacts/calibration-report.json --format html --output /tmp/agentshelf-artifacts/calibration-dashboard.html`
 - `.venv/bin/agentshelf draft-labels /tmp/agentshelf-artifacts/calibration-report.json --include-tasks --output /tmp/agentshelf-artifacts/draft-calibration-labels.json`
+- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_render_fixtures_writes_platform_snapshots_and_manifest tests.test_cli.CliTests.test_render_fixtures_outputs_are_scannable_by_profile tests.test_cli.CliTests.test_render_fixtures_rejects_missing_title`
+- `.venv/bin/agentshelf render-fixtures examples/storefront-products.json --platform all --output-dir /tmp/agentshelf-generated-snapshots --manifest /tmp/agentshelf-generated-snapshots/manifest.json --format json`
+- `.venv/bin/agentshelf scan /tmp/agentshelf-generated-snapshots --batch --format jsonl --min-score 85`
 
 ## Next Best Task
-Add a sample storefront snapshot generator so Shopify/Liquid, WooCommerce, and headless teams can create stable pre-merge HTML fixtures before running AgentShelf in CI.
+Add native import adapters for common merchant exports: Shopify product JSON, WooCommerce product CSV, and generic headless catalog API JSON.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.18.0
+- Added `agentshelf render-fixtures` to generate deterministic Shopify, WooCommerce, and headless HTML snapshots from a simple product JSON export.
+- Added `examples/storefront-products.json` as a merchant-readable catalog export example for local and CI fixture generation.
+- Added CLI tests that render all platform snapshots, scan them with matching adapter profiles, and enforce a production-ready score threshold.
+
 ## 0.17.0
 - Added a GitHub Actions artifact workflow that produces SARIF, JSONL scan results, agent task queues, calibration reports, dashboards, draft labels, and evaluation notes in one run.
 - Preserved score-gate failures until after review artifacts upload, so CI users can inspect merchant-facing fixes before a job fails.

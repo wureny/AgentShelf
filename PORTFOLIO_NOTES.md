@@ -27,6 +27,7 @@ This project shows practical AI-commerce product thinking by turning vague "agen
 - Added draft label generation so merchant calibration findings can become reviewable label contracts without hand-writing JSON from scratch.
 - Added standalone calibration dashboards so non-technical operators and consultants can review page priorities, blockers, and agent tasks without reading raw JSON.
 - Added a GitHub Actions artifact workflow that uploads SARIF, dashboards, draft labels, evaluation notes, scan JSONL, and coding-agent task queues before enforcing score gates.
+- Added product-export-to-fixture generation for Shopify, WooCommerce, and headless HTML snapshots, giving real storefront teams a low-ops pre-merge audit path without live crawling.
 - Packaged a professional open-source release with installable Python metadata, CI, contribution docs, benchmark fixtures, tests, and GitHub Action integration.
 
 ## Positioning Angle

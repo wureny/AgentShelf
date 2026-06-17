@@ -1,0 +1,65 @@
+{
+  "products": [
+    {
+      "title": "TrailBottle Pro 24oz",
+      "handle": "trailbottle-pro-24oz",
+      "brand": "North Ridge Supply",
+      "seller": "North Ridge Supply",
+      "description": "Insulated stainless steel bottle for hiking, commuting, and long day trips.",
+      "price": "39.00",
+      "currency": "USD",
+      "availability": "in_stock",
+      "shipping": "Ships in 2 business days. Free US shipping on qualifying orders.",
+      "returns": "30-day returns accepted for unused bottles in original packaging.",
+      "return_days": 30,
+      "specs": {
+        "Capacity": "24oz",
+        "Material": "18/8 stainless steel",
+        "Insulation": "Keeps drinks cold for 24 hours",
+        "Care": "Dishwasher safe"
+      },
+      "reviews": {
+        "rating": 4.8,
+        "count": 126
+      },
+      "faq": [
+        {
+          "question": "Does it fit a car cup holder?",
+          "answer": "Yes, the 24oz size fits most standard car cup holders."
+        },
+        {
+          "question": "Is the lid leakproof?",
+          "answer": "Yes, the twist lid is leakproof when fully closed."
+        }
+      ],
+      "variants": [
+        {
+          "id": "tb-24-moss",
+          "title": "24oz / Moss",
+          "sku": "TB24-MOSS",
+          "price": "39.00",
+          "available": true,
+          "options": {
+            "Size": "24oz",
+            "Color": "Moss"
+          }
+        },
+        {
+          "id": "tb-24-slate",
+          "title": "24oz / Slate",
+          "sku": "TB24-SLATE",
+          "price": "39.00",
+          "available": true,
+          "options": {
+            "Size": "24oz",
+            "Color": "Slate"
+          }
+        }
+      ],
+      "metafields": {
+        "custom.material": "18/8 stainless steel",
+        "custom.use_case": "Hiking and commuting"
+      }
+    }
+  ]
+}

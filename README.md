@@ -79,6 +79,16 @@ python3 -m playwright install chromium
 agentshelf snapshot https://example.com/product --rendered --output snapshots/product.html
 ```
 
+Generate stable pre-merge snapshots from a catalog export:
+
+```bash
+agentshelf render-fixtures examples/storefront-products.json \
+  --platform all \
+  --output-dir snapshots \
+  --manifest snapshots/manifest.json
+agentshelf scan snapshots --batch --format jsonl --output agentshelf-results.jsonl
+```
+
 Compare raw vs rendered snapshots:
 
 ```bash
@@ -157,6 +167,7 @@ agentshelf discover --site <url> [options]
 agentshelf discover --sitemap <url> [options]
 agentshelf snapshot <url> --output <path> [--rendered]
 agentshelf snapshot --url-file <urls.txt> --output-dir <dir> [--manifest <path>]
+agentshelf render-fixtures <products.json> [--platform shopify|woocommerce|headless|all]
 ```
 
 Options:
@@ -174,6 +185,8 @@ Options:
 `agent-tasks` emits JSONL remediation tasks across one page or a batch, so coding agents can pick up precise page areas, reasons, and acceptance checks.
 
 `snapshot` fetches raw HTML with the standard library by default. Use `--rendered` for a Playwright-backed single-page capture when product data is injected by JavaScript. Rendered mode is optional so the base CLI stays lightweight.
+
+`render-fixtures` turns a product JSON export into deterministic Shopify, WooCommerce, and headless HTML snapshots. Use it in CI when you can export catalog data or template data before deployment but do not want live crawling or browser capture in every PR.
 
 `compare` shows whether rendered capture unlocks agent-readiness signals that raw HTML misses. It reports score deltas, dimension deltas, newly visible evidence, regressions, and an agent recommendation.
 
@@ -242,6 +255,19 @@ agentshelf evaluate .agentshelf/runs/current-results.jsonl \
   --labels examples/calibration-labels.json \
   --fail-on-regressions
 ```
+
+Pre-merge fixture audit from product data:
+
+```bash
+agentshelf render-fixtures examples/storefront-products.json \
+  --platform all \
+  --output-dir snapshots \
+  --manifest snapshots/manifest.json
+agentshelf scan snapshots --batch --format sarif --output agentshelf-results.sarif --min-score 85
+agentshelf agent-tasks snapshots --batch --output agentshelf-tasks.jsonl
+```
+
+This is the lowest-ops path for coding agents: generate deterministic storefront-shaped HTML, run AgentShelf, then edit product data or templates until `agentshelf-tasks.jsonl` has no high-priority tasks.
 
 On the first run, `audit-run` creates a baseline. On later runs, it automatically writes `.agentshelf/runs/audit-diff.md` from the last saved result set. In CI, upload `.agentshelf/runs/audit-diff.md`, `calibration-dashboard.html`, `draft-calibration-labels.json`, and `agentshelf-tasks.jsonl` as review artifacts so humans see the merchant-level regression summary and agents get machine-actionable fixes.
 
@@ -380,6 +406,31 @@ Production-oriented profile rules currently cover:
 - bundle components: kits and bundles should list included items plus bundle-level price and availability.
 - regional shipping promises: destination-specific shipping copy should include the region plus timing or cost.
 
+## Storefront Fixture Input
+`render-fixtures` accepts a JSON list or an object with a `products` list. Each product should include enough purchase-decision data for an agent to answer price, stock, delivery, return, fit, and variant questions.
+
+```json
+{
+  "products": [
+    {
+      "title": "TrailBottle Pro 24oz",
+      "handle": "trailbottle-pro-24oz",
+      "price": "39.00",
+      "currency": "USD",
+      "availability": "in_stock",
+      "shipping": "Ships in 2 business days. Free US shipping on qualifying orders.",
+      "returns": "30-day returns accepted for unused bottles.",
+      "specs": {"Capacity": "24oz", "Material": "18/8 stainless steel"},
+      "variants": [
+        {"title": "24oz / Moss", "price": "39.00", "available": true, "options": {"Size": "24oz", "Color": "Moss"}}
+      ]
+    }
+  ]
+}
+```
+
+Generated fixtures are not a substitute for a rendered crawl when third-party apps inject reviews, subscriptions, or inventory after page load. They are for stable CI coverage from known product data and templates.
+
 ## Why This Is Not Just SEO/Schema Checking
 AgentShelf checks whether a shopping agent can make a reliable purchase recommendation, not only whether a page has rich-result metadata. The benchmark fixtures cover agent-specific failures:
 
@@ -416,6 +467,7 @@ agentshelf agent-audit examples/weak_product_page.html --contract v1
 agentshelf agent-tasks examples --batch
 agentshelf compare examples/js_product_raw.html examples/js_product_rendered.html --format json
 agentshelf discover --sitemap https://example.com/sitemap.xml --limit 10
+agentshelf render-fixtures examples/storefront-products.json --platform all --output-dir snapshots --manifest snapshots/manifest.json
 agentshelf scan examples/woocommerce_variable_product.html --profile woocommerce --format json
 agentshelf scan examples/headless_product_state.html --profile headless --format json
 agentshelf calibrate benchmarks/fixtures --batch --format markdown
@@ -434,6 +486,7 @@ python3 -m pip install -e ".[render]"  # optional rendered snapshots
 - [Shopify-style variant sample page](examples/shopify_variant_product.html)
 - [WooCommerce variable product sample page](examples/woocommerce_variable_product.html)
 - [Headless app-state sample page](examples/headless_product_state.html)
+- [Storefront product export example](examples/storefront-products.json)
 - [Calibration labels example](examples/calibration-labels.json)
 - [Draft calibration labels example](examples/draft-calibration-labels.json)
 - [Sample report](outputs/sample_report.md)

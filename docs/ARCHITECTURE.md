@@ -4,7 +4,7 @@
 AgentShelf is a lightweight Python CLI with a composable audit workflow:
 
 1. Discover product-like URLs from robots.txt sitemap hints or an explicit sitemap URL.
-2. Read an HTML/text product-page snapshot from disk, fetch raw HTML with `snapshot`, or capture rendered HTML with the optional `agentshelf[render]` extra.
+2. Read an HTML/text product-page snapshot from disk, fetch raw HTML with `snapshot`, capture rendered HTML with the optional `agentshelf[render]` extra, or generate stable storefront-shaped snapshots from product JSON with `render-fixtures`.
 3. Run weighted deterministic checks for price, inventory, shipping, returns, specs, reviews, FAQ, and Product schema signals.
 4. Parse Product JSON-LD when present to extract stronger evidence for offers and availability.
 5. Select or auto-detect a storefront adapter profile (`generic`, `shopify`, `woocommerce`, or `headless`).
@@ -52,10 +52,11 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - `.agentshelf.json` keeps production scan gates repeatable across local, CI, and scheduled runs.
 - Raw snapshot mode does not execute JavaScript; dynamic pages are flagged instead of silently trusted. `--rendered` handles single-page JS capture when the optional browser dependency is installed.
 - `snapshot --url-file` supports real merchant URL lists without introducing site-wide crawling behavior.
+- `render-fixtures` gives merchants and coding agents a deterministic pre-merge path when product data is available before deployment, avoiding live crawling and browser installs for every PR.
 - `discover` consumes sitemap metadata rather than crawling arbitrary links, keeping audits predictable and polite.
 
 ## Extension Path
 - Add deeper schema validation for variants, offers, return policy, merchant policy metadata, subscription selling plans, and bundle components.
 - Add more storefront profile packs for preorders, backorders, subscriptions with prepaid plans, B2B pricing, and marketplace sellers.
 - Add empirical benchmark runs against real agent answer quality before claiming ranking or conversion lift.
-- Add a sample storefront fixture generator so merchants can produce stable pre-merge snapshots from Liquid, WooCommerce templates, or headless route exports.
+- Add platform-specific export adapters for Shopify product JSON, WooCommerce CSV, and headless catalog API payloads so fewer teams need to reshape data manually.
