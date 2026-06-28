@@ -1,0 +1,7 @@
+{
+  "format": "markdown",
+  "min_score": 70,
+  "fail_on": "not_ready",
+  "profile": "auto",
+  "output": "agentshelf-report.md"
+}

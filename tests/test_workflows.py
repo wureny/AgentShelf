@@ -213,6 +213,58 @@ class WorkflowArtifactTests(unittest.TestCase):
             self.assertTrue((destination / "references/task-contract.md").exists())
             self.assertTrue((destination / "references/agent-loop-example.md").exists())
 
+    def test_init_merchant_repo_writes_workflow_snapshot_and_skill(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = _run_cli(
+                "init-merchant-repo",
+                "--output-dir",
+                tmpdir,
+                "--brand",
+                "Moon Kiln Studio",
+                "--category",
+                "custom handmade teacups",
+                "--vertical",
+                "artist_store",
+                "--format",
+                "json",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            root = Path(tmpdir)
+            workflow = (root / ".github/workflows/agentshelf-geo.yml").read_text(encoding="utf-8")
+            onboarding = (root / "docs/agentshelf-onboarding.md").read_text(encoding="utf-8")
+            snapshot = root / "snapshots/agentshelf-demo-product.html"
+
+            self.assertEqual(payload["contract"], "agentshelf.merchant_repo_init.v0")
+            self.assertTrue(payload["valid"])
+            self.assertTrue((root / ".agentshelf.json").exists())
+            self.assertTrue(snapshot.exists())
+            self.assertTrue((root / ".codex/skills/agentshelf-geo/SKILL.md").exists())
+            self.assertTrue((root / ".codex/skills/agentshelf-geo/references/agent-loop-example.md").exists())
+            self.assertIn("github.event.inputs.product_page", workflow)
+            self.assertIn("agentshelf geo-run", workflow)
+            self.assertIn("agentshelf agent-tasks", workflow)
+            self.assertIn("\\$agentshelf-geo", workflow)
+            self.assertIn("Moon Kiln Studio", onboarding)
+
+            scan = _run_cli("scan", str(snapshot), "--format", "json", "--min-score", "70")
+            self.assertEqual(scan.returncode, 0, scan.stderr)
+            scan_payload = json.loads(scan.stdout)
+            self.assertGreaterEqual(scan_payload["score"], 70)
+
+    def test_init_merchant_repo_detects_conflicts_without_force(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / ".agentshelf.json").write_text('{"custom": true}\n', encoding="utf-8")
+            result = _run_cli("init-merchant-repo", "--output-dir", tmpdir, "--format", "json")
+
+            self.assertEqual(result.returncode, 1)
+            payload = json.loads(result.stdout)
+            self.assertFalse(payload["valid"])
+            self.assertTrue(any(path.endswith(".agentshelf.json") for path in payload["conflicts"]))
+            self.assertEqual((root / ".agentshelf.json").read_text(encoding="utf-8"), '{"custom": true}\n')
+
     def test_geo_contract_schemas_are_published(self) -> None:
         audit_schema = json.loads((ROOT / "schemas/agentshelf.geo_audit.v0.schema.json").read_text(encoding="utf-8"))
         task_schema = json.loads((ROOT / "schemas/agentshelf.geo_task.v0.schema.json").read_text(encoding="utf-8"))

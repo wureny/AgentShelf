@@ -30,6 +30,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - `src/agentshelf/cli.py`: argument parsing, batch input resolution, snapshot fetches, threshold exits, and file I/O
 - `skills/agentshelf-geo/`: repo-local Codex-style skill, JSONL task contract reference, and OpenAI agent metadata for audit-task-edit-verify workflows
 - `src/agentshelf/skills/agentshelf-geo/`: package-bundled copy of the same skill assets used by `skill-info` and `export-skill`
+- `src/agentshelf/templates/merchant-repo/`: package-bundled merchant repository initializer assets used by `init-merchant-repo`
 - `schemas/`: published JSON Schema files for agent-facing GEO audit and task contracts
 - `tests/test_engine.py`: regression coverage for parsing and rendering
 - `tests/test_cli.py`: CLI behavior and threshold coverage
@@ -77,6 +78,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - The bundled `agentshelf-geo` skill documents the intended loop: audit, emit tasks, edit storefront code/content/schema, then verify with `geo-run`, `geo-audit`, `geo-tasks`, and `scan`.
 - `skill-info` and `export-skill` keep skill distribution inside the package boundary, so users do not need to clone this repository or manually copy paths to install the AgentShelf workflow into a merchant repo.
 - `docs/AGENT_IMPLEMENTATION_LOOP.md` locks the concrete before/after path for coding agents, so the project demonstrates an implementation loop rather than only audit output.
+- `init-merchant-repo` packages the practical adoption path: workflow, config, demo snapshot, onboarding docs, and exported skill with conflict-safe writes.
 
 ## Extension Path
 - Add stricter JSON Schema validation if AgentShelf later accepts an optional `jsonschema` dependency or a build-time validation extra.

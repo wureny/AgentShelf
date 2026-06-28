@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentshelf"
-version = "0.29.0"
+version = "0.30.0"
 description = "Open-source GEO and product page audits for AI-readable commerce."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -36,4 +36,8 @@ agentshelf = [
   "skills/agentshelf-geo/SKILL.md",
   "skills/agentshelf-geo/agents/*.yaml",
   "skills/agentshelf-geo/references/*.md",
+  "templates/merchant-repo/*.json",
+  "templates/merchant-repo/docs/*.md",
+  "templates/merchant-repo/snapshots/*.html",
+  "templates/merchant-repo/workflows/*.yml",
 ]

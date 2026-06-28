@@ -25,7 +25,7 @@ from agentshelf.geo import GeoSkillConfig, build_geo_audit, render_geo_json, ren
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.29 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.30 (+https://github.com/wureny/AgentShelf)"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -44,6 +44,12 @@ PACKAGED_GEO_SKILL_FILES = (
     "references/agent-loop-example.md",
     "references/task-contract.md",
 )
+MERCHANT_REPO_TEMPLATE_FILES = (
+    ("agentshelf.config.json", ".agentshelf.json"),
+    ("workflows/agentshelf-geo.yml", ".github/workflows/agentshelf-geo.yml"),
+    ("snapshots/agentshelf-demo-product.html", "snapshots/agentshelf-demo-product.html"),
+    ("docs/agentshelf-onboarding.md", "docs/agentshelf-onboarding.md"),
+)
 
 
 def _packaged_geo_skill_root():
@@ -57,6 +63,21 @@ def _read_packaged_geo_skill_file(relative_path: str) -> str:
     except FileNotFoundError as exc:
         raise FileNotFoundError(
             "Bundled agentshelf-geo skill asset is missing from the installed package. "
+            "Reinstall AgentShelf from a complete source checkout or wheel."
+        ) from exc
+
+
+def _packaged_merchant_template_root():
+    return resources.files("agentshelf").joinpath("templates", "merchant-repo")
+
+
+def _read_packaged_merchant_template_file(relative_path: str) -> str:
+    path = _packaged_merchant_template_root().joinpath(relative_path)
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            "Bundled merchant repository template is missing from the installed package. "
             "Reinstall AgentShelf from a complete source checkout or wheel."
         ) from exc
 
@@ -117,6 +138,96 @@ def _render_skill_info(payload: dict, output_format: str) -> str:
     if payload["issues"]:
         lines.extend(["", "## Issues"])
         lines.extend(f"- {issue}" for issue in payload["issues"])
+    return "\n".join(lines) + "\n"
+
+
+def _render_merchant_template(text: str, *, brand: str, category: str, vertical: str) -> str:
+    return (
+        text.replace("{{BRAND}}", brand)
+        .replace("{{CATEGORY}}", category)
+        .replace("{{VERTICAL}}", vertical)
+    )
+
+
+def _init_merchant_repo(
+    output_dir: Path,
+    *,
+    brand: str,
+    category: str,
+    vertical: str,
+    include_skill: bool = True,
+    force: bool = False,
+) -> dict:
+    destination = output_dir
+    written: list[str] = []
+    skipped: list[str] = []
+    conflicts: list[str] = []
+    for source, relative_target in MERCHANT_REPO_TEMPLATE_FILES:
+        text = _render_merchant_template(
+            _read_packaged_merchant_template_file(source),
+            brand=brand,
+            category=category,
+            vertical=vertical,
+        )
+        target = destination / relative_target
+        if target.exists() and target.read_text(encoding="utf-8") != text and not force:
+            conflicts.append(str(target))
+            continue
+        if target.exists() and target.read_text(encoding="utf-8") == text:
+            skipped.append(str(target))
+            continue
+        _write_text_atomic(target, text)
+        written.append(str(target))
+    skill_payload = None
+    if include_skill:
+        skill_payload = _export_geo_skill(destination / ".codex" / "skills", force=force)
+        written.extend(skill_payload["written"])
+        skipped.extend(skill_payload["skipped"])
+        conflicts.extend(skill_payload["conflicts"])
+    return {
+        "contract": "agentshelf.merchant_repo_init.v0",
+        "destination": str(destination),
+        "brand": brand,
+        "category": category,
+        "vertical": vertical,
+        "include_skill": include_skill,
+        "template_files": [target for _, target in MERCHANT_REPO_TEMPLATE_FILES],
+        "skill_export": skill_payload,
+        "written": written,
+        "skipped": skipped,
+        "conflicts": conflicts,
+        "valid": not conflicts,
+        "next_steps": [
+            "Replace snapshots/agentshelf-demo-product.html with generated storefront HTML before enforcing a production PR gate.",
+            "Run `agentshelf geo-run snapshots/agentshelf-demo-product.html --brand <brand> --category <category> --output-dir artifacts/agentshelf/geo-run`.",
+            "Run `agentshelf scan snapshots/agentshelf-demo-product.html --config .agentshelf.json`.",
+            "Ask Codex to use `$agentshelf-geo` when implementation work should follow the exported AgentShelf task queue.",
+        ],
+    }
+
+
+def _render_merchant_repo_init(payload: dict, output_format: str) -> str:
+    if output_format == "json":
+        return json.dumps(payload, indent=2) + "\n"
+    status = "initialized" if payload["valid"] else "conflict"
+    lines = [
+        "# AgentShelf Merchant Repo Init",
+        "",
+        f"- Status: {status}",
+        f"- Destination: {payload['destination']}",
+        f"- Brand: {payload['brand']}",
+        f"- Category: {payload['category']}",
+        f"- Vertical: {payload['vertical']}",
+        f"- Written: {len(payload['written'])}",
+        f"- Unchanged: {len(payload['skipped'])}",
+    ]
+    if payload["conflicts"]:
+        lines.extend(["", "## Conflicts"])
+        lines.extend(f"- {path}" for path in payload["conflicts"])
+        lines.append("")
+        lines.append("Re-run with `--force` only after reviewing these files.")
+    lines.extend(["", "## Next Steps"])
+    lines.extend(f"- {item}" for item in payload["next_steps"])
     return "\n".join(lines) + "\n"
 
 
@@ -3356,6 +3467,29 @@ def build_parser() -> argparse.ArgumentParser:
     export_skill.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
     export_skill.add_argument("--output", type=Path, help="Optional output path.")
 
+    init_merchant_repo = subcommands.add_parser(
+        "init-merchant-repo",
+        help="Initialize a storefront repository with AgentShelf GEO workflow, config, demo snapshot, and optional Codex skill.",
+    )
+    init_merchant_repo.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("."),
+        help="Merchant repository root to initialize. Defaults to the current directory.",
+    )
+    init_merchant_repo.add_argument("--brand", default="Example Studio", help="Merchant, brand, artist, or store name for template defaults.")
+    init_merchant_repo.add_argument("--category", default="commerce products", help="Commerce category for template defaults.")
+    init_merchant_repo.add_argument(
+        "--vertical",
+        choices=("commerce", "creator_commerce", "artist_store", "local_service", "generic"),
+        default="commerce",
+        help="GEO vertical profile for the generated workflow.",
+    )
+    init_merchant_repo.add_argument("--no-skill", action="store_true", help="Do not export the bundled agentshelf-geo Codex skill.")
+    init_merchant_repo.add_argument("--force", action="store_true", help="Overwrite conflicting template or skill files.")
+    init_merchant_repo.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
+    init_merchant_repo.add_argument("--output", type=Path, help="Optional output path.")
+
     compare = subcommands.add_parser("compare", help="Compare raw and rendered snapshots for unlocked agent-readiness signals.")
     compare.add_argument("raw", type=Path, help="Raw HTML snapshot path.")
     compare.add_argument("rendered", type=Path, help="Rendered HTML snapshot path.")
@@ -3702,6 +3836,17 @@ def main() -> int:
         elif args.command == "export-skill":
             payload = _export_geo_skill(args.output_dir, force=args.force)
             rendered = _render_skill_export(payload, args.format)
+            exit_code = 0 if payload["valid"] else 1
+        elif args.command == "init-merchant-repo":
+            payload = _init_merchant_repo(
+                args.output_dir,
+                brand=args.brand,
+                category=args.category,
+                vertical=args.vertical,
+                include_skill=not args.no_skill,
+                force=args.force,
+            )
+            rendered = _render_merchant_repo_init(payload, args.format)
             exit_code = 0 if payload["valid"] else 1
         elif args.command == "compare":
             raw_bundle = _load_scan_as(args.raw, "raw", adapter_profile=args.profile)

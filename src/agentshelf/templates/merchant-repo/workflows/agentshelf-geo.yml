@@ -1,0 +1,143 @@
+name: AgentShelf GEO
+
+on:
+  workflow_dispatch:
+    inputs:
+      product_page:
+        description: "Local product-page snapshot, generated fixture, or theme HTML output."
+        required: false
+        default: "snapshots/agentshelf-demo-product.html"
+      brand:
+        description: "Merchant, brand, artist, or store name."
+        required: false
+        default: "{{BRAND}}"
+      category:
+        description: "Commerce category to audit."
+        required: false
+        default: "{{CATEGORY}}"
+      vertical:
+        description: "GEO vertical: commerce, creator_commerce, artist_store, local_service, or generic."
+        required: false
+        default: "{{VERTICAL}}"
+      min_score:
+        description: "Minimum AgentShelf product-readiness score."
+        required: false
+        default: "70"
+  pull_request:
+    paths:
+      - "snapshots/**/*.html"
+      - "templates/**/*.html"
+      - "sections/**/*.liquid"
+      - "snippets/**/*.liquid"
+      - "src/**/*.tsx"
+      - "src/**/*.jsx"
+      - ".agentshelf.json"
+      - ".github/workflows/agentshelf-geo.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  agentshelf-geo:
+    runs-on: ubuntu-latest
+    env:
+      AGENTSHELF_PRODUCT_PAGE: ${{ github.event.inputs.product_page || 'snapshots/agentshelf-demo-product.html' }}
+      AGENTSHELF_BRAND: ${{ github.event.inputs.brand || '{{BRAND}}' }}
+      AGENTSHELF_CATEGORY: ${{ github.event.inputs.category || '{{CATEGORY}}' }}
+      AGENTSHELF_VERTICAL: ${{ github.event.inputs.vertical || '{{VERTICAL}}' }}
+      AGENTSHELF_MIN_SCORE: ${{ github.event.inputs.min_score || '70' }}
+      AGENTSHELF_ARTIFACT_DIR: artifacts/agentshelf
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install AgentShelf
+        run: python3 -m pip install "git+https://github.com/wureny/AgentShelf.git@main"
+
+      - name: Check bundled coding-agent skill
+        run: agentshelf skill-info
+
+      - name: Create artifact directory
+        run: mkdir -p "$AGENTSHELF_ARTIFACT_DIR"
+
+      - name: Run GEO artifact workflow
+        id: geo
+        shell: bash
+        run: |
+          set +e
+          agentshelf geo-run "$AGENTSHELF_PRODUCT_PAGE" \
+            --brand "$AGENTSHELF_BRAND" \
+            --category "$AGENTSHELF_CATEGORY" \
+            --vertical "$AGENTSHELF_VERTICAL" \
+            --output-dir "$AGENTSHELF_ARTIFACT_DIR/geo-run" \
+            --format json > "$AGENTSHELF_ARTIFACT_DIR/geo-run-summary.json"
+          status=$?
+          set -e
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Run product-readiness gate
+        id: scan
+        shell: bash
+        run: |
+          set +e
+          agentshelf scan "$AGENTSHELF_PRODUCT_PAGE" \
+            --format markdown \
+            --output "$AGENTSHELF_ARTIFACT_DIR/agentshelf-report.md" \
+            --min-score "$AGENTSHELF_MIN_SCORE"
+          status=$?
+          set -e
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Emit coding-agent remediation tasks
+        if: always()
+        run: |
+          agentshelf agent-tasks "$AGENTSHELF_PRODUCT_PAGE" \
+            --output "$AGENTSHELF_ARTIFACT_DIR/agentshelf-tasks.jsonl"
+
+      - name: Write workflow summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## AgentShelf GEO"
+            echo
+            echo "- Product page: \`$AGENTSHELF_PRODUCT_PAGE\`"
+            echo "- Brand: \`$AGENTSHELF_BRAND\`"
+            echo "- Category: \`$AGENTSHELF_CATEGORY\`"
+            echo "- Vertical: \`$AGENTSHELF_VERTICAL\`"
+            echo "- Minimum score: \`$AGENTSHELF_MIN_SCORE\`"
+            echo "- GEO status: \`${{ steps.geo.outputs.status }}\`"
+            echo "- Scan status: \`${{ steps.scan.outputs.status }}\`"
+            echo
+            echo "Artifacts to review:"
+            echo "- \`artifacts/agentshelf/geo-run/geo-report.md\`"
+            echo "- \`artifacts/agentshelf/geo-run/geo-tasks.jsonl\`"
+            echo "- \`artifacts/agentshelf/agentshelf-report.md\`"
+            echo "- \`artifacts/agentshelf/agentshelf-tasks.jsonl\`"
+            echo
+            echo "For Codex remediation, run the exported \`\$agentshelf-geo\` skill, implement high-priority tasks, then re-run this workflow."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload AgentShelf artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agentshelf-geo-artifacts
+          path: artifacts/agentshelf/
+          if-no-files-found: error
+
+      - name: Enforce AgentShelf gates
+        if: always()
+        run: |
+          if [ "${{ steps.geo.outputs.status }}" != "0" ]; then
+            echo "AgentShelf GEO workflow failed. Review uploaded geo-run artifacts."
+            exit "${{ steps.geo.outputs.status }}"
+          fi
+          if [ "${{ steps.scan.outputs.status }}" != "0" ]; then
+            echo "AgentShelf score gate failed. Review uploaded report and task queue."
+            exit "${{ steps.scan.outputs.status }}"
+          fi

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.30.0
+- Added `agentshelf init-merchant-repo` to initialize storefront repositories with an AgentShelf GEO workflow, local scan config, demo snapshot, onboarding docs, and exported Codex skill.
+- Added a packaged merchant-repository template for GitHub Actions adoption without manually copying README snippets.
+- Added conflict-safe initialization behavior so existing merchant repo files are not overwritten unless `--force` is used.
+
 ## 0.29.0
 - Added a Codex-style before/after implementation-loop fixture showing how an agent can turn `geo-run` tasks into a stronger, schema-backed product page.
 - Documented the audit-task-edit-verify loop for coding agents in `docs/AGENT_IMPLEMENTATION_LOOP.md`.

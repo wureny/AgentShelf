@@ -82,10 +82,13 @@ Production-ready open-source release completed; current focus is upgrading Agent
 - Added `examples/codex_agent_loop_after.html` and `docs/AGENT_IMPLEMENTATION_LOOP.md` to make the Codex-style audit-task-edit-verify loop executable and reviewable.
 - Normalized equivalent visible/schema prices so `USD 128` and `128.00` do not create false price contradictions in agent-facing reports.
 - Tightened review detection so return-policy review copy does not inflate social-proof scores without verified reviews or ratings.
+- Added `agentshelf init-merchant-repo` for conflict-safe merchant repository onboarding with workflow, config, demo snapshot, docs, and exported Codex skill.
+- Added packaged merchant-repo template assets under `src/agentshelf/templates/merchant-repo/`.
+- Added tests proving initialized merchant repos can scan the demo snapshot and carry the exported `agentshelf-geo` skill.
 - Added `examples/artist_store_product.html` as an artist-store/creator-commerce fixture for handmade/custom gift use cases.
 - Added `tests/test_geo.py` covering the GEO JSON contract, Markdown sections, prompt panel coverage, crawler blocker detection, Product schema patch suggestions, and `--format both` output.
 - Added workflow regression coverage for the bundled `agentshelf-geo` skill and `agentshelf.geo_task.v0` contract.
-- Updated README, architecture docs, changelog, and package metadata for version `0.29.0`.
+- Updated README, architecture docs, changelog, and package metadata for version `0.30.0`.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`

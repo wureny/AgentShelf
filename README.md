@@ -12,6 +12,17 @@ For Codex-style coding agents, AgentShelf ships an exportable skill at [`skills/
 
 See the executable before/after walkthrough in [`docs/AGENT_IMPLEMENTATION_LOOP.md`](docs/AGENT_IMPLEMENTATION_LOOP.md). It shows a weak artist-store product page, the high-priority `geo-tasks` a coding agent receives, and the verified after fixture that resolves Product/Offer schema blockers and reaches a strong scan.
 
+To add AgentShelf to a merchant repository, run:
+
+```bash
+agentshelf init-merchant-repo \
+  --brand "Moon Kiln Studio" \
+  --category "custom handmade teacups" \
+  --vertical artist_store
+```
+
+This writes `.github/workflows/agentshelf-geo.yml`, `.agentshelf.json`, a safe demo snapshot, onboarding docs, and `.codex/skills/agentshelf-geo` so Codex can run the same audit-task-edit-verify loop in the merchant repo.
+
 ## Production Posture
 AgentShelf is ready for production dogfooding in CI when you can provide one of these inputs:
 
@@ -279,6 +290,7 @@ agentshelf dogfood <url> [--brand <name>] [--category <category>] [--output-dir 
 agentshelf validate-contract <artifact.json-or-jsonl> [--contract auto|agentshelf.geo_audit.v0|agentshelf.geo_task.v0|agentshelf.geo_tasks.v0]
 agentshelf skill-info [--format markdown|json]
 agentshelf export-skill [--output-dir .codex/skills] [--force]
+agentshelf init-merchant-repo [--output-dir .] [--brand <name>] [--category <category>] [--vertical commerce|creator_commerce|artist_store|local_service|generic]
 agentshelf compare <raw.html> <rendered.html> [options]
 agentshelf diff <baseline-results.jsonl> <current-results.jsonl> [options]
 agentshelf audit-run <file-or-dir-or-glob> [options]
@@ -320,6 +332,8 @@ Options:
 `skill-info` checks that the installed Python package includes the bundled `agentshelf-geo` skill assets and prints the primary agent workflow.
 
 `export-skill` copies the bundled `agentshelf-geo` skill into another repository, usually `.codex/skills/agentshelf-geo`, so Codex-style agents can invoke the same audit-task-edit-verify loop without manually copying files from this repo.
+
+`init-merchant-repo` initializes a storefront repository with the pieces needed for practical adoption: `.github/workflows/agentshelf-geo.yml`, `.agentshelf.json`, `snapshots/agentshelf-demo-product.html`, `docs/agentshelf-onboarding.md`, and the exported `agentshelf-geo` skill. It refuses to overwrite conflicting files unless `--force` is provided.
 
 `snapshot` fetches raw HTML with the standard library by default. Use `--rendered` for a Playwright-backed single-page capture when product data is injected by JavaScript. Rendered mode is optional so the base CLI stays lightweight.
 
@@ -526,6 +540,27 @@ jobs:
 ```
 
 See [docs/workflows/agentshelf-pr-gate.yml](docs/workflows/agentshelf-pr-gate.yml) for a copyable PR gate.
+
+For a faster merchant-repo setup, use the initializer instead of copying snippets by hand:
+
+```bash
+agentshelf init-merchant-repo \
+  --brand "Example Studio" \
+  --category "custom gifts" \
+  --vertical creator_commerce
+```
+
+Then replace `snapshots/agentshelf-demo-product.html` with generated storefront HTML and run:
+
+```bash
+agentshelf geo-run snapshots/agentshelf-demo-product.html \
+  --brand "Example Studio" \
+  --category "custom gifts" \
+  --vertical creator_commerce \
+  --output-dir artifacts/agentshelf/geo-run
+
+agentshelf scan snapshots/agentshelf-demo-product.html --config .agentshelf.json
+```
 
 Use SARIF when you want GitHub code scanning annotations:
 
