@@ -292,7 +292,7 @@ agentshelf dogfood <url> [--brand <name>] [--category <category>] [--output-dir 
 agentshelf validate-contract <artifact.json-or-jsonl> [--contract auto|agentshelf.geo_audit.v0|agentshelf.geo_task.v0|agentshelf.geo_tasks.v0]
 agentshelf skill-info [--format markdown|json]
 agentshelf export-skill [--output-dir .codex/skills] [--force]
-agentshelf init-merchant-repo [--output-dir .] [--brand <name>] [--category <category>] [--vertical commerce|creator_commerce|artist_store|local_service|generic]
+agentshelf init-merchant-repo [--output-dir .] [--brand <name>] [--category <category>] [--vertical commerce|creator_commerce|artist_store|local_service|generic] [--install-ref <git-ref>]
 agentshelf adoption-check <merchant-repo> [--snapshot snapshots/product.html] [--brand <name>] [--category <category>]
 agentshelf public-audit [source-checkout] [--format markdown|json]
 agentshelf release-check [--expected-version <version>]
@@ -339,7 +339,7 @@ Options:
 
 `export-skill` copies the bundled `agentshelf-geo` skill into another repository, usually `.codex/skills/agentshelf-geo`, so Codex-style agents can invoke the same audit-task-edit-verify loop without manually copying files from this repo.
 
-`init-merchant-repo` initializes a storefront repository with the pieces needed for practical adoption: `.github/workflows/agentshelf-geo.yml`, `.agentshelf.json`, `snapshots/agentshelf-demo-product.html`, `docs/agentshelf-onboarding.md`, and the exported `agentshelf-geo` skill. It refuses to overwrite conflicting files unless `--force` is provided.
+`init-merchant-repo` initializes a storefront repository with the pieces needed for practical adoption: `.github/workflows/agentshelf-geo.yml`, `.agentshelf.json`, `snapshots/agentshelf-demo-product.html`, `docs/agentshelf-onboarding.md`, and the exported `agentshelf-geo` skill. It refuses to overwrite conflicting files unless `--force` is provided. Use `--install-ref v0.36.0` after a public release tag exists; the default remains `main` for unreleased source testing.
 
 `adoption-check` verifies that a merchant repository is actually ready for AgentShelf use after initialization. It checks the local config, GitHub workflow, exported Codex skill, onboarding docs, selected snapshot, product-readiness scan, and GEO task generation in one command. See [docs/MERCHANT_ADOPTION.md](docs/MERCHANT_ADOPTION.md) and [docs/PLATFORM_ADOPTION.md](docs/PLATFORM_ADOPTION.md).
 
@@ -561,7 +561,8 @@ For a faster merchant-repo setup, use the initializer instead of copying snippet
 agentshelf init-merchant-repo \
   --brand "Example Studio" \
   --category "custom gifts" \
-  --vertical creator_commerce
+  --vertical creator_commerce \
+  --install-ref v0.36.0
 ```
 
 Then replace `snapshots/agentshelf-demo-product.html` with generated storefront HTML and run:

@@ -12,7 +12,7 @@ This repository has been initialized for AgentShelf GEO and product-page readine
 ## Local Smoke Check
 
 ```bash
-python3 -m pip install "git+https://github.com/wureny/AgentShelf.git@main"
+python3 -m pip install "git+https://github.com/wureny/AgentShelf.git@{{INSTALL_REF}}"
 
 agentshelf geo-run snapshots/agentshelf-demo-product.html \
   --brand "{{BRAND}}" \

@@ -242,10 +242,13 @@ class WorkflowArtifactTests(unittest.TestCase):
             self.assertTrue(snapshot.exists())
             self.assertTrue((root / ".codex/skills/agentshelf-geo/SKILL.md").exists())
             self.assertTrue((root / ".codex/skills/agentshelf-geo/references/agent-loop-example.md").exists())
+            self.assertEqual(payload["install_ref"], "main")
             self.assertIn("github.event.inputs.product_page", workflow)
             self.assertIn("agentshelf geo-run", workflow)
             self.assertIn("agentshelf agent-tasks", workflow)
             self.assertIn("\\$agentshelf-geo", workflow)
+            self.assertIn("AgentShelf.git@main", workflow)
+            self.assertIn("AgentShelf.git@main", onboarding)
             self.assertIn("Moon Kiln Studio", onboarding)
             self.assertIn("agentshelf adoption-check .", onboarding)
 
@@ -253,6 +256,44 @@ class WorkflowArtifactTests(unittest.TestCase):
             self.assertEqual(scan.returncode, 0, scan.stderr)
             scan_payload = json.loads(scan.stdout)
             self.assertGreaterEqual(scan_payload["score"], 70)
+
+    def test_init_merchant_repo_can_pin_release_install_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = _run_cli(
+                "init-merchant-repo",
+                "--output-dir",
+                tmpdir,
+                "--install-ref",
+                "v0.36.0",
+                "--format",
+                "json",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            root = Path(tmpdir)
+            workflow = (root / ".github/workflows/agentshelf-geo.yml").read_text(encoding="utf-8")
+            onboarding = (root / "docs/agentshelf-onboarding.md").read_text(encoding="utf-8")
+
+            self.assertEqual(payload["install_ref"], "v0.36.0")
+            self.assertIn("AgentShelf.git@v0.36.0", workflow)
+            self.assertIn("AgentShelf.git@v0.36.0", onboarding)
+            self.assertNotIn("AgentShelf.git@main", workflow)
+
+    def test_init_merchant_repo_rejects_unsafe_install_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = _run_cli(
+                "init-merchant-repo",
+                "--output-dir",
+                tmpdir,
+                "--install-ref",
+                "main;curl bad",
+                "--format",
+                "json",
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("--install-ref", result.stderr)
 
     def test_adoption_check_validates_initialized_merchant_repo(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -448,8 +489,8 @@ class WorkflowArtifactTests(unittest.TestCase):
         self.assertIn("docs/PUBLIC_RELEASE_AUDIT.md", payload["checked_files"])
         self.assertIn("skills/agentshelf-geo/SKILL.md", payload["checked_files"])
         self.assertEqual(payload["summary"]["issues"], 0)
-        self.assertEqual(payload["summary"]["warnings"], 1)
-        self.assertTrue(any(warning["id"] == "temporary_main_install" for warning in payload["warnings"]))
+        self.assertEqual(payload["summary"]["warnings"], 0)
+        self.assertFalse(any(warning["id"] == "temporary_main_install" for warning in payload["warnings"]))
         self.assertFalse(any(warning["id"] == "generated_file_present" for warning in payload["warnings"]))
 
     def test_public_audit_fails_on_private_context_leak(self) -> None:

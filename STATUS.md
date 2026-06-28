@@ -40,7 +40,7 @@ The intended mature loop is:
 
 ## Next Best Task
 
-Create a reviewed GitHub tag only after the maintainer approves release notes for the current version, then update temporary `@main` install references to pinned release usage in the next patch if needed.
+Create a reviewed GitHub tag only after the maintainer approves release notes for the current version, then use `agentshelf init-merchant-repo --install-ref <tag>` for pinned merchant workflows.
 
 ## Risks
 

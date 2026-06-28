@@ -41,5 +41,4 @@ Publish the GitHub Action to Marketplace only after the tag exists and CI passes
 ## After Release
 
 - Confirm the copyable Action example uses `wureny/AgentShelf@v0.36.0`.
-- Confirm `agentshelf init-merchant-repo` works from the released source.
-- If the merchant template still installs from `@main`, update it in the next patch release after the tag is available.
+- Confirm `agentshelf init-merchant-repo --install-ref v0.36.0` writes merchant workflows pinned to the released source.

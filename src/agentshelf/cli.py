@@ -27,6 +27,7 @@ SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
 USER_AGENT = "AgentShelf/0.36 (+https://github.com/wureny/AgentShelf)"
+DEFAULT_INSTALL_REF = "main"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -193,11 +194,20 @@ def _render_skill_info(payload: dict, output_format: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_merchant_template(text: str, *, brand: str, category: str, vertical: str) -> str:
+def _validate_install_ref(install_ref: str) -> str:
+    if not install_ref or not re.fullmatch(r"[A-Za-z0-9._/-]+", install_ref):
+        raise ValueError("--install-ref must be a non-empty git ref using only letters, numbers, dots, underscores, slashes, or hyphens.")
+    if install_ref.startswith("/") or install_ref.endswith("/") or ".." in install_ref:
+        raise ValueError("--install-ref must be a simple branch, tag, or commit ref.")
+    return install_ref
+
+
+def _render_merchant_template(text: str, *, brand: str, category: str, vertical: str, install_ref: str) -> str:
     return (
         text.replace("{{BRAND}}", brand)
         .replace("{{CATEGORY}}", category)
         .replace("{{VERTICAL}}", vertical)
+        .replace("{{INSTALL_REF}}", install_ref)
     )
 
 
@@ -207,10 +217,12 @@ def _init_merchant_repo(
     brand: str,
     category: str,
     vertical: str,
+    install_ref: str = DEFAULT_INSTALL_REF,
     include_skill: bool = True,
     force: bool = False,
 ) -> dict:
     destination = output_dir
+    install_ref = _validate_install_ref(install_ref)
     written: list[str] = []
     skipped: list[str] = []
     conflicts: list[str] = []
@@ -220,6 +232,7 @@ def _init_merchant_repo(
             brand=brand,
             category=category,
             vertical=vertical,
+            install_ref=install_ref,
         )
         target = destination / relative_target
         if target.exists() and target.read_text(encoding="utf-8") != text and not force:
@@ -242,6 +255,7 @@ def _init_merchant_repo(
         "brand": brand,
         "category": category,
         "vertical": vertical,
+        "install_ref": install_ref,
         "include_skill": include_skill,
         "template_files": [target for _, target in MERCHANT_REPO_TEMPLATE_FILES],
         "skill_export": skill_payload,
@@ -254,6 +268,7 @@ def _init_merchant_repo(
             "Run `agentshelf geo-run snapshots/agentshelf-demo-product.html --brand <brand> --category <category> --output-dir artifacts/agentshelf/geo-run`.",
             "Run `agentshelf scan snapshots/agentshelf-demo-product.html --config .agentshelf.json`.",
             "Ask Codex to use `$agentshelf-geo` when implementation work should follow the exported AgentShelf task queue.",
+            "After a public AgentShelf tag exists, prefer `agentshelf init-merchant-repo --install-ref vX.Y.Z` for pinned merchant workflows.",
         ],
     }
 
@@ -270,6 +285,7 @@ def _render_merchant_repo_init(payload: dict, output_format: str) -> str:
         f"- Brand: {payload['brand']}",
         f"- Category: {payload['category']}",
         f"- Vertical: {payload['vertical']}",
+        f"- Install ref: {payload['install_ref']}",
         f"- Written: {len(payload['written'])}",
         f"- Unchanged: {len(payload['skipped'])}",
     ]
@@ -663,7 +679,7 @@ def _build_public_audit(root: Path) -> dict:
     next_steps = [
         "Run `agentshelf release-check --expected-version <version>` after public-audit is clean.",
         "Generate release notes with `agentshelf release-notes --version <version>` and review them before tagging.",
-        "Create a GitHub tag and release before replacing temporary @main install references or publishing Marketplace copy.",
+        "Create a GitHub tag and release before publishing Marketplace copy; use `init-merchant-repo --install-ref <tag>` for pinned merchant workflows.",
     ]
     return {
         "contract": "agentshelf.public_audit.v0",
@@ -841,7 +857,7 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
         "next_steps": [
             "Run the full local test suite before tagging.",
             "Create and push the release tag only after reviewing release notes.",
-            "After the tag exists, update any temporary @main install references if needed.",
+            "After the tag exists, initialize merchant repos with `--install-ref <tag>` when pinned workflows are required.",
         ],
     }
 
@@ -909,7 +925,7 @@ def _build_release_notes(root: Path, *, version: str | None = None) -> dict:
         "",
         "## Install and adopt",
         "- For local development: `python3 -m pip install -e . --no-build-isolation`.",
-        "- For merchant repositories: `agentshelf init-merchant-repo --brand \"<brand>\" --category \"<category>\" --vertical commerce`.",
+        f"- For merchant repositories: `agentshelf init-merchant-repo --brand \"<brand>\" --category \"<category>\" --vertical commerce --install-ref v{selected_version}`.",
         "- After initialization: `agentshelf adoption-check . --brand \"<brand>\" --category \"<category>\" --vertical commerce`.",
         "- For Codex-style agents: `agentshelf export-skill --output-dir .codex/skills`, then invoke `$agentshelf-geo` against product-page snapshots or storefront fixtures.",
         f"- For GitHub Actions after the tag exists: `uses: wureny/AgentShelf@v{selected_version}`.",
@@ -4208,6 +4224,11 @@ def build_parser() -> argparse.ArgumentParser:
     init_merchant_repo.add_argument("--brand", default="Example Studio", help="Merchant, brand, artist, or store name for template defaults.")
     init_merchant_repo.add_argument("--category", default="commerce products", help="Commerce category for template defaults.")
     init_merchant_repo.add_argument(
+        "--install-ref",
+        default=DEFAULT_INSTALL_REF,
+        help="Git branch, tag, or commit ref used by the generated merchant workflow. Defaults to main; prefer a release tag after one exists.",
+    )
+    init_merchant_repo.add_argument(
         "--vertical",
         choices=("commerce", "creator_commerce", "artist_store", "local_service", "generic"),
         default="commerce",
@@ -4611,6 +4632,7 @@ def main() -> int:
                 brand=args.brand,
                 category=args.category,
                 vertical=args.vertical,
+                install_ref=args.install_ref,
                 include_skill=not args.no_skill,
                 force=args.force,
             )

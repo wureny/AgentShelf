@@ -56,7 +56,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install AgentShelf
-        run: python3 -m pip install "git+https://github.com/wureny/AgentShelf.git@main"
+        run: python3 -m pip install "git+https://github.com/wureny/AgentShelf.git@{{INSTALL_REF}}"
 
       - name: Check bundled coding-agent skill
         run: agentshelf skill-info

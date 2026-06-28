@@ -31,6 +31,7 @@ python3 -m pip wheel . --no-deps --no-build-isolation -w /tmp/agentshelf-wheelho
 - The bundled `agentshelf-geo` skill documents the audit-task-edit-verify loop.
 - `agentshelf init-merchant-repo` and `agentshelf adoption-check` provide a practical merchant repo adoption path.
 - GitHub Action examples use a pinned release tag for public docs, not `@main`, after the tag exists.
+- Merchant repos can run `agentshelf init-merchant-repo --install-ref <tag>` so generated workflows install AgentShelf from a reviewed release tag.
 - Failure output gives humans a remediation path and leaves machine-readable artifacts for agents.
 - No release-facing docs contain local machine paths, private workspace names, unfinished work markers, or raw third-party HTML.
 - Release copy says AgentShelf is deterministic and local-first; it must not claim proven ChatGPT, Google, Perplexity, Claude, Gemini, Bing, ranking, conversion, or revenue lift.
