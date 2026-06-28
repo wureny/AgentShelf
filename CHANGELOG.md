@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.29.0
+- Added a Codex-style before/after implementation-loop fixture showing how an agent can turn `geo-run` tasks into a stronger, schema-backed product page.
+- Documented the audit-task-edit-verify loop for coding agents in `docs/AGENT_IMPLEMENTATION_LOOP.md`.
+- Normalized equivalent visible and structured prices such as `USD 128` and `128.00` so agent reports do not emit false price contradictions.
+- Tightened review detection so return-policy review copy or future testimonial placeholders do not count as verified product reviews.
+
 ## 0.28.0
 - Tightened return-policy schema applicability so generic footer links such as "Returns and exchanges" do not trigger `add_return_policy_schema`.
 - Preserved return-policy schema tasks for explicit promises such as `30-day returns`, unused-condition requirements, refund methods, labels, or store credit.

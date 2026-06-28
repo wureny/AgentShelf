@@ -297,6 +297,59 @@ class GeoSkillTests(unittest.TestCase):
             tasks = [json.loads(line) for line in (output_dir / "geo-tasks.jsonl").read_text(encoding="utf-8").splitlines()]
             self.assertTrue(any(row["task"].get("patch_type") == "product_schema" for row in tasks))
 
+    def test_codex_agent_loop_after_fixture_improves_audit_and_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            before_dir = Path(tmpdir) / "before"
+            after_dir = Path(tmpdir) / "after"
+            common_args = (
+                "--brand",
+                "Moon Kiln Studio",
+                "--category",
+                "custom handmade teacups",
+                "--vertical",
+                "artist_store",
+                "--format",
+                "json",
+            )
+            before = _run_cli(
+                "geo-run",
+                "examples/artist_store_product.html",
+                *common_args,
+                "--output-dir",
+                str(before_dir),
+            )
+            after = _run_cli(
+                "geo-run",
+                "examples/codex_agent_loop_after.html",
+                *common_args,
+                "--output-dir",
+                str(after_dir),
+            )
+
+            self.assertEqual(before.returncode, 0, before.stderr)
+            self.assertEqual(after.returncode, 0, after.stderr)
+            before_payload = json.loads(before.stdout)
+            after_payload = json.loads(after.stdout)
+            before_task_ids = {
+                row["task"]["id"]
+                for row in (json.loads(line) for line in (before_dir / "geo-tasks.jsonl").read_text(encoding="utf-8").splitlines())
+            }
+            after_task_ids = {
+                row["task"]["id"]
+                for row in (json.loads(line) for line in (after_dir / "geo-tasks.jsonl").read_text(encoding="utf-8").splitlines())
+            }
+            after_scan = json.loads(_run_cli("scan", "examples/codex_agent_loop_after.html", "--format", "json").stdout)
+
+            self.assertGreater(after_payload["overallScore"], before_payload["overallScore"])
+            self.assertGreater(after_payload["scan"]["score"], before_payload["scan"]["score"])
+            self.assertEqual(after_payload["high_impact_issue_count"], 0)
+            self.assertIn("missing_product_schema", before_task_ids)
+            self.assertIn("missing_offer_schema", before_task_ids)
+            self.assertNotIn("missing_product_schema", after_task_ids)
+            self.assertNotIn("missing_offer_schema", after_task_ids)
+            self.assertEqual(after_scan["band"], "strong")
+            self.assertEqual(after_scan["contradictions"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

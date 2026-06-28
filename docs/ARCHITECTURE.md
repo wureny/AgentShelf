@@ -35,7 +35,8 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - `tests/test_cli.py`: CLI behavior and threshold coverage
 - `examples/sample_product_page.html`: smoke-test input
 - `examples/weak_product_page.html`: failing-page fixture
-- `examples/artist_store_product.html`: artist-store GEO fixture for creator-commerce prompts and patches
+- `examples/artist_store_product.html`: artist-store GEO before fixture for creator-commerce prompts and patches
+- `examples/codex_agent_loop_after.html`: implemented after fixture showing the first Codex-style remediation loop
 - `benchmarks/fixtures/`: curated agent-readiness benchmark inputs
 - `benchmarks/expected/`: expected benchmark bands, blockers, and agent tasks
 - `docs/PROFILE_BENCHMARKS.md`: profile-specific benchmark contract for Shopify, WooCommerce, and headless fixtures
@@ -75,6 +76,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - `validate-contract` provides dependency-free contract checks for `agentshelf.geo_audit.v0`, `agentshelf.geo_task.v0`, and the `agentshelf.geo_tasks.v0` wrapper so agent workflows can fail fast when artifacts drift.
 - The bundled `agentshelf-geo` skill documents the intended loop: audit, emit tasks, edit storefront code/content/schema, then verify with `geo-run`, `geo-audit`, `geo-tasks`, and `scan`.
 - `skill-info` and `export-skill` keep skill distribution inside the package boundary, so users do not need to clone this repository or manually copy paths to install the AgentShelf workflow into a merchant repo.
+- `docs/AGENT_IMPLEMENTATION_LOOP.md` locks the concrete before/after path for coding agents, so the project demonstrates an implementation loop rather than only audit output.
 
 ## Extension Path
 - Add stricter JSON Schema validation if AgentShelf later accepts an optional `jsonschema` dependency or a build-time validation extra.

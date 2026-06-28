@@ -25,7 +25,7 @@ from agentshelf.geo import GeoSkillConfig, build_geo_audit, render_geo_json, ren
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.28 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.29 (+https://github.com/wureny/AgentShelf)"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -41,6 +41,7 @@ CONTRACT_SCHEMA_FILES = {
 PACKAGED_GEO_SKILL_FILES = (
     "SKILL.md",
     "agents/openai.yaml",
+    "references/agent-loop-example.md",
     "references/task-contract.md",
 )
 
@@ -63,6 +64,7 @@ def _read_packaged_geo_skill_file(relative_path: str) -> str:
 def _build_skill_info() -> dict:
     skill_text = _read_packaged_geo_skill_file("SKILL.md")
     metadata_text = _read_packaged_geo_skill_file("agents/openai.yaml")
+    agent_loop_text = _read_packaged_geo_skill_file("references/agent-loop-example.md")
     contract_text = _read_packaged_geo_skill_file("references/task-contract.md")
     issues: list[str] = []
     required_skill_snippets = (
@@ -79,6 +81,8 @@ def _build_skill_info() -> dict:
             issues.append(f"SKILL.md missing required snippet: {snippet}")
     if "$agentshelf-geo" not in metadata_text:
         issues.append("agents/openai.yaml missing $agentshelf-geo invocation hint.")
+    if "examples/codex_agent_loop_after.html" not in agent_loop_text:
+        issues.append("references/agent-loop-example.md missing Codex implementation loop example.")
     if "agentshelf.geo_task.v0" not in contract_text:
         issues.append("references/task-contract.md missing agentshelf.geo_task.v0 contract reference.")
     return {

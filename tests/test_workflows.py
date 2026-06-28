@@ -126,6 +126,8 @@ class WorkflowArtifactTests(unittest.TestCase):
             "agentshelf scan",
             "Do not fabricate reviews",
             "audit and remediation loop",
+            "docs/AGENT_IMPLEMENTATION_LOOP.md",
+            "references/agent-loop-example.md",
         ]
         for snippet in required_skill_snippets:
             with self.subTest(snippet=snippet):
@@ -136,6 +138,25 @@ class WorkflowArtifactTests(unittest.TestCase):
         self.assertIn("acceptance_check", contract)
         self.assertIn("$agentshelf-geo", metadata)
         self.assertIn("allow_implicit_invocation: true", metadata)
+
+    def test_agent_implementation_loop_docs_are_executable(self) -> None:
+        docs = (ROOT / "docs/AGENT_IMPLEMENTATION_LOOP.md").read_text(encoding="utf-8")
+        reference = (ROOT / "skills/agentshelf-geo/references/agent-loop-example.md").read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        required_snippets = [
+            "agentshelf geo-run examples/artist_store_product.html",
+            "agentshelf geo-run examples/codex_agent_loop_after.html",
+            "agentshelf scan examples/codex_agent_loop_after.html --format markdown --min-score 90",
+            "agentshelf export-skill --output-dir .codex/skills",
+            "Do not fabricate reviews",
+        ]
+        for snippet in required_snippets:
+            with self.subTest(snippet=snippet):
+                self.assertIn(snippet, docs)
+                self.assertIn(snippet, reference)
+        self.assertIn("docs/AGENT_IMPLEMENTATION_LOOP.md", readme)
+        self.assertIn("examples/codex_agent_loop_after.html", readme)
 
     def test_real_page_dogfood_docs_define_no_raw_html_policy(self) -> None:
         docs = (ROOT / "docs/DOGFOODING.md").read_text(encoding="utf-8")
@@ -153,7 +174,12 @@ class WorkflowArtifactTests(unittest.TestCase):
 
     def test_packaged_geo_skill_matches_repo_local_skill(self) -> None:
         package_root = ROOT / "src/agentshelf/skills/agentshelf-geo"
-        for relative in ("SKILL.md", "agents/openai.yaml", "references/task-contract.md"):
+        for relative in (
+            "SKILL.md",
+            "agents/openai.yaml",
+            "references/task-contract.md",
+            "references/agent-loop-example.md",
+        ):
             with self.subTest(relative=relative):
                 self.assertEqual(
                     (ROOT / "skills/agentshelf-geo" / relative).read_text(encoding="utf-8"),
@@ -185,6 +211,7 @@ class WorkflowArtifactTests(unittest.TestCase):
             self.assertTrue((destination / "SKILL.md").exists())
             self.assertTrue((destination / "agents/openai.yaml").exists())
             self.assertTrue((destination / "references/task-contract.md").exists())
+            self.assertTrue((destination / "references/agent-loop-example.md").exists())
 
     def test_geo_contract_schemas_are_published(self) -> None:
         audit_schema = json.loads((ROOT / "schemas/agentshelf.geo_audit.v0.schema.json").read_text(encoding="utf-8"))

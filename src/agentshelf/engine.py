@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 import html as html_lib
 import json
 import re
@@ -762,6 +763,21 @@ def _check_policy_snippet(plain_text: str, commerce: dict[str, Any], key: str, p
     return _check_text(plain_text, patterns)
 
 
+def _check_reviews(plain_text: str, jsonld_items: list[dict[str, Any]], schema_types: set[str]) -> tuple[bool, str | None]:
+    if "aggregaterating" in schema_types or _schema_values(jsonld_items, ("aggregateRating", "review", "reviewRating", "reviewCount")):
+        return True, "review or aggregateRating metadata present"
+    return _check_text(
+        plain_text,
+        [
+            r"\brated\s+\d(?:\.\d)?\s*/\s*5\b",
+            r"\brating\s+\d(?:\.\d)?\s*/\s*5\b",
+            r"\b\d(?:\.\d)?\s*(?:out of|/)\s*5\s*(?:stars?)?\s*(?:from\s+\d+\s+)?(?:reviews?|ratings?)\b",
+            r"\b\d+\s+(?:verified\s+)?(?:customer\s+)?(?:reviews?|ratings?)\b",
+            r"\b(?:buyer|customer)\s+(?:said|says|quote|quotes)\b",
+        ],
+    )
+
+
 def _check_specs_with_commerce(plain_text: str, commerce: dict[str, Any]) -> tuple[bool, str | None]:
     if commerce["metafield_keys"]:
         return True, f"metafield-like specs: {', '.join(commerce['metafield_keys'][:5])}"
@@ -851,7 +867,12 @@ def _visible_price(plain_text: str) -> str | None:
 
 def _normalize_price(value: str) -> str:
     match = re.search(r"\d+(?:\.\d{1,2})?", value.replace(",", ""))
-    return match.group(0) if match else value.strip().lower()
+    if not match:
+        return value.strip().lower()
+    try:
+        return str(Decimal(match.group(0)).quantize(Decimal("0.01")))
+    except InvalidOperation:
+        return match.group(0)
 
 
 def _detect_dynamic_rendering(content: str, plain_text: str) -> bool:
@@ -933,7 +954,7 @@ def scan_readiness(scan_input: ScanInput, adapter_profile: str = "auto") -> dict
             [r"return", r"refund", r"exchange", r"30-day"],
         ),
         "specs": lambda: _check_specs_with_commerce(plain_text, commerce),
-        "reviews": lambda: _check_text(plain_text, [r"review", r"rating", r"\d(\.\d)?/5", r"stars?"]),
+        "reviews": lambda: _check_reviews(plain_text, jsonld_items, schema_types),
         "schema_product": lambda: (bool(products), f"{len(products)} Product JSON-LD object(s)" if products else None),
         "faq": lambda: _check_text(plain_text, [r"faq", r"frequently asked", r"questions"]),
         "variant_readiness": lambda: _check_variant_readiness(plain_text, commerce),

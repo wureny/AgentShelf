@@ -96,6 +96,29 @@ class EngineTests(unittest.TestCase):
         self.assertIn("price_contradiction", ids)
         self.assertIn("availability_contradiction", ids)
 
+    def test_price_contradiction_normalizes_equivalent_visible_and_schema_prices(self) -> None:
+        html = """<html><head><title>Equivalent Price</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Product","name":"Equivalent Price","offers":{"@type":"Offer","priceCurrency":"USD","price":"128.00","availability":"https://schema.org/InStock"}}
+</script></head><body><h1>Equivalent Price</h1><p>Price: USD 128. In stock.</p></body></html>"""
+        bundle = scan_readiness(parse_input(html))
+        ids = {issue["id"] for issue in bundle["contradictions"]}
+
+        self.assertNotIn("price_contradiction", ids)
+
+    def test_return_review_copy_does_not_count_as_product_reviews(self) -> None:
+        html = """<html><head><title>Policy Review</title></head><body>
+<h1>Policy Review Bowl</h1>
+<p>Price: USD 80. In stock. Ships in 2 business days.</p>
+<p>Specifications: ceramic, 180ml capacity.</p>
+<p>Cancellations are accepted within 24 hours. Damaged arrivals are eligible for return review within 7 days with photos.</p>
+<p>FAQ: hand wash only.</p>
+</body></html>"""
+        bundle = scan_readiness(parse_input(html))
+        check = next(item for item in bundle["checks"] if item["id"] == "reviews")
+
+        self.assertFalse(check["passed"])
+
     def test_dynamic_placeholder_warns(self) -> None:
         html = """<html><head><title>JS Product</title></head><body>
 <div id="__next"></div><script src="a.js"></script><script src="b.js"></script><script src="c.js"></script>

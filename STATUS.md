@@ -79,10 +79,13 @@ Production-ready open-source release completed; current focus is upgrading Agent
 - Added `docs/DOGFOODING.md` to document the no-raw-third-party-HTML policy and the path from real-page findings to synthetic fixtures or calibration labels.
 - Tightened subscription-intent detection and added `newsletter_subscribe_single_sku_page.html` to prevent newsletter/restock copy from triggering purchase-subscription remediation tasks.
 - Tightened return-policy schema applicability and added `return_policy_link_only_page.html` so generic footer return links do not trigger noisy `add_return_policy_schema` tasks.
+- Added `examples/codex_agent_loop_after.html` and `docs/AGENT_IMPLEMENTATION_LOOP.md` to make the Codex-style audit-task-edit-verify loop executable and reviewable.
+- Normalized equivalent visible/schema prices so `USD 128` and `128.00` do not create false price contradictions in agent-facing reports.
+- Tightened review detection so return-policy review copy does not inflate social-proof scores without verified reviews or ratings.
 - Added `examples/artist_store_product.html` as an artist-store/creator-commerce fixture for handmade/custom gift use cases.
 - Added `tests/test_geo.py` covering the GEO JSON contract, Markdown sections, prompt panel coverage, crawler blocker detection, Product schema patch suggestions, and `--format both` output.
 - Added workflow regression coverage for the bundled `agentshelf-geo` skill and `agentshelf.geo_task.v0` contract.
-- Updated README, architecture docs, changelog, and package metadata for version `0.28.0`.
+- Updated README, architecture docs, changelog, and package metadata for version `0.29.0`.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`

@@ -10,6 +10,8 @@ AgentShelf now includes a deterministic GEO Skill v0 for AI-readable commerce. `
 
 For Codex-style coding agents, AgentShelf ships an exportable skill at [`skills/agentshelf-geo/SKILL.md`](skills/agentshelf-geo/SKILL.md). The intended agent workflow is: run `geo-run`, read the validated artifact bundle, edit the storefront or fixture, then verify with `geo-run` and `scan`.
 
+See the executable before/after walkthrough in [`docs/AGENT_IMPLEMENTATION_LOOP.md`](docs/AGENT_IMPLEMENTATION_LOOP.md). It shows a weak artist-store product page, the high-priority `geo-tasks` a coding agent receives, and the verified after fixture that resolves Product/Offer schema blockers and reaches a strong scan.
+
 ## Production Posture
 AgentShelf is ready for production dogfooding in CI when you can provide one of these inputs:
 
@@ -115,6 +117,19 @@ agentshelf geo-run examples/artist_store_product.html \
   --category "custom handmade teacups" \
   --vertical artist_store \
   --output-dir reports/moon-kiln-geo-run
+```
+
+Verify an implemented after fixture from the Codex-style remediation loop:
+
+```bash
+agentshelf geo-run examples/codex_agent_loop_after.html \
+  --brand "Moon Kiln Studio" \
+  --category "custom handmade teacups" \
+  --vertical artist_store \
+  --output-dir reports/moon-kiln-geo-after \
+  --format json
+
+agentshelf scan examples/codex_agent_loop_after.html --format markdown --min-score 90
 ```
 
 Dogfood against a real public page without saving third-party raw HTML:
@@ -844,6 +859,8 @@ python3 -m pip install -e ".[render]"  # optional rendered snapshots
 - [Strong sample page](examples/sample_product_page.html)
 - [Weak sample page](examples/weak_product_page.html)
 - [Artist-store GEO sample page](examples/artist_store_product.html)
+- [Codex agent loop after page](examples/codex_agent_loop_after.html)
+- [Agent implementation loop walkthrough](docs/AGENT_IMPLEMENTATION_LOOP.md)
 - [JS raw sample page](examples/js_product_raw.html)
 - [JS rendered sample page](examples/js_product_rendered.html)
 - [Shopify-style variant sample page](examples/shopify_variant_product.html)

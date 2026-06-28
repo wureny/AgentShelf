@@ -82,6 +82,8 @@ agentshelf scan <page-or-snapshot> --format markdown --min-score 70
 
 If the target has multiple generated pages, use `agentshelf scan <dir-or-glob> --batch` for the commerce-readiness gate.
 
+For a concrete local example of this loop, inspect `references/agent-loop-example.md`. The AgentShelf repository also includes `docs/AGENT_IMPLEMENTATION_LOOP.md` for the full walkthrough.
+
 ## Choosing Commands
 
 - Use `geo-audit` for broad GEO work: crawlability, entity consistency, AI intent coverage, prompt panel, GTM assets, and patch suggestions.
