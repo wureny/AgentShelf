@@ -46,7 +46,7 @@ class WorkflowArtifactTests(unittest.TestCase):
         workflow = (ROOT / "docs/workflows/agentshelf-pr-gate.yml").read_text(encoding="utf-8")
 
         required_snippets = [
-            "uses: wureny/AgentShelf@v0.1.0",
+            "uses: wureny/AgentShelf@v0.31.0",
             "actions/setup-python@v5",
             "python-version: \"3.11\"",
             "path: \"snapshots/**/*.html\"",
@@ -264,6 +264,25 @@ class WorkflowArtifactTests(unittest.TestCase):
             self.assertFalse(payload["valid"])
             self.assertTrue(any(path.endswith(".agentshelf.json") for path in payload["conflicts"]))
             self.assertEqual((root / ".agentshelf.json").read_text(encoding="utf-8"), '{"custom": true}\n')
+
+    def test_release_check_validates_release_surfaces(self) -> None:
+        result = _run_cli("release-check", "--expected-version", "0.31.0", "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["contract"], "agentshelf.release_check.v0")
+        self.assertTrue(payload["valid"])
+        self.assertEqual(payload["version"], "0.31.0")
+        self.assertIn("README.md", payload["checked_files"])
+        self.assertIn("src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml", payload["checked_files"])
+
+    def test_release_check_fails_on_wrong_expected_version(self) -> None:
+        result = _run_cli("release-check", "--expected-version", "9.99.0", "--format", "json")
+
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertFalse(payload["valid"])
+        self.assertTrue(any("Expected version 9.99.0" in issue for issue in payload["issues"]))
 
     def test_geo_contract_schemas_are_published(self) -> None:
         audit_schema = json.loads((ROOT / "schemas/agentshelf.geo_audit.v0.schema.json").read_text(encoding="utf-8"))

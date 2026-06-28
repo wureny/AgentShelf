@@ -23,6 +23,8 @@ agentshelf init-merchant-repo \
 
 This writes `.github/workflows/agentshelf-geo.yml`, `.agentshelf.json`, a safe demo snapshot, onboarding docs, and `.codex/skills/agentshelf-geo` so Codex can run the same audit-task-edit-verify loop in the merchant repo.
 
+Do not fabricate reviews, ratings, press, inventory, shipping promises, return promises, or external authority to make a page pass. AgentShelf is designed to surface missing merchant-confirmed facts, not hide them.
+
 ## Production Posture
 AgentShelf is ready for production dogfooding in CI when you can provide one of these inputs:
 
@@ -291,6 +293,7 @@ agentshelf validate-contract <artifact.json-or-jsonl> [--contract auto|agentshel
 agentshelf skill-info [--format markdown|json]
 agentshelf export-skill [--output-dir .codex/skills] [--force]
 agentshelf init-merchant-repo [--output-dir .] [--brand <name>] [--category <category>] [--vertical commerce|creator_commerce|artist_store|local_service|generic]
+agentshelf release-check [--expected-version <version>]
 agentshelf compare <raw.html> <rendered.html> [options]
 agentshelf diff <baseline-results.jsonl> <current-results.jsonl> [options]
 agentshelf audit-run <file-or-dir-or-glob> [options]
@@ -334,6 +337,8 @@ Options:
 `export-skill` copies the bundled `agentshelf-geo` skill into another repository, usually `.codex/skills/agentshelf-geo`, so Codex-style agents can invoke the same audit-task-edit-verify loop without manually copying files from this repo.
 
 `init-merchant-repo` initializes a storefront repository with the pieces needed for practical adoption: `.github/workflows/agentshelf-geo.yml`, `.agentshelf.json`, `snapshots/agentshelf-demo-product.html`, `docs/agentshelf-onboarding.md`, and the exported `agentshelf-geo` skill. It refuses to overwrite conflicting files unless `--force` is provided.
+
+`release-check` validates release readiness before a public tag: version consistency, changelog coverage, README production posture, GitHub Action metadata, pinned workflow examples, skill assets, and merchant onboarding templates. See [docs/RELEASING.md](docs/RELEASING.md).
 
 `snapshot` fetches raw HTML with the standard library by default. Use `--rendered` for a Playwright-backed single-page capture when product data is injected by JavaScript. Rendered mode is optional so the base CLI stays lightweight.
 
@@ -502,7 +507,7 @@ Recommended first rollout:
 1. Start with `format: markdown` and `min-score: "70"` so humans can inspect failures.
 2. Upload `agentshelf-report.md` as an artifact on every run.
 3. Add `agentshelf agent-tasks` or the full artifact workflow when you want Codex-style agents to fix pages automatically.
-4. Pin a release tag such as `wureny/AgentShelf@v0.1.0` once the first release exists. Use `@main` only while testing this repository.
+4. Pin a release tag such as `wureny/AgentShelf@v0.31.0` once the release exists. Use `@main` only while testing this repository.
 
 ```yaml
 name: AgentShelf
@@ -521,7 +526,7 @@ jobs:
           python-version: "3.11"
 
       - name: Audit product-page snapshots
-        uses: wureny/AgentShelf@v0.1.0
+        uses: wureny/AgentShelf@v0.31.0
         with:
           path: "snapshots/**/*.html"
           min-score: "70"
@@ -566,7 +571,7 @@ Use SARIF when you want GitHub code scanning annotations:
 
 ```yaml
 - name: Audit product-page snapshots
-  uses: wureny/AgentShelf@v0.1.0
+  uses: wureny/AgentShelf@v0.31.0
   with:
     path: "snapshots/**/*.html"
     min-score: "85"

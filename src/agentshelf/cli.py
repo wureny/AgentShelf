@@ -25,7 +25,7 @@ from agentshelf.geo import GeoSkillConfig, build_geo_audit, render_geo_json, ren
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.30 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.31 (+https://github.com/wureny/AgentShelf)"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -49,6 +49,18 @@ MERCHANT_REPO_TEMPLATE_FILES = (
     ("workflows/agentshelf-geo.yml", ".github/workflows/agentshelf-geo.yml"),
     ("snapshots/agentshelf-demo-product.html", "snapshots/agentshelf-demo-product.html"),
     ("docs/agentshelf-onboarding.md", "docs/agentshelf-onboarding.md"),
+)
+RELEASE_REQUIRED_FILES = (
+    "pyproject.toml",
+    "src/agentshelf/__init__.py",
+    "src/agentshelf/cli.py",
+    "CHANGELOG.md",
+    "README.md",
+    "action.yml",
+    "docs/workflows/agentshelf-pr-gate.yml",
+    "skills/agentshelf-geo/SKILL.md",
+    "skills/agentshelf-geo/references/agent-loop-example.md",
+    "src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml",
 )
 
 
@@ -228,6 +240,128 @@ def _render_merchant_repo_init(payload: dict, output_format: str) -> str:
         lines.append("Re-run with `--force` only after reviewing these files.")
     lines.extend(["", "## Next Steps"])
     lines.extend(f"- {item}" for item in payload["next_steps"])
+    return "\n".join(lines) + "\n"
+
+
+def _extract_project_version(pyproject_text: str) -> str | None:
+    match = re.search(r'(?m)^version\s*=\s*"([^"]+)"', pyproject_text)
+    return match.group(1) if match else None
+
+
+def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
+    issues: list[str] = []
+    warnings: list[str] = []
+    root = root.resolve()
+
+    def read(relative: str) -> str:
+        path = root / relative
+        if not path.exists():
+            issues.append(f"Missing required file: {relative}")
+            return ""
+        return path.read_text(encoding="utf-8")
+
+    for relative in RELEASE_REQUIRED_FILES:
+        if not (root / relative).exists():
+            issues.append(f"Missing required file: {relative}")
+
+    pyproject_text = read("pyproject.toml")
+    package_init = read("src/agentshelf/__init__.py")
+    cli_text = read("src/agentshelf/cli.py")
+    changelog = read("CHANGELOG.md")
+    readme = read("README.md")
+    action = read("action.yml")
+    pr_gate = read("docs/workflows/agentshelf-pr-gate.yml")
+    skill = read("skills/agentshelf-geo/SKILL.md")
+    merchant_workflow = read("src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml")
+
+    version = _extract_project_version(pyproject_text)
+    if not version:
+        issues.append("pyproject.toml is missing a project version.")
+    elif expected_version and version != expected_version:
+        issues.append(f"Expected version {expected_version}, found {version}.")
+    if version and f'__version__ = "{version}"' not in package_init:
+        issues.append("src/agentshelf/__init__.py version does not match pyproject.toml.")
+    if version:
+        major_minor = ".".join(version.split(".")[:2])
+        if f"AgentShelf/{major_minor} " not in cli_text:
+            issues.append("USER_AGENT version does not match pyproject major/minor version.")
+        if f"## {version}" not in changelog:
+            issues.append(f"CHANGELOG.md is missing section `## {version}`.")
+        pinned_action = f"wureny/AgentShelf@v{version}"
+        if pinned_action not in readme:
+            issues.append(f"README.md is missing pinned Action usage `{pinned_action}`.")
+        if pinned_action not in pr_gate:
+            issues.append(f"docs/workflows/agentshelf-pr-gate.yml is missing `{pinned_action}`.")
+
+    required_readme = (
+        "Production Posture",
+        "agentshelf init-merchant-repo",
+        "agentshelf export-skill",
+        "docs/AGENT_IMPLEMENTATION_LOOP.md",
+        "Do not fabricate",
+    )
+    for snippet in required_readme:
+        if snippet not in readme:
+            issues.append(f"README.md missing release-facing snippet: {snippet}")
+
+    required_action = ("author:", "branding:", "GITHUB_STEP_SUMMARY", "agent-tasks", "exit \"$status\"")
+    for snippet in required_action:
+        if snippet not in action:
+            issues.append(f"action.yml missing release-facing snippet: {snippet}")
+
+    required_skill = ("name: agentshelf-geo", "agentshelf geo-run", "references/agent-loop-example.md", "Do not fabricate reviews")
+    for snippet in required_skill:
+        if snippet not in skill:
+            issues.append(f"agentshelf-geo skill missing snippet: {snippet}")
+
+    required_template = ("agentshelf geo-run", "agentshelf agent-tasks", "github.event.inputs.product_page", "\\$agentshelf-geo")
+    for snippet in required_template:
+        if snippet not in merchant_workflow:
+            issues.append(f"merchant repo workflow template missing snippet: {snippet}")
+
+    if "@main" in pr_gate:
+        warnings.append("PR gate workflow contains @main; prefer a release tag for public docs.")
+    if "git+https://github.com/wureny/AgentShelf.git@main" in merchant_workflow:
+        warnings.append("Merchant initializer workflow installs AgentShelf from @main until a release tag is created.")
+
+    return {
+        "contract": "agentshelf.release_check.v0",
+        "root": str(root),
+        "version": version,
+        "expected_version": expected_version,
+        "valid": not issues,
+        "issues": issues,
+        "warnings": warnings,
+        "checked_files": list(RELEASE_REQUIRED_FILES),
+        "next_steps": [
+            "Run the full local test suite before tagging.",
+            "Create and push the release tag only after reviewing release notes.",
+            "After the tag exists, update any temporary @main install references if needed.",
+        ],
+    }
+
+
+def _render_release_check(payload: dict, output_format: str) -> str:
+    if output_format == "json":
+        return json.dumps(payload, indent=2) + "\n"
+    status = "ready" if payload["valid"] else "not ready"
+    lines = [
+        "# AgentShelf Release Check",
+        "",
+        f"- Status: {status}",
+        f"- Root: {payload['root']}",
+        f"- Version: {payload['version'] or 'unknown'}",
+    ]
+    if payload["expected_version"]:
+        lines.append(f"- Expected version: {payload['expected_version']}")
+    if payload["issues"]:
+        lines.extend(["", "## Issues"])
+        lines.extend(f"- {issue}" for issue in payload["issues"])
+    if payload["warnings"]:
+        lines.extend(["", "## Warnings"])
+        lines.extend(f"- {warning}" for warning in payload["warnings"])
+    lines.extend(["", "## Next Steps"])
+    lines.extend(f"- {step}" for step in payload["next_steps"])
     return "\n".join(lines) + "\n"
 
 
@@ -3490,6 +3624,12 @@ def build_parser() -> argparse.ArgumentParser:
     init_merchant_repo.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
     init_merchant_repo.add_argument("--output", type=Path, help="Optional output path.")
 
+    release_check = subcommands.add_parser("release-check", help="Check source tree readiness before creating a public GitHub release tag.")
+    release_check.add_argument("--root", type=Path, default=Path("."), help="AgentShelf source checkout root. Defaults to the current directory.")
+    release_check.add_argument("--expected-version", help="Optional version that pyproject.toml must match.")
+    release_check.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
+    release_check.add_argument("--output", type=Path, help="Optional output path.")
+
     compare = subcommands.add_parser("compare", help="Compare raw and rendered snapshots for unlocked agent-readiness signals.")
     compare.add_argument("raw", type=Path, help="Raw HTML snapshot path.")
     compare.add_argument("rendered", type=Path, help="Rendered HTML snapshot path.")
@@ -3847,6 +3987,10 @@ def main() -> int:
                 force=args.force,
             )
             rendered = _render_merchant_repo_init(payload, args.format)
+            exit_code = 0 if payload["valid"] else 1
+        elif args.command == "release-check":
+            payload = _release_check(args.root, expected_version=args.expected_version)
+            rendered = _render_release_check(payload, args.format)
             exit_code = 0 if payload["valid"] else 1
         elif args.command == "compare":
             raw_bundle = _load_scan_as(args.raw, "raw", adapter_profile=args.profile)

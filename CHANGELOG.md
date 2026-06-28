@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.31.0
+- Added `agentshelf release-check` for source-tree release readiness validation before creating a public GitHub release tag.
+- Updated copyable Action examples to use the current `v0.31.0` release tag target instead of the old placeholder tag.
+- Added release checks for version consistency, changelog coverage, README production posture, Action metadata, pinned workflow examples, skill assets, and merchant onboarding templates.
+
 ## 0.30.0
 - Added `agentshelf init-merchant-repo` to initialize storefront repositories with an AgentShelf GEO workflow, local scan config, demo snapshot, onboarding docs, and exported Codex skill.
 - Added a packaged merchant-repository template for GitHub Actions adoption without manually copying README snippets.
