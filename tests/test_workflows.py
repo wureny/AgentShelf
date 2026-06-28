@@ -1,11 +1,26 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-m", "agentshelf.cli", *args],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+        check=False,
+    )
 
 
 class WorkflowArtifactTests(unittest.TestCase):
@@ -120,6 +135,40 @@ class WorkflowArtifactTests(unittest.TestCase):
         self.assertIn("acceptance_check", contract)
         self.assertIn("$agentshelf-geo", metadata)
         self.assertIn("allow_implicit_invocation: true", metadata)
+
+    def test_packaged_geo_skill_matches_repo_local_skill(self) -> None:
+        package_root = ROOT / "src/agentshelf/skills/agentshelf-geo"
+        for relative in ("SKILL.md", "agents/openai.yaml", "references/task-contract.md"):
+            with self.subTest(relative=relative):
+                self.assertEqual(
+                    (ROOT / "skills/agentshelf-geo" / relative).read_text(encoding="utf-8"),
+                    (package_root / relative).read_text(encoding="utf-8"),
+                )
+
+    def test_skill_info_reports_packaged_agent_workflow(self) -> None:
+        result = _run_cli("skill-info", "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["contract"], "agentshelf.skill_info.v0")
+        self.assertEqual(payload["skill"], "agentshelf-geo")
+        self.assertTrue(payload["valid"])
+        self.assertIn("SKILL.md", payload["bundled_files"])
+        self.assertIn("agentshelf geo-run", payload["primary_workflow_command"])
+
+    def test_export_skill_writes_codex_skill_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = _run_cli("export-skill", "--output-dir", tmpdir, "--format", "json")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["contract"], "agentshelf.skill_export.v0")
+            self.assertTrue(payload["valid"])
+            destination = Path(payload["destination"])
+            self.assertEqual(destination, Path(tmpdir) / "agentshelf-geo")
+            self.assertTrue((destination / "SKILL.md").exists())
+            self.assertTrue((destination / "agents/openai.yaml").exists())
+            self.assertTrue((destination / "references/task-contract.md").exists())
 
     def test_geo_contract_schemas_are_published(self) -> None:
         audit_schema = json.loads((ROOT / "schemas/agentshelf.geo_audit.v0.schema.json").read_text(encoding="utf-8"))

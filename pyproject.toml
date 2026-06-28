@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentshelf"
-version = "0.24.0"
+version = "0.25.0"
 description = "Open-source GEO and product page audits for AI-readable commerce."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,3 +30,10 @@ agentshelf = "agentshelf.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+agentshelf = [
+  "skills/agentshelf-geo/SKILL.md",
+  "skills/agentshelf-geo/agents/*.yaml",
+  "skills/agentshelf-geo/references/*.md",
+]

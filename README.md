@@ -8,7 +8,7 @@ It also reads storefront implementation signals that matter in real Shopify/DTC 
 
 AgentShelf now includes a deterministic GEO Skill v0 for AI-readable commerce. `agentshelf geo-audit` turns a merchant page or URL plus brand/category context into a structured GEO report with crawlability, indexability, structured data, content extractability, entity consistency, commerce attribute, trust, AI intent, prompt panel, GTM opportunity, and patch recommendations.
 
-For Codex-style coding agents, AgentShelf ships a repo-local skill at [`skills/agentshelf-geo/SKILL.md`](skills/agentshelf-geo/SKILL.md). The intended agent workflow is: run `geo-audit`, convert the report with `geo-tasks`, edit the storefront or fixture, then verify with `geo-audit` and `scan`.
+For Codex-style coding agents, AgentShelf ships an exportable skill at [`skills/agentshelf-geo/SKILL.md`](skills/agentshelf-geo/SKILL.md). The intended agent workflow is: run `geo-run`, read the validated artifact bundle, edit the storefront or fixture, then verify with `geo-run` and `scan`.
 
 ## Production Posture
 AgentShelf is ready for production dogfooding in CI when you can provide one of these inputs:
@@ -115,6 +115,13 @@ agentshelf geo-run examples/artist_store_product.html \
   --category "custom handmade teacups" \
   --vertical artist_store \
   --output-dir reports/moon-kiln-geo-run
+```
+
+Check and export the bundled Codex-style skill into another storefront repo:
+
+```bash
+agentshelf skill-info
+agentshelf export-skill --output-dir .codex/skills
 ```
 
 Validate agent-facing contracts before implementation:
@@ -244,6 +251,8 @@ agentshelf geo-audit <file-or-url> [--brand <name>] [--category <category>] [--v
 agentshelf geo-tasks <geo-report.json> [--format jsonl|json]
 agentshelf geo-run <file-or-url> [--brand <name>] [--category <category>] [--output-dir agentshelf-geo-run]
 agentshelf validate-contract <artifact.json-or-jsonl> [--contract auto|agentshelf.geo_audit.v0|agentshelf.geo_task.v0|agentshelf.geo_tasks.v0]
+agentshelf skill-info [--format markdown|json]
+agentshelf export-skill [--output-dir .codex/skills] [--force]
 agentshelf compare <raw.html> <rendered.html> [options]
 agentshelf diff <baseline-results.jsonl> <current-results.jsonl> [options]
 agentshelf audit-run <file-or-dir-or-glob> [options]
@@ -279,6 +288,10 @@ Options:
 `geo-run` runs the agent workflow end to end. It writes `geo-report.json`, `geo-report.md`, `geo-tasks.jsonl`, validation JSON, `summary.json`, and, for local HTML targets, `scan-report.md`. Use it for dogfooding, CI artifacts, or a Codex task handoff where the agent should not manually chain multiple commands.
 
 `validate-contract` validates AgentShelf JSON and JSONL artifacts before a coding agent acts on them. It currently covers `agentshelf.geo_audit.v0`, `agentshelf.geo_task.v0`, and the `agentshelf.geo_tasks.v0` JSON wrapper using the published schemas in `schemas/` plus dependency-free structural checks.
+
+`skill-info` checks that the installed Python package includes the bundled `agentshelf-geo` skill assets and prints the primary agent workflow.
+
+`export-skill` copies the bundled `agentshelf-geo` skill into another repository, usually `.codex/skills/agentshelf-geo`, so Codex-style agents can invoke the same audit-task-edit-verify loop without manually copying files from this repo.
 
 `snapshot` fetches raw HTML with the standard library by default. Use `--rendered` for a Playwright-backed single-page capture when product data is injected by JavaScript. Rendered mode is optional so the base CLI stays lightweight.
 
@@ -576,6 +589,15 @@ The repo-local skill is intentionally small and operational:
 - [skills/agentshelf-geo/SKILL.md](skills/agentshelf-geo/SKILL.md): the audit-task-edit-verify loop for Codex-style agents.
 - [skills/agentshelf-geo/references/task-contract.md](skills/agentshelf-geo/references/task-contract.md): the JSONL task contract emitted by `geo-tasks`.
 
+After installing AgentShelf, export the same skill into any storefront repo:
+
+```bash
+agentshelf skill-info
+agentshelf export-skill --output-dir .codex/skills
+```
+
+This writes `.codex/skills/agentshelf-geo/SKILL.md`, `agents/openai.yaml`, and `references/task-contract.md`. Commit those files when you want the merchant repo to carry the AgentShelf workflow for future coding-agent sessions.
+
 Example:
 
 ```bash
@@ -781,6 +803,8 @@ agentshelf geo-tasks /tmp/agentshelf-geo-report.json --output /tmp/agentshelf-ge
 agentshelf geo-run examples/artist_store_product.html --brand "Moon Kiln Studio" --category "custom handmade teacups" --vertical artist_store --output-dir /tmp/agentshelf-geo-run --format json
 agentshelf validate-contract /tmp/agentshelf-geo-report.json
 agentshelf validate-contract /tmp/agentshelf-geo-tasks.jsonl --contract agentshelf.geo_task.v0
+agentshelf skill-info --format json
+agentshelf export-skill --output-dir /tmp/agentshelf-skills --format json
 agentshelf compare examples/js_product_raw.html examples/js_product_rendered.html --format json
 agentshelf discover --sitemap https://example.com/sitemap.xml --limit 10
 agentshelf render-fixtures examples/storefront-products.json --platform all --output-dir snapshots --manifest snapshots/manifest.json

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.25.0
+- Bundled the `agentshelf-geo` skill inside the Python package so installed AgentShelf distributions can export the same coding-agent workflow.
+- Added `agentshelf skill-info` to inspect the packaged skill and primary GEO workflow.
+- Added `agentshelf export-skill` to install `.codex/skills/agentshelf-geo` into another storefront or merchant repository.
+- Added regression tests to keep the repo-local skill and package-bundled skill synchronized.
+
 ## 0.24.0
 - Added `agentshelf geo-run` as a one-command GEO dogfood workflow for coding agents and CI artifacts.
 - `geo-run` writes GEO reports, validated JSON contracts, task queues, optional local scan reports, and a machine-readable summary into one output directory.

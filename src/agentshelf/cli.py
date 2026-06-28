@@ -9,6 +9,7 @@ import json
 import re
 import shutil
 import sys
+from importlib import resources
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
@@ -24,7 +25,7 @@ from agentshelf.geo import GeoSkillConfig, build_geo_audit, render_geo_json, ren
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.24 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.25 (+https://github.com/wureny/AgentShelf)"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -37,6 +38,135 @@ CONTRACT_SCHEMA_FILES = {
     "agentshelf.geo_task.v0": "schemas/agentshelf.geo_task.v0.schema.json",
     "agentshelf.geo_tasks.v0": "schemas/agentshelf.geo_task.v0.schema.json",
 }
+PACKAGED_GEO_SKILL_FILES = (
+    "SKILL.md",
+    "agents/openai.yaml",
+    "references/task-contract.md",
+)
+
+
+def _packaged_geo_skill_root():
+    return resources.files("agentshelf").joinpath("skills", "agentshelf-geo")
+
+
+def _read_packaged_geo_skill_file(relative_path: str) -> str:
+    path = _packaged_geo_skill_root().joinpath(relative_path)
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            "Bundled agentshelf-geo skill asset is missing from the installed package. "
+            "Reinstall AgentShelf from a complete source checkout or wheel."
+        ) from exc
+
+
+def _build_skill_info() -> dict:
+    skill_text = _read_packaged_geo_skill_file("SKILL.md")
+    metadata_text = _read_packaged_geo_skill_file("agents/openai.yaml")
+    contract_text = _read_packaged_geo_skill_file("references/task-contract.md")
+    issues: list[str] = []
+    required_skill_snippets = (
+        "name: agentshelf-geo",
+        "agentshelf geo-run",
+        "agentshelf geo-audit",
+        "agentshelf geo-tasks",
+        "agentshelf validate-contract",
+        "Do not fabricate reviews",
+    )
+    for snippet in required_skill_snippets:
+        if snippet not in skill_text:
+            issues.append(f"SKILL.md missing required snippet: {snippet}")
+    if "$agentshelf-geo" not in metadata_text:
+        issues.append("agents/openai.yaml missing $agentshelf-geo invocation hint.")
+    if "agentshelf.geo_task.v0" not in contract_text:
+        issues.append("references/task-contract.md missing agentshelf.geo_task.v0 contract reference.")
+    return {
+        "contract": "agentshelf.skill_info.v0",
+        "skill": "agentshelf-geo",
+        "description": "Coding-agent workflow for AI-readable commerce GEO audits and remediation.",
+        "bundled_files": list(PACKAGED_GEO_SKILL_FILES),
+        "valid": not issues,
+        "issues": issues,
+        "default_export_command": "agentshelf export-skill --output-dir .codex/skills",
+        "primary_workflow_command": "agentshelf geo-run <page-or-url> --brand <brand> --category <category> --output-dir agentshelf-geo-run",
+    }
+
+
+def _render_skill_info(payload: dict, output_format: str) -> str:
+    if output_format == "json":
+        return json.dumps(payload, indent=2) + "\n"
+    status = "valid" if payload["valid"] else "invalid"
+    lines = [
+        "# AgentShelf GEO Skill",
+        "",
+        f"- Skill: {payload['skill']}",
+        f"- Status: {status}",
+        f"- Purpose: {payload['description']}",
+        f"- Export command: `{payload['default_export_command']}`",
+        f"- Primary workflow: `{payload['primary_workflow_command']}`",
+        "- Bundled files:",
+    ]
+    lines.extend(f"  - {filename}" for filename in payload["bundled_files"])
+    if payload["issues"]:
+        lines.extend(["", "## Issues"])
+        lines.extend(f"- {issue}" for issue in payload["issues"])
+    return "\n".join(lines) + "\n"
+
+
+def _export_geo_skill(output_dir: Path, *, force: bool = False) -> dict:
+    destination = output_dir / "agentshelf-geo"
+    written: list[str] = []
+    skipped: list[str] = []
+    conflicts: list[str] = []
+    for relative_path in PACKAGED_GEO_SKILL_FILES:
+        text = _read_packaged_geo_skill_file(relative_path)
+        target = destination / relative_path
+        if target.exists() and target.read_text(encoding="utf-8") != text and not force:
+            conflicts.append(str(target))
+            continue
+        if target.exists() and target.read_text(encoding="utf-8") == text:
+            skipped.append(str(target))
+            continue
+        _write_text_atomic(target, text)
+        written.append(str(target))
+    return {
+        "contract": "agentshelf.skill_export.v0",
+        "skill": "agentshelf-geo",
+        "destination": str(destination),
+        "written": written,
+        "skipped": skipped,
+        "conflicts": conflicts,
+        "valid": not conflicts,
+        "next_steps": [
+            "Commit the exported skill directory if this repository should carry the AgentShelf workflow.",
+            "Run `agentshelf skill-info` to check the installed package assets.",
+            "Run `agentshelf geo-run <page-or-url> --brand <brand> --category <category>` before editing commerce templates.",
+        ],
+    }
+
+
+def _render_skill_export(payload: dict, output_format: str) -> str:
+    if output_format == "json":
+        return json.dumps(payload, indent=2) + "\n"
+    status = "exported" if payload["valid"] else "conflict"
+    lines = [
+        "# AgentShelf Skill Export",
+        "",
+        f"- Status: {status}",
+        f"- Skill: {payload['skill']}",
+        f"- Destination: {payload['destination']}",
+        f"- Written: {len(payload['written'])}",
+        f"- Unchanged: {len(payload['skipped'])}",
+    ]
+    if payload["conflicts"]:
+        lines.extend(["", "## Conflicts"])
+        lines.extend(f"- {path}" for path in payload["conflicts"])
+        lines.append("")
+        lines.append("Re-run with `--force` to overwrite conflicting skill files.")
+    else:
+        lines.extend(["", "## Next Steps"])
+        lines.extend(f"- {step}" for step in payload["next_steps"])
+    return "\n".join(lines) + "\n"
 
 
 def _resolve_inputs(target: str, batch: bool) -> list[Path]:
@@ -3098,6 +3228,21 @@ def build_parser() -> argparse.ArgumentParser:
     validate_contract.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Validation output format.")
     validate_contract.add_argument("--output", type=Path, help="Optional validation report path.")
 
+    skill_info = subcommands.add_parser("skill-info", help="Show the bundled AgentShelf GEO skill status and install guidance.")
+    skill_info.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
+    skill_info.add_argument("--output", type=Path, help="Optional output path.")
+
+    export_skill = subcommands.add_parser("export-skill", help="Export the bundled agentshelf-geo skill into a coding-agent repository.")
+    export_skill.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path(".codex/skills"),
+        help="Parent directory that should receive agentshelf-geo/. Defaults to .codex/skills.",
+    )
+    export_skill.add_argument("--force", action="store_true", help="Overwrite conflicting exported skill files.")
+    export_skill.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
+    export_skill.add_argument("--output", type=Path, help="Optional output path.")
+
     compare = subcommands.add_parser("compare", help="Compare raw and rendered snapshots for unlocked agent-readiness signals.")
     compare.add_argument("raw", type=Path, help="Raw HTML snapshot path.")
     compare.add_argument("rendered", type=Path, help="Rendered HTML snapshot path.")
@@ -3382,6 +3527,14 @@ def main() -> int:
         elif args.command == "validate-contract":
             payload = _validate_contract_file(args.path, requested_contract=args.contract)
             rendered = _render_contract_validation(payload, args.format)
+            exit_code = 0 if payload["valid"] else 1
+        elif args.command == "skill-info":
+            payload = _build_skill_info()
+            rendered = _render_skill_info(payload, args.format)
+            exit_code = 0 if payload["valid"] else 1
+        elif args.command == "export-skill":
+            payload = _export_geo_skill(args.output_dir, force=args.force)
+            rendered = _render_skill_export(payload, args.format)
             exit_code = 0 if payload["valid"] else 1
         elif args.command == "compare":
             raw_bundle = _load_scan_as(args.raw, "raw", adapter_profile=args.profile)

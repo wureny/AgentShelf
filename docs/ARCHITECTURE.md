@@ -21,12 +21,14 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 16. Convert GEO reports with `geo-tasks` when a coding agent needs a JSONL implementation queue with page areas, acceptance checks, and verification commands.
 17. Validate agent-facing artifacts with `validate-contract` before implementation or CI handoff.
 18. Use `geo-run` to produce a complete dogfood artifact bundle for coding agents: GEO report, validated task queue, local scan evidence, and summary.
+19. Export the bundled `agentshelf-geo` skill with `export-skill` when another repository should carry the same coding-agent workflow.
 
 ## Components
 - `src/agentshelf/engine.py`: parser, heuristic scoring engine, JSON-LD extraction, and renderers
 - `src/agentshelf/geo.py`: GEO Skill domain models, page extraction, deterministic GEO rules, prompt panel generation, opportunity generation, patch suggestions, and report renderers
 - `src/agentshelf/cli.py`: argument parsing, batch input resolution, snapshot fetches, threshold exits, and file I/O
 - `skills/agentshelf-geo/`: repo-local Codex-style skill, JSONL task contract reference, and OpenAI agent metadata for audit-task-edit-verify workflows
+- `src/agentshelf/skills/agentshelf-geo/`: package-bundled copy of the same skill assets used by `skill-info` and `export-skill`
 - `schemas/`: published JSON Schema files for agent-facing GEO audit and task contracts
 - `tests/test_engine.py`: regression coverage for parsing and rendering
 - `tests/test_cli.py`: CLI behavior and threshold coverage
@@ -69,7 +71,8 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - `geo-tasks` turns `geo-audit` JSON into stable task rows for coding agents. This keeps the agent interface implementation-oriented instead of forcing agents to parse prose reports.
 - `geo-run` is a thin orchestration layer over `geo-audit`, `geo-tasks`, `validate-contract`, and local `scan`; it should not contain separate scoring logic.
 - `validate-contract` provides dependency-free contract checks for `agentshelf.geo_audit.v0`, `agentshelf.geo_task.v0`, and the `agentshelf.geo_tasks.v0` wrapper so agent workflows can fail fast when artifacts drift.
-- The bundled `agentshelf-geo` skill documents the intended loop: audit, emit tasks, edit storefront code/content/schema, then verify with `geo-audit`, `geo-tasks`, and `scan`.
+- The bundled `agentshelf-geo` skill documents the intended loop: audit, emit tasks, edit storefront code/content/schema, then verify with `geo-run`, `geo-audit`, `geo-tasks`, and `scan`.
+- `skill-info` and `export-skill` keep skill distribution inside the package boundary, so users do not need to clone this repository or manually copy paths to install the AgentShelf workflow into a merchant repo.
 
 ## Extension Path
 - Add stricter JSON Schema validation if AgentShelf later accepts an optional `jsonschema` dependency or a build-time validation extra.

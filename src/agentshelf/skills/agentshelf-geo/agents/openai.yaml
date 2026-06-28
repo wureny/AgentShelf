@@ -1,0 +1,6 @@
+interface:
+  display_name: "AgentShelf GEO"
+  short_description: "Audit and improve AI-readable commerce."
+  default_prompt: "Use $agentshelf-geo to audit this commerce page, emit tasks, edit the relevant files, and verify the result."
+policy:
+  allow_implicit_invocation: true
