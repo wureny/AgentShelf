@@ -20,6 +20,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 15. Run `geo-audit` when the goal is a broader Generative Engine Optimization plan for AI-readable commerce rather than only a product-page readiness score.
 16. Convert GEO reports with `geo-tasks` when a coding agent needs a JSONL implementation queue with page areas, acceptance checks, and verification commands.
 17. Validate agent-facing artifacts with `validate-contract` before implementation or CI handoff.
+18. Use `geo-run` to produce a complete dogfood artifact bundle for coding agents: GEO report, validated task queue, local scan evidence, and summary.
 
 ## Components
 - `src/agentshelf/engine.py`: parser, heuristic scoring engine, JSON-LD extraction, and renderers
@@ -66,6 +67,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - `discover` consumes sitemap metadata rather than crawling arbitrary links, keeping audits predictable and polite.
 - `geo-audit` is implemented as a separate module so GEO reporting can evolve without destabilizing the existing score-gated scanner. It uses deterministic rules and templates only; live platform visibility monitoring, GSC/Bing integrations, and LLM-generated analysis remain future extension points.
 - `geo-tasks` turns `geo-audit` JSON into stable task rows for coding agents. This keeps the agent interface implementation-oriented instead of forcing agents to parse prose reports.
+- `geo-run` is a thin orchestration layer over `geo-audit`, `geo-tasks`, `validate-contract`, and local `scan`; it should not contain separate scoring logic.
 - `validate-contract` provides dependency-free contract checks for `agentshelf.geo_audit.v0`, `agentshelf.geo_task.v0`, and the `agentshelf.geo_tasks.v0` wrapper so agent workflows can fail fast when artifacts drift.
 - The bundled `agentshelf-geo` skill documents the intended loop: audit, emit tasks, edit storefront code/content/schema, then verify with `geo-audit`, `geo-tasks`, and `scan`.
 

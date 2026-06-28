@@ -106,6 +106,7 @@ class WorkflowArtifactTests(unittest.TestCase):
             "name: agentshelf-geo",
             "agentshelf geo-audit",
             "agentshelf geo-tasks",
+            "agentshelf geo-run",
             "agentshelf scan",
             "Do not fabricate reviews",
             "audit and remediation loop",

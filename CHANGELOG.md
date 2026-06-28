@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.24.0
+- Added `agentshelf geo-run` as a one-command GEO dogfood workflow for coding agents and CI artifacts.
+- `geo-run` writes GEO reports, validated JSON contracts, task queues, optional local scan reports, and a machine-readable summary into one output directory.
+- Updated docs and skill guidance to prefer `geo-run` when users want the full audit-task-verify artifact bundle.
+
 ## 0.23.0
 - Added `agentshelf validate-contract` for validating AgentShelf GEO JSON and JSONL artifacts before coding agents act on them.
 - Published JSON Schema files for `agentshelf.geo_audit.v0` and `agentshelf.geo_task.v0` under `schemas/`.

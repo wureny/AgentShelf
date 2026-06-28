@@ -107,6 +107,16 @@ agentshelf geo-tasks reports/moon-kiln-geo-report.json \
   --output reports/moon-kiln-geo-tasks.jsonl
 ```
 
+Run the full agent workflow and write all artifacts:
+
+```bash
+agentshelf geo-run examples/artist_store_product.html \
+  --brand "Moon Kiln Studio" \
+  --category "custom handmade teacups" \
+  --vertical artist_store \
+  --output-dir reports/moon-kiln-geo-run
+```
+
 Validate agent-facing contracts before implementation:
 
 ```bash
@@ -232,6 +242,7 @@ agentshelf agent-audit <file-or-url> [options]
 agentshelf agent-tasks <file-or-dir-or-glob> [options]
 agentshelf geo-audit <file-or-url> [--brand <name>] [--category <category>] [--vertical commerce|creator_commerce|artist_store|local_service|generic] [--format markdown|json|both]
 agentshelf geo-tasks <geo-report.json> [--format jsonl|json]
+agentshelf geo-run <file-or-url> [--brand <name>] [--category <category>] [--output-dir agentshelf-geo-run]
 agentshelf validate-contract <artifact.json-or-jsonl> [--contract auto|agentshelf.geo_audit.v0|agentshelf.geo_task.v0|agentshelf.geo_tasks.v0]
 agentshelf compare <raw.html> <rendered.html> [options]
 agentshelf diff <baseline-results.jsonl> <current-results.jsonl> [options]
@@ -264,6 +275,8 @@ Options:
 `geo-audit` emits a broader GEO report for AI-readable commerce. Use it when the question is not only "does this product page expose price/schema/policy?" but "what page, prompt, entity, trust, and patch work would make this merchant easier for generative engines and AI shopping agents to understand and cite?" URL mode attempts lightweight `robots.txt`, `sitemap.xml`, and `llms.txt` checks; local-file mode keeps the report runnable without network access. `--format both --out reports/name` writes `reports/name.md` and `reports/name.json`.
 
 `geo-tasks` turns `geo-audit --format json` output into JSONL work items for coding agents. Each row includes `files_or_page_area`, `reason`, `suggested_copy`, optional `suggested_schema`, `acceptance_check`, and `verification_command`.
+
+`geo-run` runs the agent workflow end to end. It writes `geo-report.json`, `geo-report.md`, `geo-tasks.jsonl`, validation JSON, `summary.json`, and, for local HTML targets, `scan-report.md`. Use it for dogfooding, CI artifacts, or a Codex task handoff where the agent should not manually chain multiple commands.
 
 `validate-contract` validates AgentShelf JSON and JSONL artifacts before a coding agent acts on them. It currently covers `agentshelf.geo_audit.v0`, `agentshelf.geo_task.v0`, and the `agentshelf.geo_tasks.v0` JSON wrapper using the published schemas in `schemas/` plus dependency-free structural checks.
 
@@ -581,6 +594,16 @@ agentshelf geo-audit --url https://example.com/products/custom-teacup \
 Agent workflow:
 
 ```bash
+agentshelf geo-run examples/artist_store_product.html \
+  --brand "Moon Kiln Studio" \
+  --category "custom handmade teacups" \
+  --vertical artist_store \
+  --output-dir reports/moon-kiln-geo-run
+```
+
+Equivalent manual workflow:
+
+```bash
 agentshelf geo-audit examples/artist_store_product.html \
   --brand "Moon Kiln Studio" \
   --category "custom handmade teacups" \
@@ -755,6 +778,7 @@ agentshelf agent-audit examples/weak_product_page.html --contract v1
 agentshelf agent-tasks examples --batch
 agentshelf geo-audit examples/artist_store_product.html --brand "Moon Kiln Studio" --category "custom handmade teacups" --vertical artist_store --format json --output /tmp/agentshelf-geo-report.json
 agentshelf geo-tasks /tmp/agentshelf-geo-report.json --output /tmp/agentshelf-geo-tasks.jsonl
+agentshelf geo-run examples/artist_store_product.html --brand "Moon Kiln Studio" --category "custom handmade teacups" --vertical artist_store --output-dir /tmp/agentshelf-geo-run --format json
 agentshelf validate-contract /tmp/agentshelf-geo-report.json
 agentshelf validate-contract /tmp/agentshelf-geo-tasks.jsonl --contract agentshelf.geo_task.v0
 agentshelf compare examples/js_product_raw.html examples/js_product_rendered.html --format json

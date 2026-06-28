@@ -258,6 +258,45 @@ class GeoSkillTests(unittest.TestCase):
             self.assertTrue(any("priority" in error for error in payload["errors"]))
             self.assertTrue(any("files_or_page_area" in error for error in payload["errors"]))
 
+    def test_geo_run_writes_valid_agent_artifact_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "geo-run"
+            result = _run_cli(
+                "geo-run",
+                "examples/artist_store_product.html",
+                "--brand",
+                "Moon Kiln Studio",
+                "--category",
+                "custom handmade teacups",
+                "--vertical",
+                "artist_store",
+                "--output-dir",
+                str(output_dir),
+                "--format",
+                "json",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["contract"], "agentshelf.geo_run.v0")
+            self.assertTrue(payload["geo_report_validation"]["valid"])
+            self.assertTrue(payload["geo_tasks_validation"]["valid"])
+            self.assertGreater(payload["task_count"], 0)
+            self.assertIsNotNone(payload["scan"])
+            for filename in (
+                "geo-report.json",
+                "geo-report.md",
+                "geo-tasks.jsonl",
+                "geo-report-validation.json",
+                "geo-tasks-validation.json",
+                "scan-report.md",
+                "summary.json",
+            ):
+                self.assertTrue((output_dir / filename).exists(), filename)
+
+            tasks = [json.loads(line) for line in (output_dir / "geo-tasks.jsonl").read_text(encoding="utf-8").splitlines()]
+            self.assertTrue(any(row["task"].get("patch_type") == "product_schema" for row in tasks))
+
 
 if __name__ == "__main__":
     unittest.main()

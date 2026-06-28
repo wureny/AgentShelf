@@ -24,7 +24,7 @@ from agentshelf.geo import GeoSkillConfig, build_geo_audit, render_geo_json, ren
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.23 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.24 (+https://github.com/wureny/AgentShelf)"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -105,6 +105,26 @@ def _split_cli_values(values: list[str] | None) -> list[str]:
             if stripped:
                 items.append(stripped)
     return items
+
+
+def _build_geo_config_from_args(target: str, args: argparse.Namespace) -> GeoSkillConfig:
+    return GeoSkillConfig(
+        targetUrl=target,
+        brandName=args.brand_name,
+        storeName=args.store_name,
+        category=args.category,
+        market=_split_cli_values(args.market),
+        language=args.language,
+        competitors=_split_cli_values(args.competitor),
+        personas=_split_cli_values(args.persona),
+        useCases=_split_cli_values(args.use_case),
+        keyProducts=_split_cli_values(args.key_product),
+        maxPages=args.max_pages,
+        includePromptPanel=not args.no_prompt_panel,
+        includePatchSuggestions=not args.no_patches,
+        vertical=args.vertical,
+        outputFormat=getattr(args, "format", "json"),
+    )
 
 
 def _load_geo_target(target: str, timeout: float = 10.0) -> tuple[str, dict]:
@@ -567,6 +587,106 @@ def _render_contract_validation(payload: dict, output_format: str) -> str:
     if payload["errors"]:
         lines.extend(["", "## Errors"])
         lines.extend(f"- {error}" for error in payload["errors"])
+    return "\n".join(lines) + "\n"
+
+
+def _build_geo_run_summary(
+    *,
+    target: str,
+    output_dir: Path,
+    geo_report: dict,
+    task_validation: dict,
+    report_validation: dict,
+    scan_bundle: dict | None,
+) -> dict:
+    summary = {
+        "contract": "agentshelf.geo_run.v0",
+        "target": target,
+        "output_dir": str(output_dir),
+        "geo_report": str(output_dir / "geo-report.json"),
+        "geo_report_markdown": str(output_dir / "geo-report.md"),
+        "geo_tasks": str(output_dir / "geo-tasks.jsonl"),
+        "geo_report_validation": report_validation,
+        "geo_tasks_validation": task_validation,
+        "overallScore": geo_report.get("overallScore"),
+        "issue_count": len(geo_report.get("issues") or []),
+        "high_impact_issue_count": len(
+            [
+                issue
+                for issue in geo_report.get("issues") or []
+                if isinstance(issue, dict) and issue.get("severity") in {"critical", "high"}
+            ]
+        ),
+        "task_count": task_validation.get("item_count", 0),
+        "top_task_ids": [],
+        "scan": None,
+        "next_actions": [
+            f"Open {output_dir / 'geo-tasks.jsonl'} and implement high-priority tasks first.",
+            "Do not fabricate reviews, ratings, press, stock, price, shipping, return, or external-authority claims.",
+            "Re-run `agentshelf geo-run ...` after edits and compare issue/task counts.",
+        ],
+    }
+    task_rows = _load_geo_task_rows(output_dir / "geo-tasks.jsonl")
+    summary["top_task_ids"] = [row["task"]["id"] for row in task_rows[:5] if isinstance(row.get("task"), dict)]
+    if scan_bundle:
+        summary["scan"] = {
+            "score": scan_bundle["score"],
+            "band": scan_bundle["band"],
+            "top_fixes": scan_bundle.get("top_fixes", [])[:5],
+            "report": str(output_dir / "scan-report.md"),
+        }
+    return summary
+
+
+def _load_geo_task_rows(path: Path) -> list[dict]:
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            row = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+
+def _render_geo_run_summary(payload: dict, output_format: str) -> str:
+    if output_format == "json":
+        return json.dumps(payload, indent=2) + "\n"
+    lines = [
+        "# AgentShelf GEO Run",
+        "",
+        "## Summary",
+        f"- Target: {payload['target']}",
+        f"- Output directory: `{payload['output_dir']}`",
+        f"- GEO score: {payload['overallScore']}/100",
+        f"- Issues: {payload['issue_count']} ({payload['high_impact_issue_count']} high-impact)",
+        f"- Tasks: {payload['task_count']}",
+        f"- Report contract valid: {payload['geo_report_validation']['valid']}",
+        f"- Task contract valid: {payload['geo_tasks_validation']['valid']}",
+    ]
+    if payload.get("scan"):
+        lines.extend(
+            [
+                f"- Scan score: {payload['scan']['score']}/100",
+                f"- Scan band: {payload['scan']['band']}",
+            ]
+        )
+    lines.extend(["", "## Artifacts"])
+    for key in ("geo_report", "geo_report_markdown", "geo_tasks"):
+        lines.append(f"- {key}: `{payload[key]}`")
+    if payload.get("scan"):
+        lines.append(f"- scan_report: `{payload['scan']['report']}`")
+    lines.extend(["", "## Top Task IDs"])
+    if payload["top_task_ids"]:
+        lines.extend(f"- `{task_id}`" for task_id in payload["top_task_ids"])
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Next Actions"])
+    lines.extend(f"- {action}" for action in payload["next_actions"])
     return "\n".join(lines) + "\n"
 
 
@@ -2941,6 +3061,32 @@ def build_parser() -> argparse.ArgumentParser:
     geo_tasks.add_argument("--format", choices=("jsonl", "json"), default="jsonl", help="Task output format.")
     geo_tasks.add_argument("--output", type=Path, help="Optional task output path.")
 
+    geo_run = subcommands.add_parser("geo-run", help="Run the full GEO audit, contract validation, task export, and optional local scan workflow.")
+    geo_run.add_argument("target", nargs="?", help="HTML file or http(s) URL to audit.")
+    geo_run.add_argument("--url", help="http(s) URL to audit. Use instead of the positional target.")
+    geo_run.add_argument("--brand", dest="brand_name", help="Brand or artist name.")
+    geo_run.add_argument("--store", dest="store_name", help="Store name if different from the brand.")
+    geo_run.add_argument("--category", help="Commerce category, for example custom gifts or handmade teacups.")
+    geo_run.add_argument("--market", action="append", help="Target market. Repeat or comma-separate values.")
+    geo_run.add_argument("--language", default="en", help="Primary report/prompt language. v0 is optimized for English.")
+    geo_run.add_argument("--competitor", action="append", help="Competitor or alternative brand. Repeat or comma-separate values.")
+    geo_run.add_argument("--persona", action="append", help="Buyer persona. Repeat or comma-separate values.")
+    geo_run.add_argument("--use-case", action="append", help="Buyer use case. Repeat or comma-separate values.")
+    geo_run.add_argument("--key-product", action="append", help="Key product or product family. Repeat or comma-separate values.")
+    geo_run.add_argument(
+        "--vertical",
+        choices=("commerce", "creator_commerce", "artist_store", "local_service", "generic"),
+        default="commerce",
+        help="GEO vertical profile.",
+    )
+    geo_run.add_argument("--max-pages", type=int, default=1, help="Reserved for future multi-page audits; v0 audits one page.")
+    geo_run.add_argument("--no-prompt-panel", action="store_true", help="Do not include deterministic prompt panel output.")
+    geo_run.add_argument("--no-patches", action="store_true", help="Do not include page patch suggestions.")
+    geo_run.add_argument("--timeout", type=float, default=10.0, help="URL fetch timeout in seconds.")
+    geo_run.add_argument("--output-dir", type=Path, default=Path("agentshelf-geo-run"), help="Directory for generated GEO artifacts.")
+    geo_run.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Summary output format.")
+    geo_run.add_argument("--output", type=Path, help="Optional summary output path.")
+
     validate_contract = subcommands.add_parser("validate-contract", help="Validate AgentShelf JSON or JSONL contract artifacts.")
     validate_contract.add_argument("path", type=Path, help="AgentShelf JSON or JSONL artifact to validate.")
     validate_contract.add_argument(
@@ -3182,6 +3328,57 @@ def main() -> int:
                 raise ValueError("Expected a JSON report from `agentshelf geo-audit --format json`.")
             rendered = render_geo_tasks_json(report) if args.format == "json" else render_geo_tasks_jsonl(report)
             exit_code = 0
+        elif args.command == "geo-run":
+            target = args.url or args.target
+            if not target:
+                raise ValueError("Provide a target file/URL or --url.")
+            if args.url and args.target:
+                raise ValueError("Provide either positional target or --url, not both.")
+            if args.max_pages < 1:
+                raise ValueError("--max-pages must be at least 1.")
+            output_dir = args.output_dir
+            output_dir.mkdir(parents=True, exist_ok=True)
+            html, fetch_metadata = _load_geo_target(target, timeout=args.timeout)
+            result = build_geo_audit(
+                _build_geo_config_from_args(target, args),
+                html,
+                robots_text=fetch_metadata["robots_text"],
+                robots_status=fetch_metadata["robots_status"],
+                sitemap_status=fetch_metadata["sitemap_status"],
+                llms_status=fetch_metadata["llms_status"],
+                raw_metadata={
+                    "source_type": fetch_metadata["source_type"],
+                    "fetch_warnings": fetch_metadata["fetch_warnings"],
+                },
+            )
+            report_json = render_geo_json(result)
+            report_path = output_dir / "geo-report.json"
+            report_md_path = output_dir / "geo-report.md"
+            tasks_path = output_dir / "geo-tasks.jsonl"
+            _write_text_atomic(report_path, report_json)
+            _write_text_atomic(report_md_path, result.reportMarkdown)
+            _write_text_atomic(tasks_path, render_geo_tasks_jsonl(json.loads(report_json)))
+            report_validation = _validate_contract_file(report_path, requested_contract="agentshelf.geo_audit.v0")
+            task_validation = _validate_contract_file(tasks_path, requested_contract="agentshelf.geo_task.v0")
+            _write_text_atomic(output_dir / "geo-report-validation.json", json.dumps(report_validation, indent=2) + "\n")
+            _write_text_atomic(output_dir / "geo-tasks-validation.json", json.dumps(task_validation, indent=2) + "\n")
+            scan_bundle = None
+            if not _is_url(target):
+                target_path = Path(target)
+                if target_path.exists() and target_path.is_file():
+                    scan_bundle = _load_scan(target_path)
+                    _write_text_atomic(output_dir / "scan-report.md", render_markdown(scan_bundle))
+            summary = _build_geo_run_summary(
+                target=target,
+                output_dir=output_dir,
+                geo_report=json.loads(report_json),
+                task_validation=task_validation,
+                report_validation=report_validation,
+                scan_bundle=scan_bundle,
+            )
+            _write_text_atomic(output_dir / "summary.json", json.dumps(summary, indent=2) + "\n")
+            rendered = _render_geo_run_summary(summary, args.format)
+            exit_code = 0 if report_validation["valid"] and task_validation["valid"] else 1
         elif args.command == "validate-contract":
             payload = _validate_contract_file(args.path, requested_contract=args.contract)
             rendered = _render_contract_validation(payload, args.format)
