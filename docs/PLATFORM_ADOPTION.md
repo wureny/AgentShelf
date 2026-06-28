@@ -64,7 +64,15 @@ Recommended production wiring:
 - Run the snapshot generation step after catalog normalization and before deploy previews.
 - Prefer generated product-page snapshots over live crawling in PR gates.
 - If the live page injects key data late with JavaScript, add a scheduled rendered snapshot job separately and keep those raw artifacts out of commits when they include third-party HTML.
-- Keep schema and page-copy fixes in typed components, metadata helpers, JSON-LD builders, or product data mappers.
+- Keep schema and page-copy fixes in typed components, metadata helpers, JSON-LD builders, route loaders, or product data mappers.
+- When Codex reads `geo-tasks.jsonl`, route fixes to files such as `app/products/[handle]/page.tsx`, `components/ProductJsonLd.tsx`, `lib/catalog/normalizeProduct.ts`, or equivalent project-local modules instead of editing generated snapshots directly.
+- Re-run `agentshelf adoption-check` against regenerated snapshots after each remediation pass.
+
+Typical Codex prompt:
+
+```text
+Use $agentshelf-geo. Run agentshelf adoption-check against snapshots/headless/trailbottle-pro-24oz.headless.html, read the generated GEO tasks, then update the product metadata helpers and JSON-LD builder until Product/Offer schema, shipping, returns, and FAQ issues are resolved. Do not fabricate reviews or policy promises.
+```
 
 ## What Good Looks Like
 

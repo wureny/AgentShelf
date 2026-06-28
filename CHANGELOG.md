@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.35.0
+- Added regression coverage proving `init-merchant-repo`, `render-fixtures`, and `adoption-check` work together on a headless/Next.js-style catalog export.
+- Expanded platform adoption guidance for app-state payloads, typed metadata helpers, JSON-LD builders, and Codex remediation in headless storefront repositories.
+- Updated release readiness docs and examples for the `v0.35.0` release target.
+
 ## 0.34.0
 - Added platform adoption guidance for Shopify/Liquid and headless/Next.js storefronts that use generated snapshots instead of live crawling.
 - Added regression coverage proving `init-merchant-repo`, `render-fixtures`, and `adoption-check` work together on a Shopify export inside a merchant-style repository.

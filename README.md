@@ -513,7 +513,7 @@ Recommended first rollout:
 1. Start with `format: markdown` and `min-score: "70"` so humans can inspect failures.
 2. Upload `agentshelf-report.md` as an artifact on every run.
 3. Add `agentshelf agent-tasks` or the full artifact workflow when you want Codex-style agents to fix pages automatically.
-4. Pin a release tag such as `wureny/AgentShelf@v0.34.0` once the release exists. Use `@main` only while testing this repository.
+4. Pin a release tag such as `wureny/AgentShelf@v0.35.0` once the release exists. Use `@main` only while testing this repository.
 
 ```yaml
 name: AgentShelf
@@ -532,7 +532,7 @@ jobs:
           python-version: "3.11"
 
       - name: Audit product-page snapshots
-        uses: wureny/AgentShelf@v0.34.0
+        uses: wureny/AgentShelf@v0.35.0
         with:
           path: "snapshots/**/*.html"
           min-score: "70"
@@ -577,7 +577,7 @@ Use SARIF when you want GitHub code scanning annotations:
 
 ```yaml
 - name: Audit product-page snapshots
-  uses: wureny/AgentShelf@v0.34.0
+  uses: wureny/AgentShelf@v0.35.0
   with:
     path: "snapshots/**/*.html"
     min-score: "85"
