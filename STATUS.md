@@ -1,13 +1,13 @@
 # Status
 
-- Date: 2026-06-17
+- Date: 2026-06-28
 - Phase: maintain_or_extend
 - Project path: `/Users/wurenyu/Documents/Codex/2026-06-06/intent-to-prompt-users-wurenyu-codex/projects/agentic-commerce-readiness-scanner`
 - Canonical requested root: `/Users/wurenyu/workspace`
 - Current blocker: none
 
 ## Current Milestone
-Production-ready open-source release completed; current focus is release-readiness hardening for the GitHub Action, Marketplace copy, and coding-agent remediation loop.
+Production-ready open-source release completed; current focus is upgrading AgentShelf into a GEO Skill v0 for AI-readable commerce while preserving the existing CI scanner and Action.
 
 ## Completed This Run
 - Rebranded the public project to `AgentShelf`.
@@ -65,6 +65,15 @@ Production-ready open-source release completed; current focus is release-readine
 - Updated README with production posture, recommended Action rollout, SARIF example, failure-output example, and Codex/coding-agent remediation guidance.
 - Added stderr failure summaries for `scan`, `agent-audit --fail-on-blockers`, and `audit-run` gates while preserving JSON/SARIF machine output.
 - Added tests for Action metadata, copyable workflow, and CLI gate failure summaries.
+- Added `agentshelf geo-audit` as a deterministic GEO Skill v0 for AI-readable commerce.
+- Added `src/agentshelf/geo.py` with GEO dataclasses, page extraction, crawlability/indexability rules, structured-data rules, content extractability rules, entity consistency rules, commerce attribute rules, trust/proof rules, AI intent coverage rules, prompt panel generation, opportunity generation, patch suggestions, and JSON/Markdown report rendering.
+- Added URL-mode GEO metadata checks for robots.txt, sitemap.xml, and llms.txt without introducing arbitrary crawling or external platform APIs.
+- Added `agentshelf geo-tasks` to convert GEO JSON reports into JSONL implementation tasks for Codex-style coding agents.
+- Added repo-local `skills/agentshelf-geo` with the audit-task-edit-verify workflow, task contract reference, and OpenAI agent metadata.
+- Added `examples/artist_store_product.html` as an artist-store/creator-commerce fixture for handmade/custom gift use cases.
+- Added `tests/test_geo.py` covering the GEO JSON contract, Markdown sections, prompt panel coverage, crawler blocker detection, Product schema patch suggestions, and `--format both` output.
+- Added workflow regression coverage for the bundled `agentshelf-geo` skill and `agentshelf.geo_task.v0` contract.
+- Updated README, architecture docs, changelog, and package metadata for version `0.22.0`.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -118,12 +127,23 @@ Production-ready open-source release completed; current focus is release-readine
 - `ruby -e 'require "yaml"; YAML.load_file("action.yml"); YAML.load_file("docs/workflows/agentshelf-pr-gate.yml"); puts "yaml ok"'`
 - `git diff --check`
 - `PYTHONPATH=src /opt/homebrew/bin/python3.11 -m agentshelf.cli scan examples/weak_product_page.html --format json --output /private/tmp/agentshelf-weak.json --min-score 70`
+- `/opt/homebrew/bin/python3.11 -m unittest tests.test_geo`
+- `/opt/homebrew/bin/python3.11 -m unittest tests.test_geo tests.test_workflows`
+- `/opt/homebrew/bin/python3.11 -m unittest discover -s tests`
+- `/opt/homebrew/bin/python3.11 -m py_compile src/agentshelf/geo.py src/agentshelf/cli.py`
+- `ruby -e 'require "yaml"; YAML.load_file("skills/agentshelf-geo/SKILL.md"); YAML.load_file("skills/agentshelf-geo/agents/openai.yaml"); puts "skill-yaml-ok"'`
+- `.venv/bin/python -m pip install -e . --no-build-isolation`
+- `.venv/bin/agentshelf geo-audit examples/artist_store_product.html --brand "Moon Kiln Studio" --category "custom handmade teacups" --vertical artist_store --format json --output /private/tmp/agentshelf-geo-report.json`
+- `.venv/bin/agentshelf geo-tasks /private/tmp/agentshelf-geo-report.json --output /private/tmp/agentshelf-geo-tasks.jsonl`
+- `.venv/bin/agentshelf geo-tasks /private/tmp/agentshelf-geo-report.json --format json`
+- `.venv/bin/agentshelf scan examples/sample_product_page.html --format markdown --min-score 85`
 
 ## Next Best Task
-Draft a `v0.1.0` GitHub release with the Action usage snippet, but delay Marketplace publication until the Action is dogfooded against one real storefront fixture repository.
+Dogfood `agentshelf geo-audit` against the first real artist-store page snapshot, then tighten the issue taxonomy and patch templates around the gaps found in that report.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.
 - Raw URL snapshot mode still does not execute JavaScript unless `--rendered` is explicitly used.
 - Benchmark fixtures are curated examples, not empirical evidence of improved ChatGPT, Google, Perplexity, or Claude shopping-agent ranking.
 - Native import adapters cover common export shapes, but unusual merchant schemas may still need a small mapping step into AgentShelf's normalized JSON.
+- GEO audit is deterministic and local-first; it does not yet monitor real ChatGPT Search, Google AI, Perplexity, Claude, Gemini, Bing, GSC, or conversion outcomes.

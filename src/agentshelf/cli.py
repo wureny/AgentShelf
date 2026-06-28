@@ -18,12 +18,13 @@ from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
 from agentshelf.engine import ADAPTER_PROFILES, build_agent_contract, parse_input, render_markdown, scan_readiness
+from agentshelf.geo import GeoSkillConfig, build_geo_audit, render_geo_json, render_geo_tasks_json, render_geo_tasks_jsonl
 
 
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.21 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.22 (+https://github.com/wureny/AgentShelf)"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -87,6 +88,64 @@ def _coerce_score(value: object) -> int | None:
     if not 0 <= score <= 100:
         raise ValueError("Score thresholds must be integers between 0 and 100.")
     return score
+
+
+def _split_cli_values(values: list[str] | None) -> list[str]:
+    if not values:
+        return []
+    items: list[str] = []
+    for value in values:
+        for part in value.split(","):
+            stripped = part.strip()
+            if stripped:
+                items.append(stripped)
+    return items
+
+
+def _load_geo_target(target: str, timeout: float = 10.0) -> tuple[str, dict]:
+    if _is_url(target):
+        metadata = {
+            "source_type": "url",
+            "robots_text": None,
+            "robots_status": "not_checked",
+            "sitemap_status": "not_checked",
+            "llms_status": "not_checked",
+            "fetch_warnings": [],
+        }
+        html = _fetch_url(target, timeout=timeout)
+        parsed = urlparse(target)
+        base = f"{parsed.scheme}://{parsed.netloc}"
+        try:
+            robots_text = _fetch_url(f"{base}/robots.txt", timeout=timeout)
+            metadata["robots_text"] = robots_text
+            metadata["robots_status"] = "found"
+            metadata["sitemap_status"] = "found" if _sitemap_urls_from_robots(robots_text) else "not_declared_in_robots"
+        except (OSError, ValueError) as exc:
+            metadata["robots_status"] = "missing_or_unavailable"
+            metadata["fetch_warnings"].append(f"robots.txt unavailable: {exc}")
+        if metadata["sitemap_status"] != "found":
+            try:
+                sitemap_text = _fetch_url(f"{base}/sitemap.xml", timeout=timeout)
+                metadata["sitemap_status"] = "found" if "<urlset" in sitemap_text or "<sitemapindex" in sitemap_text else "unexpected_response"
+            except (OSError, ValueError) as exc:
+                metadata["sitemap_status"] = "missing_or_unavailable"
+                metadata["fetch_warnings"].append(f"sitemap.xml unavailable: {exc}")
+        try:
+            llms_text = _fetch_url(f"{base}/llms.txt", timeout=timeout)
+            metadata["llms_status"] = "found" if llms_text.strip() else "empty"
+        except (OSError, ValueError):
+            metadata["llms_status"] = "missing_or_unavailable"
+        return html, metadata
+
+    path = Path(target)
+    return path.read_text(encoding="utf-8"), {
+        "source_type": "file",
+        "robots_text": None,
+        "robots_status": "not_checked",
+        "sitemap_status": "not_checked",
+        "llms_status": "not_checked",
+        "fetch_warnings": [],
+    }
 
 
 def _load_scan(path: Path, adapter_profile: str = "auto") -> dict:
@@ -2625,6 +2684,36 @@ def build_parser() -> argparse.ArgumentParser:
     tasks.add_argument("--output", type=Path, help="Optional output file path.")
     tasks.add_argument("--profile", choices=ADAPTER_PROFILES, default="auto", help="Storefront adapter profile for commerce extraction.")
 
+    geo_audit = subcommands.add_parser("geo-audit", help="Run a GEO Skill audit for AI-readable commerce.")
+    geo_audit.add_argument("target", nargs="?", help="HTML file or http(s) URL to audit.")
+    geo_audit.add_argument("--url", help="http(s) URL to audit. Use instead of the positional target.")
+    geo_audit.add_argument("--brand", dest="brand_name", help="Brand or artist name.")
+    geo_audit.add_argument("--store", dest="store_name", help="Store name if different from the brand.")
+    geo_audit.add_argument("--category", help="Commerce category, for example custom gifts or handmade teacups.")
+    geo_audit.add_argument("--market", action="append", help="Target market. Repeat or comma-separate values.")
+    geo_audit.add_argument("--language", default="en", help="Primary report/prompt language. v0 is optimized for English.")
+    geo_audit.add_argument("--competitor", action="append", help="Competitor or alternative brand. Repeat or comma-separate values.")
+    geo_audit.add_argument("--persona", action="append", help="Buyer persona. Repeat or comma-separate values.")
+    geo_audit.add_argument("--use-case", action="append", help="Buyer use case. Repeat or comma-separate values.")
+    geo_audit.add_argument("--key-product", action="append", help="Key product or product family. Repeat or comma-separate values.")
+    geo_audit.add_argument(
+        "--vertical",
+        choices=("commerce", "creator_commerce", "artist_store", "local_service", "generic"),
+        default="commerce",
+        help="GEO vertical profile.",
+    )
+    geo_audit.add_argument("--max-pages", type=int, default=1, help="Reserved for future multi-page audits; v0 audits one page.")
+    geo_audit.add_argument("--no-prompt-panel", action="store_true", help="Do not include deterministic prompt panel output.")
+    geo_audit.add_argument("--no-patches", action="store_true", help="Do not include page patch suggestions.")
+    geo_audit.add_argument("--format", choices=("markdown", "json", "both"), default="markdown", help="Report output format.")
+    geo_audit.add_argument("--output", "--out", type=Path, help="Output file path or prefix. With --format both, writes .md and .json.")
+    geo_audit.add_argument("--timeout", type=float, default=10.0, help="URL fetch timeout in seconds.")
+
+    geo_tasks = subcommands.add_parser("geo-tasks", help="Emit JSONL remediation tasks from a geo-audit JSON report.")
+    geo_tasks.add_argument("report", type=Path, help="JSON output from `agentshelf geo-audit --format json`.")
+    geo_tasks.add_argument("--format", choices=("jsonl", "json"), default="jsonl", help="Task output format.")
+    geo_tasks.add_argument("--output", type=Path, help="Optional task output path.")
+
     compare = subcommands.add_parser("compare", help="Compare raw and rendered snapshots for unlocked agent-readiness signals.")
     compare.add_argument("raw", type=Path, help="Raw HTML snapshot path.")
     compare.add_argument("rendered", type=Path, help="Rendered HTML snapshot path.")
@@ -2791,6 +2880,69 @@ def main() -> int:
                 raise ValueError("Multiple inputs found. Re-run with --batch.")
             results = [_load_scan(path, adapter_profile=args.profile) for path in paths]
             rendered = _render_agent_tasks(results)
+            exit_code = 0
+        elif args.command == "geo-audit":
+            target = args.url or args.target
+            if not target:
+                raise ValueError("Provide a target file/URL or --url.")
+            if args.url and args.target:
+                raise ValueError("Provide either positional target or --url, not both.")
+            if args.max_pages < 1:
+                raise ValueError("--max-pages must be at least 1.")
+            html, fetch_metadata = _load_geo_target(target, timeout=args.timeout)
+            config = GeoSkillConfig(
+                targetUrl=target,
+                brandName=args.brand_name,
+                storeName=args.store_name,
+                category=args.category,
+                market=_split_cli_values(args.market),
+                language=args.language,
+                competitors=_split_cli_values(args.competitor),
+                personas=_split_cli_values(args.persona),
+                useCases=_split_cli_values(args.use_case),
+                keyProducts=_split_cli_values(args.key_product),
+                maxPages=args.max_pages,
+                includePromptPanel=not args.no_prompt_panel,
+                includePatchSuggestions=not args.no_patches,
+                vertical=args.vertical,
+                outputFormat=args.format,
+            )
+            result = build_geo_audit(
+                config,
+                html,
+                robots_text=fetch_metadata["robots_text"],
+                robots_status=fetch_metadata["robots_status"],
+                sitemap_status=fetch_metadata["sitemap_status"],
+                llms_status=fetch_metadata["llms_status"],
+                raw_metadata={
+                    "source_type": fetch_metadata["source_type"],
+                    "fetch_warnings": fetch_metadata["fetch_warnings"],
+                },
+            )
+            if args.format == "json":
+                rendered = render_geo_json(result)
+            elif args.format == "both":
+                if args.output:
+                    output_base = args.output.with_suffix("") if args.output.suffix in {".md", ".json"} else args.output
+                    markdown_path = output_base.with_suffix(".md")
+                    json_path = output_base.with_suffix(".json")
+                    _write_text_atomic(markdown_path, result.reportMarkdown)
+                    _write_text_atomic(json_path, render_geo_json(result))
+                    args.output = None
+                    rendered = f"Wrote GEO audit reports: {markdown_path} and {json_path}\n"
+                else:
+                    rendered = render_geo_json(result) + "\n" + result.reportMarkdown
+            else:
+                rendered = result.reportMarkdown
+            exit_code = 0
+        elif args.command == "geo-tasks":
+            try:
+                report = json.loads(args.report.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Invalid geo-audit JSON report {args.report}: {exc.msg}.") from exc
+            if not isinstance(report, dict) or report.get("rawMetadata", {}).get("contract") != "agentshelf.geo_audit.v0":
+                raise ValueError("Expected a JSON report from `agentshelf geo-audit --format json`.")
+            rendered = render_geo_tasks_json(report) if args.format == "json" else render_geo_tasks_jsonl(report)
             exit_code = 0
         elif args.command == "compare":
             raw_bundle = _load_scan_as(args.raw, "raw", adapter_profile=args.profile)

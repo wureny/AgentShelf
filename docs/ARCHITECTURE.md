@@ -17,14 +17,19 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 12. Calibrate rules against real merchant snapshots by grouping likely false-positive categories and exporting anonymized fixture candidates.
 13. Render calibration dashboards for larger merchant page sets, draft labels from review findings, then evaluate rule changes against confirmed human labels before tightening CI gates.
 14. Publish CI review artifacts together: SARIF annotations, JSONL scan output, calibration dashboards, draft labels, evaluation notes, and agent task queues.
+15. Run `geo-audit` when the goal is a broader Generative Engine Optimization plan for AI-readable commerce rather than only a product-page readiness score.
+16. Convert GEO reports with `geo-tasks` when a coding agent needs a JSONL implementation queue with page areas, acceptance checks, and verification commands.
 
 ## Components
 - `src/agentshelf/engine.py`: parser, heuristic scoring engine, JSON-LD extraction, and renderers
+- `src/agentshelf/geo.py`: GEO Skill domain models, page extraction, deterministic GEO rules, prompt panel generation, opportunity generation, patch suggestions, and report renderers
 - `src/agentshelf/cli.py`: argument parsing, batch input resolution, snapshot fetches, threshold exits, and file I/O
+- `skills/agentshelf-geo/`: repo-local Codex-style skill, JSONL task contract reference, and OpenAI agent metadata for audit-task-edit-verify workflows
 - `tests/test_engine.py`: regression coverage for parsing and rendering
 - `tests/test_cli.py`: CLI behavior and threshold coverage
 - `examples/sample_product_page.html`: smoke-test input
 - `examples/weak_product_page.html`: failing-page fixture
+- `examples/artist_store_product.html`: artist-store GEO fixture for creator-commerce prompts and patches
 - `benchmarks/fixtures/`: curated agent-readiness benchmark inputs
 - `benchmarks/expected/`: expected benchmark bands, blockers, and agent tasks
 - `docs/PROFILE_BENCHMARKS.md`: profile-specific benchmark contract for Shopify, WooCommerce, and headless fixtures
@@ -57,8 +62,12 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - Import validation lives before rendering, so missing native-export fields become manifest warnings and optional CI failures instead of being hidden by generated fallback copy.
 - Import remediation tasks convert those validation warnings into JSONL work items with source export fields, acceptance checks, and priorities for coding agents.
 - `discover` consumes sitemap metadata rather than crawling arbitrary links, keeping audits predictable and polite.
+- `geo-audit` is implemented as a separate module so GEO reporting can evolve without destabilizing the existing score-gated scanner. It uses deterministic rules and templates only; live platform visibility monitoring, GSC/Bing integrations, and LLM-generated analysis remain future extension points.
+- `geo-tasks` turns `geo-audit` JSON into stable task rows for coding agents. This keeps the agent interface implementation-oriented instead of forcing agents to parse prose reports.
+- The bundled `agentshelf-geo` skill documents the intended loop: audit, emit tasks, edit storefront code/content/schema, then verify with `geo-audit`, `geo-tasks`, and `scan`.
 
 ## Extension Path
+- Add JSON Schema files for `agentshelf.geo_audit.v0` and `agentshelf.geo_task.v0` once the first real artist-store dogfood report has been reviewed.
 - Add deeper schema validation for variants, offers, return policy, merchant policy metadata, subscription selling plans, and bundle components.
 - Add more storefront profile packs for preorders, backorders, subscriptions with prepaid plans, B2B pricing, and marketplace sellers.
 - Add empirical benchmark runs against real agent answer quality before claiming ranking or conversion lift.

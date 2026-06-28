@@ -95,3 +95,26 @@ class WorkflowArtifactTests(unittest.TestCase):
         self.assertIn("--tasks-output \"$AGENTSHELF_ARTIFACT_DIR/import-tasks.jsonl\"", workflow)
         self.assertIn("generated-snapshots", workflow)
         self.assertIn("AgentShelf import validation gate failed", workflow)
+
+    def test_repo_local_geo_skill_documents_agent_workflow(self) -> None:
+        skill = (ROOT / "skills/agentshelf-geo/SKILL.md").read_text(encoding="utf-8")
+        contract = (ROOT / "skills/agentshelf-geo/references/task-contract.md").read_text(encoding="utf-8")
+        metadata = (ROOT / "skills/agentshelf-geo/agents/openai.yaml").read_text(encoding="utf-8")
+
+        required_skill_snippets = [
+            "name: agentshelf-geo",
+            "agentshelf geo-audit",
+            "agentshelf geo-tasks",
+            "agentshelf scan",
+            "Do not fabricate reviews",
+            "audit and remediation loop",
+        ]
+        for snippet in required_skill_snippets:
+            with self.subTest(snippet=snippet):
+                self.assertIn(snippet, skill)
+
+        self.assertIn("agentshelf.geo_task.v0", contract)
+        self.assertIn("files_or_page_area", contract)
+        self.assertIn("acceptance_check", contract)
+        self.assertIn("$agentshelf-geo", metadata)
+        self.assertIn("allow_implicit_invocation: true", metadata)

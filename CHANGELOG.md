@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.22.0
+- Added `agentshelf geo-audit` as a deterministic GEO Skill v0 for AI-readable commerce.
+- Added `agentshelf geo-tasks` to turn GEO JSON reports into a stable JSONL implementation queue for coding agents.
+- Added the repo-local `skills/agentshelf-geo` Codex-style skill with task contract documentation and OpenAI agent metadata.
+- Added GEO domain models, page extraction, crawlability/indexability checks, structured-data checks, content extractability checks, entity consistency checks, commerce attribute checks, trust checks, prompt panel generation, opportunity generation, and page patch suggestions.
+- Added an artist-store example fixture and tests for JSON/Markdown GEO reports, crawler blocker detection, prompt panel coverage, and `--format both` output.
+
 ## 0.21.0
 - Added `render-fixtures --tasks-output` to turn import validation warnings into machine-readable JSONL remediation tasks for coding agents.
 - Added platform-aware task guidance for Shopify JSON, WooCommerce CSV, headless catalog JSON, and normalized AgentShelf product exports.

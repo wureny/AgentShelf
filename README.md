@@ -1,10 +1,14 @@
 # AgentShelf
 
-Open-source product page audits for AI shopping agents.
+Open-source GEO and product page audits for AI-readable commerce.
 
 AgentShelf checks whether product pages expose the signals AI shopping agents need for discovery, ranking, and purchase recommendations: product title, price, availability, shipping, returns, specs, reviews, FAQ, and Product structured data.
 
 It also reads storefront implementation signals that matter in real Shopify/DTC pages: embedded product JSON, variant arrays, selling plan groups, metafield-like keys, policy snippets, subscription terms, bundle contents, regional shipping promises, and return policy schema.
+
+AgentShelf now includes a deterministic GEO Skill v0 for AI-readable commerce. `agentshelf geo-audit` turns a merchant page or URL plus brand/category context into a structured GEO report with crawlability, indexability, structured data, content extractability, entity consistency, commerce attribute, trust, AI intent, prompt panel, GTM opportunity, and patch recommendations.
+
+For Codex-style coding agents, AgentShelf ships a repo-local skill at [`skills/agentshelf-geo/SKILL.md`](skills/agentshelf-geo/SKILL.md). The intended agent workflow is: run `geo-audit`, convert the report with `geo-tasks`, edit the storefront or fixture, then verify with `geo-audit` and `scan`.
 
 ## Production Posture
 AgentShelf is ready for production dogfooding in CI when you can provide one of these inputs:
@@ -15,6 +19,8 @@ AgentShelf is ready for production dogfooding in CI when you can provide one of 
 - raw or rendered snapshots captured by a scheduled job before the PR gate runs
 
 It is not a fully managed crawler, hosted Shopify app, or checkout automation system. Treat the score as an explainable CI signal, not a claim that a specific external shopping agent will rank the product higher. The mature production loop is: generate or capture snapshots, run `agentshelf scan`, upload human-readable evidence, emit `agentshelf agent-tasks` for coding agents, and tighten thresholds after a few real merchant review cycles.
+
+For GEO work, treat `geo-audit` as a local deterministic skill for review and implementation planning. It does not call ChatGPT, Google, Perplexity, Claude, Gemini, Bing, or Search Console APIs, and it does not claim live visibility lift. It creates the factual report, prompt panel, and patch queue needed before those monitoring integrations are worth adding.
 
 ## Who It Helps
 - Shopify and DTC operators preparing storefronts for agentic commerce
@@ -68,6 +74,37 @@ Emit batch remediation tasks for a coding agent:
 
 ```bash
 agentshelf agent-tasks examples --batch --output agentshelf-tasks.jsonl
+```
+
+Run a GEO Skill audit for an artist-store or creator-commerce page:
+
+```bash
+agentshelf geo-audit examples/artist_store_product.html \
+  --brand "Moon Kiln Studio" \
+  --category "custom handmade teacups" \
+  --vertical artist_store \
+  --format markdown
+```
+
+Write both Markdown and JSON GEO reports:
+
+```bash
+agentshelf geo-audit examples/artist_store_product.html \
+  --brand "Moon Kiln Studio" \
+  --category "custom handmade teacups" \
+  --vertical artist_store \
+  --competitor Etsy \
+  --persona "tea lovers" \
+  --use-case "meaningful custom gifts" \
+  --format both \
+  --out reports/moon-kiln-geo-report
+```
+
+Turn a GEO report into a Codex-readable task queue:
+
+```bash
+agentshelf geo-tasks reports/moon-kiln-geo-report.json \
+  --output reports/moon-kiln-geo-tasks.jsonl
 ```
 
 Fetch a raw HTML snapshot for later audit:
@@ -186,6 +223,8 @@ Weak pages return prioritized fixes:
 agentshelf scan <file-or-dir-or-glob> [options]
 agentshelf agent-audit <file-or-url> [options]
 agentshelf agent-tasks <file-or-dir-or-glob> [options]
+agentshelf geo-audit <file-or-url> [--brand <name>] [--category <category>] [--vertical commerce|creator_commerce|artist_store|local_service|generic] [--format markdown|json|both]
+agentshelf geo-tasks <geo-report.json> [--format jsonl|json]
 agentshelf compare <raw.html> <rendered.html> [options]
 agentshelf diff <baseline-results.jsonl> <current-results.jsonl> [options]
 agentshelf audit-run <file-or-dir-or-glob> [options]
@@ -213,6 +252,10 @@ Options:
 `agent-audit` emits JSON with stable fields for coding agents: `target`, `score`, `band`, `blocking_issues`, `agent_tasks`, `evidence`, `next_actions`, `confidence`, and `warnings`.
 
 `agent-tasks` emits JSONL remediation tasks across one page or a batch, so coding agents can pick up precise page areas, reasons, and acceptance checks.
+
+`geo-audit` emits a broader GEO report for AI-readable commerce. Use it when the question is not only "does this product page expose price/schema/policy?" but "what page, prompt, entity, trust, and patch work would make this merchant easier for generative engines and AI shopping agents to understand and cite?" URL mode attempts lightweight `robots.txt`, `sitemap.xml`, and `llms.txt` checks; local-file mode keeps the report runnable without network access. `--format both --out reports/name` writes `reports/name.md` and `reports/name.json`.
+
+`geo-tasks` turns `geo-audit --format json` output into JSONL work items for coding agents. Each row includes `files_or_page_area`, `reason`, `suggested_copy`, optional `suggested_schema`, `acceptance_check`, and `verification_command`.
 
 `snapshot` fetches raw HTML with the standard library by default. Use `--rendered` for a Playwright-backed single-page capture when product data is injected by JavaScript. Rendered mode is optional so the base CLI stays lightweight.
 
@@ -502,6 +545,66 @@ JSON reports include stable fields for dashboards and CI:
 - `acceptance_check`: how to know the fix is complete
 - `priority`: `high` or `medium`
 
+## GEO Skill For AI-Readable Commerce
+`agentshelf geo-audit` is the first GEO Skill surface. It is built for merchants, consultants, and coding agents that need a structured plan for making commerce pages easier for generative engines and AI shopping systems to crawl, index, understand, cite, compare, and recommend.
+
+The repo-local skill is intentionally small and operational:
+
+- [skills/agentshelf-geo/SKILL.md](skills/agentshelf-geo/SKILL.md): the audit-task-edit-verify loop for Codex-style agents.
+- [skills/agentshelf-geo/references/task-contract.md](skills/agentshelf-geo/references/task-contract.md): the JSONL task contract emitted by `geo-tasks`.
+
+Example:
+
+```bash
+agentshelf geo-audit --url https://example.com/products/custom-teacup \
+  --brand "Example Studio" \
+  --category "custom handmade teacups" \
+  --vertical artist_store \
+  --market US \
+  --competitor Etsy \
+  --persona "tea lovers" \
+  --use-case "meaningful custom gifts" \
+  --format both \
+  --out reports/example-studio-geo
+```
+
+Agent workflow:
+
+```bash
+agentshelf geo-audit examples/artist_store_product.html \
+  --brand "Moon Kiln Studio" \
+  --category "custom handmade teacups" \
+  --vertical artist_store \
+  --format json \
+  --output reports/moon-kiln-geo-report.json
+
+agentshelf geo-tasks reports/moon-kiln-geo-report.json \
+  --output reports/moon-kiln-geo-tasks.jsonl
+
+# Codex reads reports/moon-kiln-geo-tasks.jsonl, edits the relevant page/template/schema,
+# then reruns geo-audit and scan as verification gates.
+```
+
+The JSON report uses the `agentshelf.geo_audit.v0` contract and includes:
+
+- `storeProfile`: normalized brand, domain, vertical, markets, products, personas, use cases, competitors, positioning, and claims.
+- `pages`: extracted page facts including page type, title, meta description, H1, headings, canonical, links, images, schema types, Product data, FAQ data, claims, and crawl status.
+- `categoryScores`: crawlability, indexability, structured data, content extractability, entity consistency, commerce attributes, trust, AI intent coverage, external authority, and GTM scores.
+- `issues`: deterministic findings with severity, category, why it matters, recommendation, confidence, and page URL.
+- `opportunities`: suggested collection pages, gift guides, FAQ assets, commission process pages, artist entity pages, and schema work.
+- `promptPanel`: 100-150 deterministic prompts grouped across brand, category, gift, comparison, alternative, customization, trust, shipping, price/value, material/craft, buyer persona, and GTM intent buckets.
+- `patchSuggestions`: opening answer blocks, FAQ blocks, Product schema skeletons, Organization schema skeletons, image alt text guidance, collection briefs, gift guide briefs, commission process pages, and artist factsheets.
+- `geo-tasks`: JSONL implementation queue derived from patch suggestions and high-severity issues.
+
+`artist_store` and `creator_commerce` verticals add templates for one-of-one goods, handmade gifts, personalized objects, artist-made products, Chinese calligraphy, custom teacups, commission processes, and artist/studio entity factsheets. These are templates, not hard-coded business assumptions; pass `--category`, `--persona`, `--use-case`, and `--key-product` to steer the output.
+
+Current GEO non-goals:
+
+- no live ranking or visibility claims for ChatGPT Search, Google AI Overviews / AI Mode, Perplexity, Copilot, Claude, or Gemini
+- no Search Console, Bing Webmaster Tools, or paid API integrations
+- no arbitrary site-wide crawling
+- no fake reviews, ratings, external authority, or platform-monitoring data
+
 ## Rule Philosophy
 AgentShelf rules should be deterministic, explainable, and operator-actionable. Every failed check should point to a concrete storefront improvement, not just a score penalty.
 
@@ -632,6 +735,8 @@ python3 -m unittest discover -s tests
 agentshelf scan examples/sample_product_page.html --format markdown --min-score 85
 agentshelf agent-audit examples/weak_product_page.html --contract v1
 agentshelf agent-tasks examples --batch
+agentshelf geo-audit examples/artist_store_product.html --brand "Moon Kiln Studio" --category "custom handmade teacups" --vertical artist_store --format json --output /tmp/agentshelf-geo-report.json
+agentshelf geo-tasks /tmp/agentshelf-geo-report.json --output /tmp/agentshelf-geo-tasks.jsonl
 agentshelf compare examples/js_product_raw.html examples/js_product_rendered.html --format json
 agentshelf discover --sitemap https://example.com/sitemap.xml --limit 10
 agentshelf render-fixtures examples/storefront-products.json --platform all --output-dir snapshots --manifest snapshots/manifest.json
@@ -651,6 +756,7 @@ python3 -m pip install -e ".[render]"  # optional rendered snapshots
 ## Example Files
 - [Strong sample page](examples/sample_product_page.html)
 - [Weak sample page](examples/weak_product_page.html)
+- [Artist-store GEO sample page](examples/artist_store_product.html)
 - [JS raw sample page](examples/js_product_raw.html)
 - [JS rendered sample page](examples/js_product_rendered.html)
 - [Shopify-style variant sample page](examples/shopify_variant_product.html)

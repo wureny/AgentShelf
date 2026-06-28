@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentshelf"
-version = "0.21.0"
-description = "Open-source product page audits for AI shopping agents."
+version = "0.22.0"
+description = "Open-source GEO and product page audits for AI-readable commerce."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Alix" }]
-keywords = ["agentic-commerce", "ecommerce", "ai-agents", "auditing", "shopify"]
+keywords = ["agentic-commerce", "geo", "ecommerce", "ai-agents", "auditing", "shopify"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
