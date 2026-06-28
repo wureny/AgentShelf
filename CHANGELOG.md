@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.32.0
+- Added `agentshelf release-notes` to generate conservative Markdown or JSON release drafts from the matching `CHANGELOG.md` section before creating public GitHub tags.
+- Extended `release-check` to require release-note generation coverage so maintainers review production posture, install guidance, and non-claims before publishing.
+- Updated release documentation and pinned workflow examples for the `v0.32.0` release target.
+
 ## 0.31.0
 - Added `agentshelf release-check` for source-tree release readiness validation before creating a public GitHub release tag.
 - Updated copyable Action examples to use the current `v0.31.0` release tag target instead of the old placeholder tag.

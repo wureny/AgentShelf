@@ -25,7 +25,7 @@ from agentshelf.geo import GeoSkillConfig, build_geo_audit, render_geo_json, ren
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.31 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.32 (+https://github.com/wureny/AgentShelf)"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -287,6 +287,20 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
             issues.append("USER_AGENT version does not match pyproject major/minor version.")
         if f"## {version}" not in changelog:
             issues.append(f"CHANGELOG.md is missing section `## {version}`.")
+        try:
+            release_notes = _build_release_notes(root, version=version)
+        except ValueError as exc:
+            issues.append(f"Release notes generation failed: {exc}")
+        else:
+            required_release_notes = (
+                "Production posture",
+                "agentshelf init-merchant-repo",
+                "agentshelf release-check",
+                "Before publishing",
+            )
+            for snippet in required_release_notes:
+                if snippet not in release_notes["markdown"]:
+                    issues.append(f"Generated release notes missing snippet: {snippet}")
         pinned_action = f"wureny/AgentShelf@v{version}"
         if pinned_action not in readme:
             issues.append(f"README.md is missing pinned Action usage `{pinned_action}`.")
@@ -363,6 +377,92 @@ def _render_release_check(payload: dict, output_format: str) -> str:
     lines.extend(["", "## Next Steps"])
     lines.extend(f"- {step}" for step in payload["next_steps"])
     return "\n".join(lines) + "\n"
+
+
+def _extract_changelog_section(changelog: str, version: str) -> tuple[list[str], str]:
+    pattern = rf"(?ms)^##\s+{re.escape(version)}\s*\n(?P<body>.*?)(?=^##\s+|\Z)"
+    match = re.search(pattern, changelog)
+    if not match:
+        raise ValueError(f"CHANGELOG.md is missing section `## {version}`.")
+    body = match.group("body").strip()
+    items = [line[2:].strip() for line in body.splitlines() if line.startswith("- ")]
+    if not items:
+        raise ValueError(f"CHANGELOG.md section `## {version}` has no bullet items.")
+    return items, body
+
+
+def _build_release_notes(root: Path, *, version: str | None = None) -> dict:
+    root = root.resolve()
+    pyproject_path = root / "pyproject.toml"
+    changelog_path = root / "CHANGELOG.md"
+    if not pyproject_path.exists():
+        raise ValueError("pyproject.toml is missing.")
+    if not changelog_path.exists():
+        raise ValueError("CHANGELOG.md is missing.")
+    project_version = _extract_project_version(pyproject_path.read_text(encoding="utf-8"))
+    if not project_version:
+        raise ValueError("pyproject.toml is missing a project version.")
+    selected_version = version or project_version
+    if selected_version != project_version:
+        raise ValueError(f"Requested version {selected_version} does not match pyproject.toml version {project_version}.")
+    changelog_items, changelog_body = _extract_changelog_section(
+        changelog_path.read_text(encoding="utf-8"),
+        selected_version,
+    )
+    title = f"AgentShelf v{selected_version}"
+    markdown_lines = [
+        f"# {title}",
+        "",
+        "## What changed",
+        *[f"- {item}" for item in changelog_items],
+        "",
+        "## Install and adopt",
+        "- For local development: `python3 -m pip install -e . --no-build-isolation`.",
+        "- For merchant repositories: `agentshelf init-merchant-repo --brand \"<brand>\" --category \"<category>\" --vertical commerce`.",
+        "- For Codex-style agents: `agentshelf export-skill --output-dir .codex/skills`, then invoke `$agentshelf-geo` against product-page snapshots or storefront fixtures.",
+        f"- For GitHub Actions after the tag exists: `uses: wureny/AgentShelf@v{selected_version}`.",
+        "",
+        "## Recommended verification",
+        f"- `agentshelf release-check --expected-version {selected_version}`",
+        "- `PYTHONPATH=src python3 -m unittest discover -s tests`",
+        "- `python3 -m pip install -e . --no-build-isolation`",
+        "- `python3 -m pip wheel . --no-deps --no-build-isolation -w /tmp/agentshelf-wheelhouse`",
+        "",
+        "## Production posture",
+        "- Ready for production dogfooding as a local snapshot, generated-fixture, GitHub Action, and Codex remediation workflow.",
+        "- Best suited for merchant-owned product pages, Shopify/DTC theme outputs, headless storefront snapshots, and catalog-derived HTML fixtures.",
+        "- Emits deterministic reports, validated JSON/JSONL contracts, and implementation tasks that coding agents can act on.",
+        "- Not a hosted crawler, Shopify app, checkout automation system, or empirical proof of improved ChatGPT, Google, Perplexity, Claude, Gemini, or Bing shopping visibility.",
+        "",
+        "## Before publishing",
+        "- Review this release draft against `CHANGELOG.md` and the current README production posture.",
+        "- Confirm CI passes on the exact commit to be tagged.",
+        f"- Create and push `v{selected_version}` only after review; do not publish Marketplace copy from `@main`.",
+        "- Keep any external-agent ranking or conversion-lift claims out of the release unless backed by separate evidence.",
+    ]
+    markdown = "\n".join(markdown_lines) + "\n"
+    return {
+        "contract": "agentshelf.release_notes.v0",
+        "version": selected_version,
+        "title": title,
+        "source": str(changelog_path),
+        "changelog_items": changelog_items,
+        "changelog_body": changelog_body,
+        "markdown": markdown,
+        "valid": True,
+        "issues": [],
+        "next_steps": [
+            f"Run `agentshelf release-check --expected-version {selected_version}`.",
+            "Review the generated Markdown before drafting a GitHub release.",
+            f"Create tag `v{selected_version}` only after tests and release notes are approved.",
+        ],
+    }
+
+
+def _render_release_notes(payload: dict, output_format: str) -> str:
+    if output_format == "json":
+        return json.dumps(payload, indent=2) + "\n"
+    return payload["markdown"]
 
 
 def _export_geo_skill(output_dir: Path, *, force: bool = False) -> dict:
@@ -3630,6 +3730,12 @@ def build_parser() -> argparse.ArgumentParser:
     release_check.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
     release_check.add_argument("--output", type=Path, help="Optional output path.")
 
+    release_notes = subcommands.add_parser("release-notes", help="Generate conservative GitHub release draft notes from CHANGELOG.md.")
+    release_notes.add_argument("--root", type=Path, default=Path("."), help="AgentShelf source checkout root. Defaults to the current directory.")
+    release_notes.add_argument("--version", help="Release version to extract. Defaults to pyproject.toml version.")
+    release_notes.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
+    release_notes.add_argument("--output", type=Path, help="Optional output path.")
+
     compare = subcommands.add_parser("compare", help="Compare raw and rendered snapshots for unlocked agent-readiness signals.")
     compare.add_argument("raw", type=Path, help="Raw HTML snapshot path.")
     compare.add_argument("rendered", type=Path, help="Rendered HTML snapshot path.")
@@ -3992,6 +4098,10 @@ def main() -> int:
             payload = _release_check(args.root, expected_version=args.expected_version)
             rendered = _render_release_check(payload, args.format)
             exit_code = 0 if payload["valid"] else 1
+        elif args.command == "release-notes":
+            payload = _build_release_notes(args.root, version=args.version)
+            rendered = _render_release_notes(payload, args.format)
+            exit_code = 0
         elif args.command == "compare":
             raw_bundle = _load_scan_as(args.raw, "raw", adapter_profile=args.profile)
             rendered_bundle = _load_scan_as(args.rendered, "rendered", adapter_profile=args.profile)

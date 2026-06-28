@@ -46,7 +46,7 @@ class WorkflowArtifactTests(unittest.TestCase):
         workflow = (ROOT / "docs/workflows/agentshelf-pr-gate.yml").read_text(encoding="utf-8")
 
         required_snippets = [
-            "uses: wureny/AgentShelf@v0.31.0",
+            "uses: wureny/AgentShelf@v0.32.0",
             "actions/setup-python@v5",
             "python-version: \"3.11\"",
             "path: \"snapshots/**/*.html\"",
@@ -266,13 +266,13 @@ class WorkflowArtifactTests(unittest.TestCase):
             self.assertEqual((root / ".agentshelf.json").read_text(encoding="utf-8"), '{"custom": true}\n')
 
     def test_release_check_validates_release_surfaces(self) -> None:
-        result = _run_cli("release-check", "--expected-version", "0.31.0", "--format", "json")
+        result = _run_cli("release-check", "--expected-version", "0.32.0", "--format", "json")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["contract"], "agentshelf.release_check.v0")
         self.assertTrue(payload["valid"])
-        self.assertEqual(payload["version"], "0.31.0")
+        self.assertEqual(payload["version"], "0.32.0")
         self.assertIn("README.md", payload["checked_files"])
         self.assertIn("src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml", payload["checked_files"])
 
@@ -283,6 +283,37 @@ class WorkflowArtifactTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertFalse(payload["valid"])
         self.assertTrue(any("Expected version 9.99.0" in issue for issue in payload["issues"]))
+
+    def test_release_notes_generates_reviewable_markdown(self) -> None:
+        result = _run_cli("release-notes", "--version", "0.32.0")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("# AgentShelf v0.32.0", result.stdout)
+        self.assertIn("## What changed", result.stdout)
+        self.assertIn("agentshelf release-notes", result.stdout)
+        self.assertIn("agentshelf init-merchant-repo", result.stdout)
+        self.assertIn("agentshelf release-check --expected-version 0.32.0", result.stdout)
+        self.assertIn("Production posture", result.stdout)
+        self.assertIn("Not a hosted crawler", result.stdout)
+        self.assertIn("Before publishing", result.stdout)
+
+    def test_release_notes_json_contract_is_stable(self) -> None:
+        result = _run_cli("release-notes", "--version", "0.32.0", "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["contract"], "agentshelf.release_notes.v0")
+        self.assertEqual(payload["version"], "0.32.0")
+        self.assertEqual(payload["title"], "AgentShelf v0.32.0")
+        self.assertTrue(payload["valid"])
+        self.assertTrue(any("release-notes" in item for item in payload["changelog_items"]))
+        self.assertIn("wureny/AgentShelf@v0.32.0", payload["markdown"])
+
+    def test_release_notes_fails_on_wrong_version(self) -> None:
+        result = _run_cli("release-notes", "--version", "9.99.0", "--format", "json")
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Requested version 9.99.0", result.stderr)
 
     def test_geo_contract_schemas_are_published(self) -> None:
         audit_schema = json.loads((ROOT / "schemas/agentshelf.geo_audit.v0.schema.json").read_text(encoding="utf-8"))

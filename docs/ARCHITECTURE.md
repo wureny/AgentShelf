@@ -79,7 +79,8 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - `skill-info` and `export-skill` keep skill distribution inside the package boundary, so users do not need to clone this repository or manually copy paths to install the AgentShelf workflow into a merchant repo.
 - `docs/AGENT_IMPLEMENTATION_LOOP.md` locks the concrete before/after path for coding agents, so the project demonstrates an implementation loop rather than only audit output.
 - `init-merchant-repo` packages the practical adoption path: workflow, config, demo snapshot, onboarding docs, and exported skill with conflict-safe writes.
-- `release-check` keeps release-facing surfaces aligned before a tag is created: package version, changelog, README, Action metadata, pinned workflow examples, skill assets, and merchant templates.
+- `release-check` keeps release-facing surfaces aligned before a tag is created: package version, changelog, README, Action metadata, pinned workflow examples, generated release notes, skill assets, and merchant templates.
+- `release-notes` turns the matching changelog section into a conservative GitHub release draft with install guidance, verification commands, production posture, and non-claims. It intentionally generates a review artifact instead of publishing a tag or Marketplace release.
 
 ## Extension Path
 - Add stricter JSON Schema validation if AgentShelf later accepts an optional `jsonschema` dependency or a build-time validation extra.
