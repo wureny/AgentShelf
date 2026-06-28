@@ -294,6 +294,7 @@ agentshelf skill-info [--format markdown|json]
 agentshelf export-skill [--output-dir .codex/skills] [--force]
 agentshelf init-merchant-repo [--output-dir .] [--brand <name>] [--category <category>] [--vertical commerce|creator_commerce|artist_store|local_service|generic]
 agentshelf adoption-check <merchant-repo> [--snapshot snapshots/product.html] [--brand <name>] [--category <category>]
+agentshelf public-audit [source-checkout] [--format markdown|json]
 agentshelf release-check [--expected-version <version>]
 agentshelf release-notes [--version <version>] [--format markdown|json]
 agentshelf compare <raw.html> <rendered.html> [options]
@@ -342,7 +343,9 @@ Options:
 
 `adoption-check` verifies that a merchant repository is actually ready for AgentShelf use after initialization. It checks the local config, GitHub workflow, exported Codex skill, onboarding docs, selected snapshot, product-readiness scan, and GEO task generation in one command. See [docs/MERCHANT_ADOPTION.md](docs/MERCHANT_ADOPTION.md) and [docs/PLATFORM_ADOPTION.md](docs/PLATFORM_ADOPTION.md).
 
-`release-check` validates release readiness before a public tag: version consistency, changelog coverage, README production posture, GitHub Action metadata, pinned workflow examples, release notes, skill assets, and merchant onboarding templates.
+`public-audit` checks the source checkout for public open-source release hygiene: required adoption docs, Codex skill guidance, conservative non-claims, private local path leaks, unfinished work markers, and generated-file hygiene. Run it before release tags or Marketplace-facing copy. See [docs/PUBLIC_RELEASE_AUDIT.md](docs/PUBLIC_RELEASE_AUDIT.md).
+
+`release-check` validates release readiness before a public tag: version consistency, changelog coverage, README production posture, GitHub Action metadata, pinned workflow examples, release notes, public-audit status, skill assets, and merchant onboarding templates.
 
 `release-notes` generates a conservative GitHub release draft from the matching `CHANGELOG.md` section. It includes install/adoption commands, recommended verification, production posture, and explicit non-claims so maintainers do not accidentally publish Marketplace-style copy that overstates external-agent ranking lift. See [docs/RELEASING.md](docs/RELEASING.md).
 
@@ -513,7 +516,7 @@ Recommended first rollout:
 1. Start with `format: markdown` and `min-score: "70"` so humans can inspect failures.
 2. Upload `agentshelf-report.md` as an artifact on every run.
 3. Add `agentshelf agent-tasks` or the full artifact workflow when you want Codex-style agents to fix pages automatically.
-4. Pin a release tag such as `wureny/AgentShelf@v0.35.0` once the release exists. Use `@main` only while testing this repository.
+4. Pin a release tag such as `wureny/AgentShelf@v0.36.0` once the release exists. Use `@main` only while testing this repository.
 
 ```yaml
 name: AgentShelf
@@ -532,7 +535,7 @@ jobs:
           python-version: "3.11"
 
       - name: Audit product-page snapshots
-        uses: wureny/AgentShelf@v0.35.0
+        uses: wureny/AgentShelf@v0.36.0
         with:
           path: "snapshots/**/*.html"
           min-score: "70"
@@ -577,7 +580,7 @@ Use SARIF when you want GitHub code scanning annotations:
 
 ```yaml
 - name: Audit product-page snapshots
-  uses: wureny/AgentShelf@v0.35.0
+  uses: wureny/AgentShelf@v0.36.0
   with:
     path: "snapshots/**/*.html"
     min-score: "85"

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.36.0
+- Added `agentshelf public-audit` to validate public open-source release hygiene before tags, release drafts, or Marketplace-facing copy.
+- Added `docs/PUBLIC_RELEASE_AUDIT.md` with maintainer checks for public adoption paths, conservative non-claims, private path leaks, release notes, and Marketplace readiness.
+- Cleaned `STATUS.md` into a public-facing release posture summary instead of an internal automation log.
+- Extended `release-check` so public-audit failures block release readiness.
+
 ## 0.35.0
 - Added regression coverage proving `init-merchant-repo`, `render-fixtures`, and `adoption-check` work together on a headless/Next.js-style catalog export.
 - Expanded platform adoption guidance for app-state payloads, typed metadata helpers, JSON-LD builders, and Codex remediation in headless storefront repositories.

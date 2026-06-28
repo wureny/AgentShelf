@@ -8,6 +8,7 @@ import html
 import json
 import re
 import shutil
+import subprocess
 import sys
 from importlib import resources
 from datetime import datetime, timezone
@@ -25,7 +26,7 @@ from agentshelf.geo import GeoSkillConfig, build_geo_audit, render_geo_json, ren
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.35 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.36 (+https://github.com/wureny/AgentShelf)"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -58,11 +59,48 @@ RELEASE_REQUIRED_FILES = (
     "README.md",
     "action.yml",
     "docs/workflows/agentshelf-pr-gate.yml",
+    "docs/PUBLIC_RELEASE_AUDIT.md",
     "docs/MERCHANT_ADOPTION.md",
     "docs/PLATFORM_ADOPTION.md",
     "skills/agentshelf-geo/SKILL.md",
     "skills/agentshelf-geo/references/agent-loop-example.md",
     "src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml",
+)
+PUBLIC_AUDIT_REQUIRED_FILES = (
+    "README.md",
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CODE_OF_CONDUCT.md",
+    "CHANGELOG.md",
+    "STATUS.md",
+    "pyproject.toml",
+    "action.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/agentshelf-artifacts.yml",
+    "docs/ARCHITECTURE.md",
+    "docs/RELEASING.md",
+    "docs/PUBLIC_RELEASE_AUDIT.md",
+    "docs/MERCHANT_ADOPTION.md",
+    "docs/PLATFORM_ADOPTION.md",
+    "docs/AGENT_IMPLEMENTATION_LOOP.md",
+    "docs/DOGFOODING.md",
+    "docs/workflows/agentshelf-pr-gate.yml",
+    "skills/agentshelf-geo/SKILL.md",
+    "skills/agentshelf-geo/agents/openai.yaml",
+    "skills/agentshelf-geo/references/task-contract.md",
+    "skills/agentshelf-geo/references/agent-loop-example.md",
+    "schemas/agentshelf.geo_audit.v0.schema.json",
+    "schemas/agentshelf.geo_task.v0.schema.json",
+)
+PUBLIC_AUDIT_TEXT_FILES = tuple(
+    dict.fromkeys(
+        PUBLIC_AUDIT_REQUIRED_FILES
+        + (
+            "src/agentshelf/templates/merchant-repo/docs/agentshelf-onboarding.md",
+            "src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml",
+        )
+    )
 )
 
 
@@ -445,6 +483,253 @@ def _extract_project_version(pyproject_text: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _public_audit_issue(issue_id: str, message: str, *, path: str | None = None) -> dict:
+    issue = {"id": issue_id, "message": message}
+    if path:
+        issue["path"] = path
+    return issue
+
+
+def _read_public_audit_file(root: Path, relative: str, issues: list[dict]) -> str:
+    path = root / relative
+    if not path.exists():
+        issues.append(_public_audit_issue("missing_required_file", f"Missing required public file: {relative}", path=relative))
+        return ""
+    if not path.is_file():
+        issues.append(_public_audit_issue("not_a_file", f"Expected a file but found another path type: {relative}", path=relative))
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+def _public_audit_texts(root: Path, issues: list[dict]) -> dict[str, str]:
+    texts: dict[str, str] = {}
+    for relative in PUBLIC_AUDIT_TEXT_FILES:
+        texts[relative] = _read_public_audit_file(root, relative, issues)
+    return texts
+
+
+def _public_audit_check_snippets(texts: dict[str, str], issues: list[dict]) -> None:
+    required_snippets = {
+        "README.md": (
+            "Production Posture",
+            "Who It Helps",
+            "agentshelf geo-run",
+            "agentshelf export-skill",
+            "agentshelf init-merchant-repo",
+            "agentshelf adoption-check",
+            "agentshelf public-audit",
+            "does not claim live visibility lift",
+            "Do not fabricate",
+        ),
+        "docs/PUBLIC_RELEASE_AUDIT.md": (
+            "agentshelf public-audit",
+            "agentshelf release-check",
+            "agentshelf release-notes",
+            "agentshelf adoption-check",
+            "Marketplace",
+            "Do not claim",
+        ),
+        "docs/RELEASING.md": (
+            "agentshelf public-audit",
+            "agentshelf release-check",
+            "agentshelf release-notes",
+            "Marketplace",
+            "conservative",
+        ),
+        "docs/MERCHANT_ADOPTION.md": (
+            "agentshelf init-merchant-repo",
+            "agentshelf adoption-check",
+            "$agentshelf-geo",
+            "Production Boundary",
+        ),
+        "docs/PLATFORM_ADOPTION.md": (
+            "Shopify Or Liquid",
+            "Headless Or Next.js",
+            "agentshelf render-fixtures",
+            "agentshelf adoption-check",
+        ),
+        "skills/agentshelf-geo/SKILL.md": (
+            "agentshelf geo-run",
+            "agentshelf geo-tasks",
+            "agentshelf validate-contract",
+            "Do not fabricate reviews",
+        ),
+        "STATUS.md": (
+            "Current Release Posture",
+            "Verified Workflows",
+            "Next Best Task",
+        ),
+    }
+    for relative, snippets in required_snippets.items():
+        text = texts.get(relative, "")
+        for snippet in snippets:
+            if snippet not in text:
+                issues.append(
+                    _public_audit_issue(
+                        "missing_public_snippet",
+                        f"{relative} is missing public-readiness snippet: {snippet}",
+                        path=relative,
+                    )
+                )
+
+
+def _public_audit_scan_private_context(texts: dict[str, str], issues: list[dict]) -> None:
+    forbidden_patterns = (
+        ("private_user_path", re.compile(r"/Users/")),
+        ("private_tmp_path", re.compile(r"/private/tmp")),
+        ("automation_workspace_leak", re.compile(r"intent-to-prompt|Codex/2026")),
+        ("local_username_leak", re.compile(r"\bwurenyu\b")),
+        ("todo_marker", re.compile(r"\b(?:TODO|FIXME)\b")),
+    )
+    for relative, text in texts.items():
+        for issue_id, pattern in forbidden_patterns:
+            match = pattern.search(text)
+            if match:
+                issues.append(
+                    _public_audit_issue(
+                        issue_id,
+                        f"{relative} contains release-facing private or unfinished marker `{match.group(0)}`.",
+                        path=relative,
+                    )
+                )
+                break
+
+
+def _public_audit_scan_generated_files(root: Path, warnings: list[dict]) -> None:
+    generated_paths = (
+        "src/agentshelf.egg-info",
+        "tests/__pycache__",
+        "src/agentshelf/__pycache__",
+        ".venv",
+    )
+    for relative in generated_paths:
+        path = root / relative
+        if path.exists():
+            warnings.append(
+                _public_audit_issue(
+                    "generated_file_present",
+                    f"Generated local path exists and should remain untracked: {relative}",
+                    path=relative,
+                )
+            )
+
+
+def _public_audit_scan_git_tracked_generated(root: Path, warnings: list[dict]) -> None:
+    git_dir = root / ".git"
+    if not git_dir.exists():
+        warnings.append(_public_audit_issue("git_metadata_unavailable", "No .git directory found; tracked generated-file check was skipped."))
+        return
+    try:
+        completed = subprocess.run(
+            [
+                "git",
+                "ls-files",
+                "src/agentshelf.egg-info/*",
+                "tests/__pycache__/*",
+                "src/**/__pycache__/*",
+                ".venv/*",
+            ],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        warnings.append(_public_audit_issue("git_unavailable", f"Could not run git tracked-file check: {exc}."))
+        return
+    if completed.returncode != 0:
+        warnings.append(_public_audit_issue("git_tracked_check_failed", completed.stderr.strip() or "git ls-files failed."))
+        return
+    tracked = [line for line in completed.stdout.splitlines() if line.strip()]
+    if tracked:
+        warnings.append(
+            _public_audit_issue(
+                "generated_file_tracked",
+                "Generated files appear to be tracked and should be removed from git: " + ", ".join(tracked[:8]),
+            )
+        )
+
+
+def _build_public_audit(root: Path) -> dict:
+    root = root.resolve()
+    issues: list[dict] = []
+    warnings: list[dict] = []
+    texts = _public_audit_texts(root, issues)
+
+    _public_audit_check_snippets(texts, issues)
+    _public_audit_scan_private_context(texts, issues)
+    _public_audit_scan_generated_files(root, warnings)
+    _public_audit_scan_git_tracked_generated(root, warnings)
+
+    merchant_workflow = texts.get("src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml", "")
+    if "git+https://github.com/wureny/AgentShelf.git@main" in merchant_workflow:
+        warnings.append(
+            _public_audit_issue(
+                "temporary_main_install",
+                "Merchant initializer workflow installs from @main until a reviewed release tag exists.",
+                path="src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml",
+            )
+        )
+    readme = texts.get("README.md", "")
+    if "external shopping-agent ranking lift" not in readme and "external-agent ranking" not in readme:
+        warnings.append(
+            _public_audit_issue(
+                "non_claim_copy_not_obvious",
+                "README should explicitly avoid claiming external-agent ranking or conversion lift.",
+                path="README.md",
+            )
+        )
+
+    next_steps = [
+        "Run `agentshelf release-check --expected-version <version>` after public-audit is clean.",
+        "Generate release notes with `agentshelf release-notes --version <version>` and review them before tagging.",
+        "Create a GitHub tag and release before replacing temporary @main install references or publishing Marketplace copy.",
+    ]
+    return {
+        "contract": "agentshelf.public_audit.v0",
+        "root": str(root),
+        "valid": not issues,
+        "summary": {
+            "checked_files": len(PUBLIC_AUDIT_TEXT_FILES),
+            "issues": len(issues),
+            "warnings": len(warnings),
+        },
+        "checked_files": list(PUBLIC_AUDIT_TEXT_FILES),
+        "issues": issues,
+        "warnings": warnings,
+        "next_steps": next_steps,
+    }
+
+
+def _render_public_audit(payload: dict, output_format: str) -> str:
+    if output_format == "json":
+        return json.dumps(payload, indent=2) + "\n"
+    status = "ready" if payload["valid"] else "not ready"
+    summary = payload["summary"]
+    lines = [
+        "# AgentShelf Public Audit",
+        "",
+        f"- Status: {status}",
+        f"- Root: {payload['root']}",
+        f"- Checked files: {summary['checked_files']}",
+        f"- Issues: {summary['issues']}",
+        f"- Warnings: {summary['warnings']}",
+    ]
+    if payload["issues"]:
+        lines.extend(["", "## Issues"])
+        for issue in payload["issues"]:
+            path = f" `{issue['path']}`" if issue.get("path") else ""
+            lines.append(f"- {issue['id']}:{path} {issue['message']}")
+    if payload["warnings"]:
+        lines.extend(["", "## Warnings"])
+        for warning in payload["warnings"]:
+            path = f" `{warning['path']}`" if warning.get("path") else ""
+            lines.append(f"- {warning['id']}:{path} {warning['message']}")
+    lines.extend(["", "## Next Steps"])
+    lines.extend(f"- {step}" for step in payload["next_steps"])
+    return "\n".join(lines) + "\n"
+
+
 def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
     issues: list[str] = []
     warnings: list[str] = []
@@ -472,6 +757,7 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
     merchant_adoption = read("docs/MERCHANT_ADOPTION.md")
     platform_adoption = read("docs/PLATFORM_ADOPTION.md")
     merchant_workflow = read("src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml")
+    public_audit_docs = read("docs/PUBLIC_RELEASE_AUDIT.md")
 
     version = _extract_project_version(pyproject_text)
     if not version:
@@ -495,12 +781,19 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
                 "Production posture",
                 "agentshelf init-merchant-repo",
                 "agentshelf adoption-check",
+                "agentshelf public-audit",
                 "agentshelf release-check",
                 "Before publishing",
             )
             for snippet in required_release_notes:
                 if snippet not in release_notes["markdown"]:
                     issues.append(f"Generated release notes missing snippet: {snippet}")
+        public_audit = _build_public_audit(root)
+        if not public_audit["valid"]:
+            issues.append(f"Public audit failed with {len(public_audit['issues'])} issue(s). Run `agentshelf public-audit --format markdown`.")
+        for warning in public_audit["warnings"]:
+            if warning["id"] not in {"generated_file_present", "temporary_main_install"}:
+                warnings.append(warning["message"])
         pinned_action = f"wureny/AgentShelf@v{version}"
         if pinned_action not in readme:
             issues.append(f"README.md is missing pinned Action usage `{pinned_action}`.")
@@ -540,6 +833,11 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
     for snippet in required_platform_adoption:
         if snippet not in platform_adoption:
             issues.append(f"docs/PLATFORM_ADOPTION.md missing snippet: {snippet}")
+
+    required_public_audit = ("agentshelf public-audit", "agentshelf release-check", "Marketplace", "Do not claim")
+    for snippet in required_public_audit:
+        if snippet not in public_audit_docs:
+            issues.append(f"docs/PUBLIC_RELEASE_AUDIT.md missing snippet: {snippet}")
 
     required_template = ("agentshelf geo-run", "agentshelf agent-tasks", "github.event.inputs.product_page", "\\$agentshelf-geo")
     for snippet in required_template:
@@ -637,6 +935,7 @@ def _build_release_notes(root: Path, *, version: str | None = None) -> dict:
         f"- For GitHub Actions after the tag exists: `uses: wureny/AgentShelf@v{selected_version}`.",
         "",
         "## Recommended verification",
+        "- `agentshelf public-audit .`",
         f"- `agentshelf release-check --expected-version {selected_version}`",
         "- `PYTHONPATH=src python3 -m unittest discover -s tests`",
         "- `python3 -m pip install -e . --no-build-isolation`",
@@ -666,6 +965,7 @@ def _build_release_notes(root: Path, *, version: str | None = None) -> dict:
         "valid": True,
         "issues": [],
         "next_steps": [
+            "Run `agentshelf public-audit .`.",
             f"Run `agentshelf release-check --expected-version {selected_version}`.",
             "Review the generated Markdown before drafting a GitHub release.",
             f"Create tag `v{selected_version}` only after tests and release notes are approved.",
@@ -3967,6 +4267,11 @@ def build_parser() -> argparse.ArgumentParser:
     release_check.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
     release_check.add_argument("--output", type=Path, help="Optional output path.")
 
+    public_audit = subcommands.add_parser("public-audit", help="Audit this source checkout for public open-source release hygiene.")
+    public_audit.add_argument("root", nargs="?", type=Path, default=Path("."), help="AgentShelf source checkout root. Defaults to the current directory.")
+    public_audit.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
+    public_audit.add_argument("--output", type=Path, help="Optional output path.")
+
     release_notes = subcommands.add_parser("release-notes", help="Generate conservative GitHub release draft notes from CHANGELOG.md.")
     release_notes.add_argument("--root", type=Path, default=Path("."), help="AgentShelf source checkout root. Defaults to the current directory.")
     release_notes.add_argument("--version", help="Release version to extract. Defaults to pyproject.toml version.")
@@ -4346,6 +4651,10 @@ def main() -> int:
         elif args.command == "release-check":
             payload = _release_check(args.root, expected_version=args.expected_version)
             rendered = _render_release_check(payload, args.format)
+            exit_code = 0 if payload["valid"] else 1
+        elif args.command == "public-audit":
+            payload = _build_public_audit(args.root)
+            rendered = _render_public_audit(payload, args.format)
             exit_code = 0 if payload["valid"] else 1
         elif args.command == "release-notes":
             payload = _build_release_notes(args.root, version=args.version)

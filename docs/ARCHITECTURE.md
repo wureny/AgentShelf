@@ -23,6 +23,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 18. Use `geo-run` to produce a complete dogfood artifact bundle for coding agents: GEO report, validated task queue, local scan evidence, and summary.
 19. Export the bundled `agentshelf-geo` skill with `export-skill` when another repository should carry the same coding-agent workflow.
 20. Use `dogfood` for public real-page checks where derived artifacts are useful but third-party raw HTML should not be persisted.
+21. Run `public-audit` before release tags or Marketplace copy to catch missing adoption paths, private local context, and overstated production claims.
 
 ## Components
 - `src/agentshelf/engine.py`: parser, heuristic scoring engine, JSON-LD extraction, and renderers
@@ -42,6 +43,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - `benchmarks/expected/`: expected benchmark bands, blockers, and agent tasks
 - `docs/PROFILE_BENCHMARKS.md`: profile-specific benchmark contract for Shopify, WooCommerce, and headless fixtures
 - `docs/PLATFORM_ADOPTION.md`: Shopify/Liquid and headless/Next.js adoption path using generated snapshots and `adoption-check`
+- `docs/PUBLIC_RELEASE_AUDIT.md`: public release hygiene checklist for maintainers before tags, GitHub releases, or Marketplace publication
 
 ## Design Choices
 - Standard-library raw snapshot mode keeps the base demo runnable without browser installs.
@@ -83,6 +85,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - `adoption-check` is the post-install health check for merchant repositories. It verifies the initialized surfaces and runs scan plus GEO task generation on a selected snapshot before teams enforce CI gates.
 - `release-check` keeps release-facing surfaces aligned before a tag is created: package version, changelog, README, Action metadata, pinned workflow examples, generated release notes, skill assets, and merchant templates.
 - `release-notes` turns the matching changelog section into a conservative GitHub release draft with install guidance, verification commands, production posture, and non-claims. It intentionally generates a review artifact instead of publishing a tag or Marketplace release.
+- `public-audit` checks the repository as an open-source product surface, not only as a package: required docs, coding-agent skill distribution, merchant adoption path, private path leaks, unfinished work markers, and conservative non-claims.
 
 ## Extension Path
 - Add stricter JSON Schema validation if AgentShelf later accepts an optional `jsonschema` dependency or a build-time validation extra.

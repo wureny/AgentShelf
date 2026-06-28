@@ -1,191 +1,51 @@
 # Status
 
-- Date: 2026-06-28
+- Version: 0.36.0
 - Phase: maintain_or_extend
-- Project path: `/Users/wurenyu/Documents/Codex/2026-06-06/intent-to-prompt-users-wurenyu-codex/projects/agentic-commerce-readiness-scanner`
-- Canonical requested root: `/Users/wurenyu/workspace`
+- Current focus: public release readiness for a coding-agent-first AgentShelf workflow
 - Current blocker: none
 
-## Current Milestone
-Production-ready open-source release completed; current focus is upgrading AgentShelf into a GEO Skill v0 for AI-readable commerce while preserving the existing CI scanner and Action.
+## Current Release Posture
 
-## Completed This Run
-- Rebranded the public project to `AgentShelf`.
-- Packaged it as an installable Python project with CLI command `agentshelf`.
-- Added batch scanning, JSONL output, score thresholds, fail bands, top fixes, evidence, and JSON-LD Product parsing.
-- Added GitHub Action metadata, CI workflow, MIT license, contribution docs, security notes, changelog, and git ignore rules.
-- Added `agent-audit` with a stable JSON contract for coding agents.
-- Added raw HTML `snapshot` command for URL capture without browser dependencies.
-- Added dimension scoring, agent-specific checks, contradiction detection, confidence levels, and benchmark fixtures.
-- Added optional Playwright-backed rendered snapshots behind `agentshelf[render]`.
-- Updated docs and package metadata for `agentshelf snapshot <url> --rendered`.
-- Added `.agentshelf.json` config support for repeatable local and CI gates.
-- Added SARIF output for GitHub code scanning and production-quality CI annotations.
-- Added `agent-tasks` JSONL output so coding agents can remediate batches.
-- Added `snapshot --url-file --output-dir --manifest` for merchant URL list capture workflows.
-- Extended the GitHub Action inputs for config files, SARIF output, and fail-band gates.
-- Added `compare` for raw-vs-rendered snapshot analysis with score deltas, unlocked signals, regressions, and agent recommendations.
-- Added `discover` for robots.txt sitemap hints and explicit sitemap ingestion with include/exclude filters and limits.
-- Added `diff` for comparing JSON/JSONL scan artifacts across scheduled audit runs, including regressions, improvements, blocker changes, catalog changes, and agent next actions.
-- Added `audit-run` for local scheduled audits with safe previous/current result rotation, timestamped archives, generated diff reports, and optional agent task output.
-- Added embedded commerce signal extraction for Shopify/theme-style product JSON, variants, selling plan groups, metafield-like keys, and policy snippets.
-- Upgraded price, inventory, variant readiness, offer completeness, specs, policy, agent answerability, and merchant-feed checks to use storefront commerce evidence.
-- Added storefront adapter profiles (`auto`, `generic`, `shopify`, `woocommerce`, `headless`) with CLI, config, GitHub Action, JSON, and Markdown support.
-- Added profile-specific benchmark fixtures and expected outputs for Shopify, WooCommerce, and headless storefront exports.
-- Added `docs/PROFILE_BENCHMARKS.md` to document the adapter benchmark contract.
-- Added applicable profile-specific rule packs for return policy schema, subscription terms, bundle component clarity, and regional shipping promises.
-- Added profile-rule agent tasks: `add_return_policy_schema`, `complete_subscription_terms`, `clarify_bundle_components`, and `add_regional_shipping_matrix`.
-- Added a production-style benchmark fixture for subscription bundle gaps and updated benchmark expectations for stricter agent-readiness scoring.
-- Improved JSON-LD schema extraction so nested Offer return policy metadata is detected.
-- Added `agentshelf calibrate` to summarize real-page calibration hotspots from HTML snapshots or scan JSON/JSONL artifacts.
-- Added calibration categories for rendered capture, contradictions, profile rules, policy schema, offer extraction, content gaps, and low-confidence snapshots.
-- Added anonymized fixture export for local HTML candidates plus metadata sidecars.
-- Added `agentshelf evaluate` to compare scan results against human calibration labels for checks, blocking issues, agent tasks, categories, and warnings.
-- Added `examples/calibration-labels.json` as a true-positive and false-positive label contract example.
-- Added `agentshelf draft-labels` to convert calibration JSON reports into editable draft label contracts.
-- Added support for `needs_review` draft labels; `evaluate` skips them until they are confirmed.
-- Added `examples/draft-calibration-labels.json`.
-- Added `agentshelf dashboard` to render calibration JSON as standalone HTML or Markdown review dashboards.
-- Dashboard output summarizes page priority, score, band, confidence, adapter profile, review categories, blockers, tasks, and next actions.
-- Added `.github/workflows/agentshelf-artifacts.yml` to produce SARIF, JSONL scan results, agent task queues, calibration reports, dashboards, draft labels, and evaluation notes in one CI run.
-- Added workflow regression tests so the GitHub Actions artifact example keeps covering code scanning, review artifacts, and delayed score-gate enforcement.
-- Added `agentshelf render-fixtures` to turn product JSON exports into deterministic Shopify, WooCommerce, and headless HTML snapshots.
-- Added `examples/storefront-products.json` as a realistic catalog export shape for merchants and coding agents.
-- Added tests proving generated platform snapshots are scannable with matching adapter profiles and pass an `85` score gate.
-- Added `render-fixtures --input-format auto|agentshelf|shopify|woocommerce|headless`.
-- Added native import adapters for Shopify product JSON, WooCommerce product CSV, and generic headless catalog JSON.
-- Added native export examples: `examples/shopify-products.json`, `examples/woocommerce-products.csv`, and `examples/headless-catalog.json`.
-- Added import validation in `render-fixtures` manifests for missing price, currency, availability, variants, shipping, returns, specs, and variant option context.
-- Added `render-fixtures --fail-on-warnings` so production CI can fail before fallback-generated snapshots create overconfident audit results.
-- Added `render-fixtures --tasks-output` so validation warnings can be emitted as JSONL remediation tasks for coding agents.
-- Added platform-aware import remediation task guidance for Shopify JSON, WooCommerce CSV, headless catalog JSON, and normalized AgentShelf exports.
-- Extended `.github/workflows/agentshelf-artifacts.yml` so CI can optionally render fixtures from catalog exports, upload `import-tasks.jsonl`, scan generated snapshots, and defer import/score gates until after artifact upload.
-- Improved `action.yml` Marketplace-facing metadata, input descriptions, branding, and GitHub Step Summary output.
-- Added a copyable PR gate workflow at `docs/workflows/agentshelf-pr-gate.yml`.
-- Updated README with production posture, recommended Action rollout, SARIF example, failure-output example, and Codex/coding-agent remediation guidance.
-- Added stderr failure summaries for `scan`, `agent-audit --fail-on-blockers`, and `audit-run` gates while preserving JSON/SARIF machine output.
-- Added tests for Action metadata, copyable workflow, and CLI gate failure summaries.
-- Added `agentshelf geo-audit` as a deterministic GEO Skill v0 for AI-readable commerce.
-- Added `src/agentshelf/geo.py` with GEO dataclasses, page extraction, crawlability/indexability rules, structured-data rules, content extractability rules, entity consistency rules, commerce attribute rules, trust/proof rules, AI intent coverage rules, prompt panel generation, opportunity generation, patch suggestions, and JSON/Markdown report rendering.
-- Added URL-mode GEO metadata checks for robots.txt, sitemap.xml, and llms.txt without introducing arbitrary crawling or external platform APIs.
-- Added `agentshelf geo-tasks` to convert GEO JSON reports into JSONL implementation tasks for Codex-style coding agents.
-- Added repo-local `skills/agentshelf-geo` with the audit-task-edit-verify workflow, task contract reference, and OpenAI agent metadata.
-- Added `schemas/agentshelf.geo_audit.v0.schema.json` and `schemas/agentshelf.geo_task.v0.schema.json` for published agent-facing contract references.
-- Added `agentshelf validate-contract` so coding agents and CI can validate GEO JSON/JSONL artifacts before implementation.
-- Added `agentshelf geo-run` as a one-command dogfood workflow that writes GEO reports, validated contracts, task queues, optional local scan evidence, and a summary artifact.
-- Added `agentshelf skill-info` and `agentshelf export-skill` so installed AgentShelf packages can check and export the bundled `agentshelf-geo` skill into another coding-agent repo.
-- Bundled the `agentshelf-geo` skill assets inside the Python package and added drift tests against the repo-local skill copy.
-- Added `agentshelf dogfood` for safe real-URL dogfooding that writes derived GEO, task, validation, scan, notes, and summary artifacts without persisting third-party raw HTML.
-- Added `docs/DOGFOODING.md` to document the no-raw-third-party-HTML policy and the path from real-page findings to synthetic fixtures or calibration labels.
-- Tightened subscription-intent detection and added `newsletter_subscribe_single_sku_page.html` to prevent newsletter/restock copy from triggering purchase-subscription remediation tasks.
-- Tightened return-policy schema applicability and added `return_policy_link_only_page.html` so generic footer return links do not trigger noisy `add_return_policy_schema` tasks.
-- Added `examples/codex_agent_loop_after.html` and `docs/AGENT_IMPLEMENTATION_LOOP.md` to make the Codex-style audit-task-edit-verify loop executable and reviewable.
-- Normalized equivalent visible/schema prices so `USD 128` and `128.00` do not create false price contradictions in agent-facing reports.
-- Tightened review detection so return-policy review copy does not inflate social-proof scores without verified reviews or ratings.
-- Added `agentshelf init-merchant-repo` for conflict-safe merchant repository onboarding with workflow, config, demo snapshot, docs, and exported Codex skill.
-- Added packaged merchant-repo template assets under `src/agentshelf/templates/merchant-repo/`.
-- Added tests proving initialized merchant repos can scan the demo snapshot and carry the exported `agentshelf-geo` skill.
-- Added `agentshelf release-check` for pre-tag validation of version consistency, release-facing docs, Action metadata, generated release notes, skill assets, and onboarding templates.
-- Added `agentshelf release-notes` for conservative Markdown/JSON GitHub release drafts that include changelog items, installation/adoption guidance, verification commands, production posture, and explicit non-claims.
-- Added `agentshelf adoption-check` so initialized merchant repositories can verify config, workflow, exported Codex skill, onboarding docs, snapshot scan score, and GEO task generation before enforcing CI gates.
-- Added `docs/MERCHANT_ADOPTION.md` to document the merchant repo adoption flow from initialization through Codex remediation and production boundaries.
-- Added `docs/PLATFORM_ADOPTION.md` for Shopify/Liquid and headless/Next.js adoption paths using generated product snapshots and `adoption-check`.
-- Added regression coverage proving `init-merchant-repo`, `render-fixtures`, and `adoption-check` work together on a Shopify export inside a merchant-style repository.
-- Added regression coverage proving `init-merchant-repo`, `render-fixtures`, and `adoption-check` work together on a headless/Next.js-style catalog export.
-- Expanded platform adoption guidance for app-state payloads, typed metadata helpers, JSON-LD builders, and Codex remediation in headless storefront repositories.
-- Added `examples/artist_store_product.html` as an artist-store/creator-commerce fixture for handmade/custom gift use cases.
-- Added `tests/test_geo.py` covering the GEO JSON contract, Markdown sections, prompt panel coverage, crawler blocker detection, Product schema patch suggestions, and `--format both` output.
-- Added workflow regression coverage for the bundled `agentshelf-geo` skill and `agentshelf.geo_task.v0` contract.
-- Updated README, architecture docs, release docs, changelog, tests, and package metadata for version `0.35.0`.
+AgentShelf is suitable for production dogfooding as a local CLI, GitHub Action, generated-snapshot audit, and Codex-style remediation workflow. It is not yet a hosted crawler, Shopify app, checkout automation system, or empirically proven external-agent ranking tool.
 
-## Verification
-- `PYTHONPATH=src python3 -m unittest discover -s tests`
-- `python3 -m unittest discover -s tests`
-- `python3 -m pip install -e .`
-- `agentshelf scan examples/sample_product_page.html --format markdown --output outputs/sample_report.md`
-- `agentshelf scan examples/weak_product_page.html --min-score 70`
-- `agentshelf scan examples --batch --format jsonl`
-- `agentshelf agent-audit examples/weak_product_page.html --contract v1`
-- `agentshelf scan benchmarks/fixtures --batch --format jsonl`
-- `python3 -m unittest tests.test_cli.CliTests.test_rendered_snapshot_uses_playwright_when_available`
-- `agentshelf scan examples/weak_product_page.html --format sarif`
-- `agentshelf agent-tasks examples --batch`
-- `agentshelf scan examples/weak_product_page.html --config examples/agentshelf.config.json`
-- `python3 -m unittest tests.test_cli.CliTests.test_snapshot_url_file_writes_manifest tests.test_cli.CliTests.test_snapshot_writes_html_from_local_server`
-- `agentshelf compare examples/js_product_raw.html examples/js_product_rendered.html --format json`
-- `agentshelf discover --sitemap <local test server>/sitemap.xml`
-- `agentshelf diff previous-results.jsonl current-results.jsonl --output audit-diff.md`
-- `agentshelf audit-run "snapshots/*.html" --batch --history-dir .agentshelf/runs --tasks-output agentshelf-tasks.jsonl`
-- `agentshelf scan examples/sample_product_page.html --format markdown`
-- `agentshelf scan examples/shopify_variant_product.html --profile shopify --format json`
-- `python3 -m unittest tests.test_engine.BenchmarkTests`
-- `.venv/bin/python -m unittest tests.test_engine`
-- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_calibrate_from_html_batch_exports_anonymized_fixtures tests.test_cli.CliTests.test_calibrate_from_scan_results_jsonl`
-- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_evaluate_calibration_labels_passes_expected_findings tests.test_cli.CliTests.test_evaluate_calibration_labels_fails_false_positive_regression`
-- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_draft_labels_from_calibration_report tests.test_cli.CliTests.test_evaluate_skips_draft_labels`
-- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_dashboard_renders_html_from_calibration_report tests.test_cli.CliTests.test_dashboard_renders_markdown_from_calibration_report`
-- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/agentshelf-artifacts.yml"); puts "workflow-yaml-ok"'`
-- `.venv/bin/python -m unittest tests.test_workflows`
-- `.venv/bin/agentshelf scan "benchmarks/fixtures/*.html" --batch --format sarif --output /tmp/agentshelf-artifacts/agentshelf-results.sarif`
-- `.venv/bin/agentshelf scan "benchmarks/fixtures/*.html" --batch --format jsonl --output /tmp/agentshelf-artifacts/agentshelf-results.jsonl`
-- `.venv/bin/agentshelf agent-tasks "benchmarks/fixtures/*.html" --batch --output /tmp/agentshelf-artifacts/agentshelf-tasks.jsonl`
-- `.venv/bin/agentshelf calibrate /tmp/agentshelf-artifacts/agentshelf-results.jsonl --from-results --format json --output /tmp/agentshelf-artifacts/calibration-report.json`
-- `.venv/bin/agentshelf dashboard /tmp/agentshelf-artifacts/calibration-report.json --format html --output /tmp/agentshelf-artifacts/calibration-dashboard.html`
-- `.venv/bin/agentshelf draft-labels /tmp/agentshelf-artifacts/calibration-report.json --include-tasks --output /tmp/agentshelf-artifacts/draft-calibration-labels.json`
-- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_render_fixtures_writes_platform_snapshots_and_manifest tests.test_cli.CliTests.test_render_fixtures_outputs_are_scannable_by_profile tests.test_cli.CliTests.test_render_fixtures_rejects_missing_title`
-- `.venv/bin/agentshelf render-fixtures examples/storefront-products.json --platform all --output-dir /tmp/agentshelf-generated-snapshots --manifest /tmp/agentshelf-generated-snapshots/manifest.json --format json`
-- `.venv/bin/agentshelf scan /tmp/agentshelf-generated-snapshots --batch --format jsonl --min-score 85`
-- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_render_fixtures_imports_native_shopify_json tests.test_cli.CliTests.test_render_fixtures_imports_native_woocommerce_csv tests.test_cli.CliTests.test_render_fixtures_imports_native_headless_catalog_json tests.test_cli.CliTests.test_render_fixtures_auto_detects_woocommerce_csv`
-- `.venv/bin/agentshelf render-fixtures examples/shopify-products.json --input-format shopify --platform shopify --output-dir /tmp/agentshelf-native/shopify --format json`
-- `.venv/bin/agentshelf render-fixtures examples/woocommerce-products.csv --input-format woocommerce --platform woocommerce --output-dir /tmp/agentshelf-native/woocommerce --format json`
-- `.venv/bin/agentshelf render-fixtures examples/headless-catalog.json --input-format headless --platform headless --output-dir /tmp/agentshelf-native/headless --format json`
-- `.venv/bin/agentshelf scan /tmp/agentshelf-native --batch --format jsonl --min-score 85`
-- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_render_fixtures_manifest_includes_validation_status tests.test_cli.CliTests.test_render_fixtures_warns_for_missing_import_fields tests.test_cli.CliTests.test_render_fixtures_fail_on_warnings_returns_nonzero`
-- `.venv/bin/agentshelf render-fixtures /tmp/agentshelf-thin-products.json --input-format agentshelf --platform shopify --output-dir /tmp/agentshelf-validation --format json --fail-on-warnings`
-- `.venv/bin/python -m unittest tests.test_cli.CliTests.test_render_fixtures_writes_import_remediation_tasks tests.test_cli.CliTests.test_render_fixtures_clean_import_writes_empty_task_file`
-- `.venv/bin/agentshelf render-fixtures /tmp/agentshelf-thin-products.json --input-format agentshelf --platform shopify --output-dir /tmp/agentshelf-import-tasks --tasks-output /tmp/agentshelf-import-tasks/tasks.jsonl --format json`
-- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/agentshelf-artifacts.yml"); puts "workflow-yaml-ok"'`
-- `.venv/bin/python -m unittest tests.test_workflows`
-- `/opt/homebrew/bin/python3.11 -m unittest discover -s tests`
-- `ruby -e 'require "yaml"; YAML.load_file("action.yml"); YAML.load_file("docs/workflows/agentshelf-pr-gate.yml"); puts "yaml ok"'`
-- `git diff --check`
-- `PYTHONPATH=src /opt/homebrew/bin/python3.11 -m agentshelf.cli scan examples/weak_product_page.html --format json --output /private/tmp/agentshelf-weak.json --min-score 70`
-- `/opt/homebrew/bin/python3.11 -m unittest tests.test_geo`
-- `/opt/homebrew/bin/python3.11 -m unittest tests.test_geo tests.test_workflows`
-- `/opt/homebrew/bin/python3.11 -m unittest discover -s tests`
-- `/opt/homebrew/bin/python3.11 -m py_compile src/agentshelf/geo.py src/agentshelf/cli.py`
-- `/opt/homebrew/bin/python3.11 -m py_compile src/agentshelf/cli.py src/agentshelf/geo.py src/agentshelf/engine.py`
-- `ruby -e 'require "yaml"; YAML.load_file("skills/agentshelf-geo/SKILL.md"); YAML.load_file("skills/agentshelf-geo/agents/openai.yaml"); puts "skill-yaml-ok"'`
-- `ruby -rjson -e 'JSON.parse(File.read("schemas/agentshelf.geo_audit.v0.schema.json")); JSON.parse(File.read("schemas/agentshelf.geo_task.v0.schema.json")); puts "schema-json-ok"'`
-- `.venv/bin/python -m pip install -e . --no-build-isolation`
-- `.venv/bin/agentshelf geo-audit examples/artist_store_product.html --brand "Moon Kiln Studio" --category "custom handmade teacups" --vertical artist_store --format json --output /private/tmp/agentshelf-geo-report.json`
-- `.venv/bin/agentshelf validate-contract /private/tmp/agentshelf-geo-report.json --format json`
-- `.venv/bin/agentshelf geo-tasks /private/tmp/agentshelf-geo-report.json --output /private/tmp/agentshelf-geo-tasks.jsonl`
-- `.venv/bin/agentshelf geo-tasks /private/tmp/agentshelf-geo-report.json --format json`
-- `.venv/bin/agentshelf geo-tasks /private/tmp/agentshelf-geo-report.json --format json --output /private/tmp/agentshelf-geo-tasks-wrapper.json`
-- `.venv/bin/agentshelf validate-contract /private/tmp/agentshelf-geo-tasks.jsonl --contract agentshelf.geo_task.v0`
-- `.venv/bin/agentshelf validate-contract /private/tmp/agentshelf-geo-tasks-wrapper.json --contract agentshelf.geo_tasks.v0 --format json`
-- `.venv/bin/agentshelf geo-run examples/artist_store_product.html --brand "Moon Kiln Studio" --category "custom handmade teacups" --vertical artist_store --output-dir /private/tmp/agentshelf-geo-run --format json`
-- `.venv/bin/agentshelf validate-contract /private/tmp/agentshelf-geo-run/geo-report.json --format json`
-- `.venv/bin/agentshelf validate-contract /private/tmp/agentshelf-geo-run/geo-tasks.jsonl --contract agentshelf.geo_task.v0`
-- `.venv/bin/agentshelf skill-info --format json`
-- `.venv/bin/agentshelf export-skill --output-dir /private/tmp/agentshelf-skills --format json`
-- `.venv/bin/agentshelf dogfood <public-product-url> --brand <brand> --category <category> --output-dir /private/tmp/agentshelf-dogfood --format json`
-- `.venv/bin/agentshelf scan examples/sample_product_page.html --format markdown --min-score 85`
-- `/opt/homebrew/bin/python3.11 -m agentshelf.cli release-notes --version 0.35.0 --output /private/tmp/agentshelf-v0.35.0-release.md`
-- `/opt/homebrew/bin/python3.11 -m agentshelf.cli release-check --expected-version 0.35.0`
-- `/opt/homebrew/bin/python3.11 -m agentshelf.cli adoption-check /private/tmp/agentshelf-merchant-adoption --brand "Moon Kiln Studio" --category "custom handmade teacups" --vertical artist_store --format json`
-- `/opt/homebrew/bin/python3.11 -m agentshelf.cli render-fixtures examples/shopify-products.json --input-format shopify --platform shopify --output-dir /private/tmp/agentshelf-platform-adoption/snapshots/shopify --manifest /private/tmp/agentshelf-platform-adoption/snapshots/shopify/manifest.json --format json`
-- `/opt/homebrew/bin/python3.11 -m agentshelf.cli adoption-check /private/tmp/agentshelf-platform-adoption --snapshot snapshots/shopify/trailbottle-pro-24oz.shopify.html --brand "North Ridge Supply" --category "outdoor bottles" --vertical commerce --format json`
-- `/opt/homebrew/bin/python3.11 -m agentshelf.cli render-fixtures examples/headless-catalog.json --input-format headless --platform headless --output-dir /private/tmp/agentshelf-headless-adoption/snapshots/headless --manifest /private/tmp/agentshelf-headless-adoption/snapshots/headless/manifest.json --format json`
-- `/opt/homebrew/bin/python3.11 -m agentshelf.cli adoption-check /private/tmp/agentshelf-headless-adoption --snapshot snapshots/headless/trailbottle-pro-24oz.headless.html --brand "North Ridge Supply" --category "outdoor bottles" --vertical commerce --format json`
+The intended mature loop is:
+
+1. Generate or capture merchant-owned product-page snapshots.
+2. Run `agentshelf geo-run`, `agentshelf scan`, or the GitHub Action.
+3. Let a coding agent consume `geo-tasks.jsonl` or `agentshelf-tasks.jsonl`.
+4. Edit storefront templates, schema builders, product data mappers, or content.
+5. Re-run AgentShelf until blockers and score gates are resolved.
+
+## Public Surfaces
+
+- `agentshelf scan`: human and CI product-page readiness gate.
+- `agentshelf geo-run`: one-command GEO artifact bundle for coding agents.
+- `agentshelf geo-tasks`: JSONL implementation queue from a GEO report.
+- `agentshelf export-skill`: exports the bundled `agentshelf-geo` skill into merchant repos.
+- `agentshelf init-merchant-repo`: initializes a storefront repo with workflow, config, demo snapshot, onboarding docs, and skill.
+- `agentshelf adoption-check`: verifies an initialized merchant repo before enforcing CI.
+- `agentshelf public-audit`: checks public release hygiene before tags or Marketplace copy.
+- `agentshelf release-check`: verifies versioned release surfaces before tagging.
+- `agentshelf release-notes`: generates conservative GitHub release draft copy.
+
+## Verified Workflows
+
+- Full unit suite.
+- GEO audit-task-edit-verify example.
+- Packaged skill export and drift tests.
+- Merchant repo initialization and adoption checks.
+- Shopify and headless generated-snapshot adoption regressions.
+- Release-readiness and public-audit checks.
 
 ## Next Best Task
-Add a concise release readiness audit checklist that verifies the open-source repo is publishable without needing private context, then decide whether to create a reviewed tag.
+
+Create a reviewed GitHub tag only after the maintainer approves release notes for the current version, then update temporary `@main` install references to pinned release usage in the next patch if needed.
 
 ## Risks
-- Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.
-- Raw URL snapshot mode still does not execute JavaScript unless `--rendered` is explicitly used.
-- Benchmark fixtures are curated examples, not empirical evidence of improved ChatGPT, Google, Perplexity, or Claude shopping-agent ranking.
-- Native import adapters cover common export shapes, but unusual merchant schemas may still need a small mapping step into AgentShelf's normalized JSON.
-- GEO audit is deterministic and local-first; it does not yet monitor real ChatGPT Search, Google AI, Perplexity, Claude, Gemini, Bing, GSC, or conversion outcomes.
+
+- Rendered snapshot mode requires the optional Playwright extra and Chromium install.
+- Raw URL mode does not execute JavaScript unless rendered mode is explicitly used.
+- Curated fixtures are useful regression evidence, not proof of external ChatGPT, Google, Perplexity, Claude, Gemini, or Bing ranking lift.
+- Unusual merchant catalog exports may need a small mapping step before `render-fixtures`.
+- Marketplace publication should wait until a reviewed release tag exists and CI is green on that tag.
