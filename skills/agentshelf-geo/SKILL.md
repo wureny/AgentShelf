@@ -16,7 +16,8 @@ Use this skill to run AgentShelf as an agent-native audit and remediation loop f
 
 1. Locate the target page source.
    - Prefer local HTML snapshots, generated storefront fixtures, product templates, theme sections, or page components.
-   - Use live URLs only when the user explicitly wants URL fetch behavior or no local page source exists.
+   - Use `agentshelf dogfood <url>` for public third-party URLs when you need real-page evidence without saving raw HTML.
+   - Use live URL `geo-run` only when the user explicitly wants URL fetch behavior and raw third-party HTML will not be committed.
 
 2. Run the full GEO workflow when you need an artifact bundle.
 
@@ -29,6 +30,18 @@ agentshelf geo-run <page-or-url> \
 ```
 
 Use the generated `agentshelf-geo-run/summary.json`, `geo-report.json`, `geo-tasks.jsonl`, and validation files as the implementation handoff.
+
+For public real-page dogfooding, prefer the safe URL workflow:
+
+```bash
+agentshelf dogfood <url> \
+  --brand "<brand or store>" \
+  --category "<commerce category>" \
+  --vertical commerce \
+  --output-dir agentshelf-dogfood
+```
+
+Use `agentshelf-dogfood/dogfood-notes.md` and `summary.json` for calibration decisions. Do not commit third-party raw HTML.
 
 3. If you need separate files or custom wiring, run a manual GEO audit.
 
@@ -74,6 +87,7 @@ If the target has multiple generated pages, use `agentshelf scan <dir-or-glob> -
 - Use `geo-audit` for broad GEO work: crawlability, entity consistency, AI intent coverage, prompt panel, GTM assets, and patch suggestions.
 - Use `geo-tasks` when Codex needs a concrete work queue from the GEO report.
 - Use `geo-run` when the user wants the whole artifact bundle in one command.
+- Use `dogfood` for real public URLs when you want derived audit artifacts without persisting third-party raw HTML.
 - Use `validate-contract` before implementation when a task depends on stable JSON or JSONL output.
 - Use `scan` for product-page readiness gates: price, availability, shipping, returns, specs, reviews, Product schema, FAQ, variants, policy, and agent actionability.
 - Use `agent-tasks` for product-page remediation tasks across snapshots or fixtures.

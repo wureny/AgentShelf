@@ -75,10 +75,12 @@ Production-ready open-source release completed; current focus is upgrading Agent
 - Added `agentshelf geo-run` as a one-command dogfood workflow that writes GEO reports, validated contracts, task queues, optional local scan evidence, and a summary artifact.
 - Added `agentshelf skill-info` and `agentshelf export-skill` so installed AgentShelf packages can check and export the bundled `agentshelf-geo` skill into another coding-agent repo.
 - Bundled the `agentshelf-geo` skill assets inside the Python package and added drift tests against the repo-local skill copy.
+- Added `agentshelf dogfood` for safe real-URL dogfooding that writes derived GEO, task, validation, scan, notes, and summary artifacts without persisting third-party raw HTML.
+- Added `docs/DOGFOODING.md` to document the no-raw-third-party-HTML policy and the path from real-page findings to synthetic fixtures or calibration labels.
 - Added `examples/artist_store_product.html` as an artist-store/creator-commerce fixture for handmade/custom gift use cases.
 - Added `tests/test_geo.py` covering the GEO JSON contract, Markdown sections, prompt panel coverage, crawler blocker detection, Product schema patch suggestions, and `--format both` output.
 - Added workflow regression coverage for the bundled `agentshelf-geo` skill and `agentshelf.geo_task.v0` contract.
-- Updated README, architecture docs, changelog, and package metadata for version `0.25.0`.
+- Updated README, architecture docs, changelog, and package metadata for version `0.26.0`.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -152,6 +154,7 @@ Production-ready open-source release completed; current focus is upgrading Agent
 - `.venv/bin/agentshelf validate-contract /private/tmp/agentshelf-geo-run/geo-tasks.jsonl --contract agentshelf.geo_task.v0`
 - `.venv/bin/agentshelf skill-info --format json`
 - `.venv/bin/agentshelf export-skill --output-dir /private/tmp/agentshelf-skills --format json`
+- `.venv/bin/agentshelf dogfood <public-product-url> --brand <brand> --category <category> --output-dir /private/tmp/agentshelf-dogfood --format json`
 - `.venv/bin/agentshelf scan examples/sample_product_page.html --format markdown --min-score 85`
 
 ## Next Best Task

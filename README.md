@@ -117,6 +117,16 @@ agentshelf geo-run examples/artist_store_product.html \
   --output-dir reports/moon-kiln-geo-run
 ```
 
+Dogfood against a real public page without saving third-party raw HTML:
+
+```bash
+agentshelf dogfood https://example.com/products/custom-teacup \
+  --brand "Example Studio" \
+  --category "custom handmade teacups" \
+  --vertical artist_store \
+  --output-dir reports/example-studio-dogfood
+```
+
 Check and export the bundled Codex-style skill into another storefront repo:
 
 ```bash
@@ -250,6 +260,7 @@ agentshelf agent-tasks <file-or-dir-or-glob> [options]
 agentshelf geo-audit <file-or-url> [--brand <name>] [--category <category>] [--vertical commerce|creator_commerce|artist_store|local_service|generic] [--format markdown|json|both]
 agentshelf geo-tasks <geo-report.json> [--format jsonl|json]
 agentshelf geo-run <file-or-url> [--brand <name>] [--category <category>] [--output-dir agentshelf-geo-run]
+agentshelf dogfood <url> [--brand <name>] [--category <category>] [--output-dir agentshelf-dogfood]
 agentshelf validate-contract <artifact.json-or-jsonl> [--contract auto|agentshelf.geo_audit.v0|agentshelf.geo_task.v0|agentshelf.geo_tasks.v0]
 agentshelf skill-info [--format markdown|json]
 agentshelf export-skill [--output-dir .codex/skills] [--force]
@@ -286,6 +297,8 @@ Options:
 `geo-tasks` turns `geo-audit --format json` output into JSONL work items for coding agents. Each row includes `files_or_page_area`, `reason`, `suggested_copy`, optional `suggested_schema`, `acceptance_check`, and `verification_command`.
 
 `geo-run` runs the agent workflow end to end. It writes `geo-report.json`, `geo-report.md`, `geo-tasks.jsonl`, validation JSON, `summary.json`, and, for local HTML targets, `scan-report.md`. Use it for dogfooding, CI artifacts, or a Codex task handoff where the agent should not manually chain multiple commands.
+
+`dogfood` is the safe real-URL variant. It fetches a public page in memory, writes GEO artifacts, contract validation, scan reports, `dogfood-notes.md`, and `summary.json`, but does not persist third-party raw HTML. Use it before turning real-page findings into anonymized fixtures or calibration labels.
 
 `validate-contract` validates AgentShelf JSON and JSONL artifacts before a coding agent acts on them. It currently covers `agentshelf.geo_audit.v0`, `agentshelf.geo_task.v0`, and the `agentshelf.geo_tasks.v0` JSON wrapper using the published schemas in `schemas/` plus dependency-free structural checks.
 
@@ -394,6 +407,10 @@ agentshelf scan snapshots/woocommerce --batch --profile woocommerce --format jso
 On the first run, `audit-run` creates a baseline. On later runs, it automatically writes `.agentshelf/runs/audit-diff.md` from the last saved result set. In CI, upload `.agentshelf/runs/audit-diff.md`, `calibration-dashboard.html`, `draft-calibration-labels.json`, and `agentshelf-tasks.jsonl` as review artifacts so humans see the merchant-level regression summary and agents get machine-actionable fixes.
 
 Use calibration reports before changing scoring rules. A common loop is: run real merchant snapshots, inspect `rendered_capture_review`, `profile_rule_review`, `policy_schema_review`, and `offer_extraction_review`, then export anonymized fixture candidates for cases that should become benchmark coverage.
+
+For real public pages that you do not own, prefer `agentshelf dogfood <url>` first. It keeps the fetched HTML in memory and writes only derived audit artifacts. Do not commit raw third-party HTML. If a finding should become a regression fixture, recreate the pattern as a synthetic fixture or use `calibrate --export-fixtures` only on pages you own or have permission to store.
+
+See [Real-Page Dogfooding](docs/DOGFOODING.md) for the full no-raw-HTML workflow.
 
 When you want to turn calibration findings into regression coverage, run `draft-labels`, review the generated JSON, then change each useful label from `needs_review` to `true_positive` or `false_positive`. Draft labels are safe to commit because `evaluate` skips them until they are confirmed.
 

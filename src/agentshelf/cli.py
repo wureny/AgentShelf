@@ -25,7 +25,7 @@ from agentshelf.geo import GeoSkillConfig, build_geo_audit, render_geo_json, ren
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.25 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.26 (+https://github.com/wureny/AgentShelf)"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -68,6 +68,7 @@ def _build_skill_info() -> dict:
     required_skill_snippets = (
         "name: agentshelf-geo",
         "agentshelf geo-run",
+        "agentshelf dogfood",
         "agentshelf geo-audit",
         "agentshelf geo-tasks",
         "agentshelf validate-contract",
@@ -89,6 +90,7 @@ def _build_skill_info() -> dict:
         "issues": issues,
         "default_export_command": "agentshelf export-skill --output-dir .codex/skills",
         "primary_workflow_command": "agentshelf geo-run <page-or-url> --brand <brand> --category <category> --output-dir agentshelf-geo-run",
+        "safe_url_workflow_command": "agentshelf dogfood <url> --brand <brand> --category <category> --output-dir agentshelf-dogfood",
     }
 
 
@@ -104,6 +106,7 @@ def _render_skill_info(payload: dict, output_format: str) -> str:
         f"- Purpose: {payload['description']}",
         f"- Export command: `{payload['default_export_command']}`",
         f"- Primary workflow: `{payload['primary_workflow_command']}`",
+        f"- Safe URL workflow: `{payload['safe_url_workflow_command']}`",
         "- Bundled files:",
     ]
     lines.extend(f"  - {filename}" for filename in payload["bundled_files"])
@@ -817,6 +820,85 @@ def _render_geo_run_summary(payload: dict, output_format: str) -> str:
         lines.append("- None")
     lines.extend(["", "## Next Actions"])
     lines.extend(f"- {action}" for action in payload["next_actions"])
+    return "\n".join(lines) + "\n"
+
+
+def _build_dogfood_summary(
+    *,
+    url: str,
+    output_dir: Path,
+    geo_report: dict,
+    task_validation: dict,
+    report_validation: dict,
+    scan_bundle: dict,
+    fetch_metadata: dict,
+) -> dict:
+    summary = _build_geo_run_summary(
+        target=url,
+        output_dir=output_dir,
+        geo_report=geo_report,
+        task_validation=task_validation,
+        report_validation=report_validation,
+        scan_bundle=scan_bundle,
+    )
+    summary["contract"] = "agentshelf.dogfood_run.v0"
+    summary["url"] = url
+    summary["raw_html_persisted"] = False
+    summary["source_policy"] = "Fetched HTML was used in memory only. Do not commit third-party raw HTML unless you own the page or have permission."
+    summary["fetch_metadata"] = {
+        "source_type": fetch_metadata.get("source_type"),
+        "robots_status": fetch_metadata.get("robots_status"),
+        "sitemap_status": fetch_metadata.get("sitemap_status"),
+        "llms_status": fetch_metadata.get("llms_status"),
+        "fetch_warnings": fetch_metadata.get("fetch_warnings", []),
+    }
+    summary["dogfood_notes"] = str(output_dir / "dogfood-notes.md")
+    summary["next_actions"] = [
+        f"Review {output_dir / 'dogfood-notes.md'} and {output_dir / 'geo-tasks.jsonl'} before changing rules.",
+        "If a finding looks wrong, create an anonymized or synthetic fixture; do not commit third-party raw HTML.",
+        "Promote confirmed false positives or true positives into calibration labels before tightening CI gates.",
+    ]
+    return summary
+
+
+def _render_dogfood_notes(summary: dict) -> str:
+    scan = summary.get("scan") or {}
+    lines = [
+        "# AgentShelf Real-Page Dogfood Notes",
+        "",
+        "## Source Policy",
+        f"- URL: {summary['url']}",
+        f"- Raw HTML persisted: {str(summary['raw_html_persisted']).lower()}",
+        f"- Policy: {summary['source_policy']}",
+        "",
+        "## Generated Artifacts",
+        f"- GEO report: `{summary['geo_report']}`",
+        f"- GEO Markdown: `{summary['geo_report_markdown']}`",
+        f"- GEO tasks: `{summary['geo_tasks']}`",
+        f"- GEO report validation: valid={str(summary['geo_report_validation']['valid']).lower()}",
+        f"- GEO tasks validation: valid={str(summary['geo_tasks_validation']['valid']).lower()}",
+        f"- Scan report: `{scan.get('report', 'not generated')}`",
+        "",
+        "## Snapshot-Level Findings",
+        f"- GEO score: {summary['overallScore']}",
+        f"- GEO issues: {summary['issue_count']}",
+        f"- High-impact GEO issues: {summary['high_impact_issue_count']}",
+        f"- Task count: {summary['task_count']}",
+    ]
+    if scan:
+        lines.extend(
+            [
+                f"- Product readiness score: {scan['score']}",
+                f"- Product readiness band: {scan['band']}",
+            ]
+        )
+    lines.extend(["", "## Top Task IDs"])
+    if summary["top_task_ids"]:
+        lines.extend(f"- `{task_id}`" for task_id in summary["top_task_ids"])
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Calibration Follow-Up"])
+    lines.extend(f"- {action}" for action in summary["next_actions"])
     return "\n".join(lines) + "\n"
 
 
@@ -3217,6 +3299,33 @@ def build_parser() -> argparse.ArgumentParser:
     geo_run.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Summary output format.")
     geo_run.add_argument("--output", type=Path, help="Optional summary output path.")
 
+    dogfood = subcommands.add_parser("dogfood", help="Run a safe real-URL dogfood audit without persisting third-party raw HTML.")
+    dogfood.add_argument("url", nargs="?", help="http(s) product or storefront URL to audit.")
+    dogfood.add_argument("--url", dest="url_option", help="http(s) product or storefront URL to audit. Use instead of the positional URL.")
+    dogfood.add_argument("--brand", dest="brand_name", help="Brand or artist name.")
+    dogfood.add_argument("--store", dest="store_name", help="Store name if different from the brand.")
+    dogfood.add_argument("--category", help="Commerce category, for example custom gifts or handmade teacups.")
+    dogfood.add_argument("--market", action="append", help="Target market. Repeat or comma-separate values.")
+    dogfood.add_argument("--language", default="en", help="Primary report/prompt language. v0 is optimized for English.")
+    dogfood.add_argument("--competitor", action="append", help="Competitor or alternative brand. Repeat or comma-separate values.")
+    dogfood.add_argument("--persona", action="append", help="Buyer persona. Repeat or comma-separate values.")
+    dogfood.add_argument("--use-case", action="append", help="Buyer use case. Repeat or comma-separate values.")
+    dogfood.add_argument("--key-product", action="append", help="Key product or product family. Repeat or comma-separate values.")
+    dogfood.add_argument(
+        "--vertical",
+        choices=("commerce", "creator_commerce", "artist_store", "local_service", "generic"),
+        default="commerce",
+        help="GEO vertical profile.",
+    )
+    dogfood.add_argument("--profile", choices=ADAPTER_PROFILES, default="auto", help="Storefront adapter profile for the product-readiness scan.")
+    dogfood.add_argument("--max-pages", type=int, default=1, help="Reserved for future multi-page audits; v0 audits one URL.")
+    dogfood.add_argument("--no-prompt-panel", action="store_true", help="Do not include deterministic prompt panel output.")
+    dogfood.add_argument("--no-patches", action="store_true", help="Do not include page patch suggestions.")
+    dogfood.add_argument("--timeout", type=float, default=10.0, help="URL fetch timeout in seconds.")
+    dogfood.add_argument("--output-dir", type=Path, default=Path("agentshelf-dogfood"), help="Directory for safe dogfood artifacts.")
+    dogfood.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Summary output format.")
+    dogfood.add_argument("--output", type=Path, help="Optional summary output path.")
+
     validate_contract = subcommands.add_parser("validate-contract", help="Validate AgentShelf JSON or JSONL contract artifacts.")
     validate_contract.add_argument("path", type=Path, help="AgentShelf JSON or JSONL artifact to validate.")
     validate_contract.add_argument(
@@ -3521,6 +3630,60 @@ def main() -> int:
                 report_validation=report_validation,
                 scan_bundle=scan_bundle,
             )
+            _write_text_atomic(output_dir / "summary.json", json.dumps(summary, indent=2) + "\n")
+            rendered = _render_geo_run_summary(summary, args.format)
+            exit_code = 0 if report_validation["valid"] and task_validation["valid"] else 1
+        elif args.command == "dogfood":
+            target = args.url_option or args.url
+            if not target:
+                raise ValueError("Provide a URL or --url.")
+            if args.url_option and args.url:
+                raise ValueError("Provide either positional URL or --url, not both.")
+            if not _is_url(target):
+                raise ValueError("`agentshelf dogfood` only accepts http(s) URLs. Use `geo-run` for local files.")
+            if args.max_pages < 1:
+                raise ValueError("--max-pages must be at least 1.")
+            output_dir = args.output_dir
+            output_dir.mkdir(parents=True, exist_ok=True)
+            html, fetch_metadata = _load_geo_target(target, timeout=args.timeout)
+            result = build_geo_audit(
+                _build_geo_config_from_args(target, args),
+                html,
+                robots_text=fetch_metadata["robots_text"],
+                robots_status=fetch_metadata["robots_status"],
+                sitemap_status=fetch_metadata["sitemap_status"],
+                llms_status=fetch_metadata["llms_status"],
+                raw_metadata={
+                    "source_type": fetch_metadata["source_type"],
+                    "fetch_warnings": fetch_metadata["fetch_warnings"],
+                    "raw_html_persisted": False,
+                },
+            )
+            report_json = render_geo_json(result)
+            report_path = output_dir / "geo-report.json"
+            report_md_path = output_dir / "geo-report.md"
+            tasks_path = output_dir / "geo-tasks.jsonl"
+            _write_text_atomic(report_path, report_json)
+            _write_text_atomic(report_md_path, result.reportMarkdown)
+            _write_text_atomic(tasks_path, render_geo_tasks_jsonl(json.loads(report_json)))
+            report_validation = _validate_contract_file(report_path, requested_contract="agentshelf.geo_audit.v0")
+            task_validation = _validate_contract_file(tasks_path, requested_contract="agentshelf.geo_task.v0")
+            _write_text_atomic(output_dir / "geo-report-validation.json", json.dumps(report_validation, indent=2) + "\n")
+            _write_text_atomic(output_dir / "geo-tasks-validation.json", json.dumps(task_validation, indent=2) + "\n")
+            parsed = parse_input(html, fallback_title=urlparse(target).netloc or "Fetched Product Page", source=target)
+            scan_bundle = scan_readiness(parsed, adapter_profile=args.profile)
+            _write_text_atomic(output_dir / "scan-report.md", render_markdown(scan_bundle))
+            _write_text_atomic(output_dir / "scan-report.json", json.dumps(scan_bundle, indent=2) + "\n")
+            summary = _build_dogfood_summary(
+                url=target,
+                output_dir=output_dir,
+                geo_report=json.loads(report_json),
+                task_validation=task_validation,
+                report_validation=report_validation,
+                scan_bundle=scan_bundle,
+                fetch_metadata=fetch_metadata,
+            )
+            _write_text_atomic(output_dir / "dogfood-notes.md", _render_dogfood_notes(summary))
             _write_text_atomic(output_dir / "summary.json", json.dumps(summary, indent=2) + "\n")
             rendered = _render_geo_run_summary(summary, args.format)
             exit_code = 0 if report_validation["valid"] and task_validation["valid"] else 1

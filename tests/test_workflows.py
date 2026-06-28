@@ -122,6 +122,7 @@ class WorkflowArtifactTests(unittest.TestCase):
             "agentshelf geo-audit",
             "agentshelf geo-tasks",
             "agentshelf geo-run",
+            "agentshelf dogfood",
             "agentshelf scan",
             "Do not fabricate reviews",
             "audit and remediation loop",
@@ -135,6 +136,20 @@ class WorkflowArtifactTests(unittest.TestCase):
         self.assertIn("acceptance_check", contract)
         self.assertIn("$agentshelf-geo", metadata)
         self.assertIn("allow_implicit_invocation: true", metadata)
+
+    def test_real_page_dogfood_docs_define_no_raw_html_policy(self) -> None:
+        docs = (ROOT / "docs/DOGFOODING.md").read_text(encoding="utf-8")
+
+        required_snippets = [
+            "agentshelf dogfood",
+            "raw_html_persisted: false",
+            "Do not commit",
+            "synthetic fixture",
+            "raw third-party HTML",
+        ]
+        for snippet in required_snippets:
+            with self.subTest(snippet=snippet):
+                self.assertIn(snippet, docs)
 
     def test_packaged_geo_skill_matches_repo_local_skill(self) -> None:
         package_root = ROOT / "src/agentshelf/skills/agentshelf-geo"
@@ -155,6 +170,7 @@ class WorkflowArtifactTests(unittest.TestCase):
         self.assertTrue(payload["valid"])
         self.assertIn("SKILL.md", payload["bundled_files"])
         self.assertIn("agentshelf geo-run", payload["primary_workflow_command"])
+        self.assertIn("agentshelf dogfood", payload["safe_url_workflow_command"])
 
     def test_export_skill_writes_codex_skill_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

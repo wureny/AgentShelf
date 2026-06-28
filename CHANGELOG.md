@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.26.0
+- Added `agentshelf dogfood` for safe real-URL dogfooding without persisting third-party raw HTML by default.
+- `dogfood` writes GEO reports, GEO tasks, contract validation, product-readiness scan reports, dogfood notes, and a machine-readable summary.
+- Documented the real-page calibration workflow and no-raw-third-party-HTML policy for open-source dogfooding.
+
 ## 0.25.0
 - Bundled the `agentshelf-geo` skill inside the Python package so installed AgentShelf distributions can export the same coding-agent workflow.
 - Added `agentshelf skill-info` to inspect the packaged skill and primary GEO workflow.

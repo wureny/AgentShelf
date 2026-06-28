@@ -706,6 +706,79 @@ class CliTests(unittest.TestCase):
                 server.server_close()
                 os.chdir(old_cwd)
 
+    def test_dogfood_url_writes_safe_artifacts_without_raw_html_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            page = root / "product.html"
+            page.write_text(
+                """<!doctype html>
+<html>
+  <head>
+    <title>Local Dogfood Cup</title>
+    <meta name="description" content="Handmade ceramic cup with clear shipping and return information.">
+  </head>
+  <body>
+    <h1>Local Dogfood Cup</h1>
+    <p>$48.00 USD. In stock. Ships in 3 business days. Returns accepted within 14 days.</p>
+    <dl><dt>Material</dt><dd>Stoneware clay</dd><dt>Capacity</dt><dd>10 oz</dd></dl>
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"Product","name":"Local Dogfood Cup","offers":{"@type":"Offer","price":"48.00","priceCurrency":"USD","availability":"https://schema.org/InStock"}}
+    </script>
+  </body>
+</html>""",
+                encoding="utf-8",
+            )
+
+            class Handler(http.server.SimpleHTTPRequestHandler):
+                def log_message(self, format: str, *args: object) -> None:
+                    return
+
+            try:
+                server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            except PermissionError as exc:
+                self.skipTest(f"local socket binding unavailable in this sandbox: {exc}")
+            old_cwd = os.getcwd()
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            try:
+                os.chdir(root)
+                thread.start()
+                output_dir = root / "dogfood"
+                url = f"http://127.0.0.1:{server.server_port}/product.html"
+                result = _run_cli(
+                    "dogfood",
+                    url,
+                    "--brand",
+                    "Local Studio",
+                    "--category",
+                    "handmade cups",
+                    "--vertical",
+                    "artist_store",
+                    "--output-dir",
+                    str(output_dir),
+                    "--format",
+                    "json",
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                payload = json.loads(result.stdout)
+                self.assertEqual(payload["contract"], "agentshelf.dogfood_run.v0")
+                self.assertFalse(payload["raw_html_persisted"])
+                self.assertTrue(payload["geo_report_validation"]["valid"])
+                self.assertTrue(payload["geo_tasks_validation"]["valid"])
+                self.assertTrue((output_dir / "dogfood-notes.md").exists())
+                self.assertTrue((output_dir / "geo-report.json").exists())
+                self.assertTrue((output_dir / "geo-tasks.jsonl").exists())
+                self.assertTrue((output_dir / "scan-report.md").exists())
+                self.assertTrue((output_dir / "scan-report.json").exists())
+                self.assertFalse((output_dir / "product.html").exists())
+                notes = (output_dir / "dogfood-notes.md").read_text(encoding="utf-8")
+                self.assertIn("Raw HTML persisted: false", notes)
+                self.assertIn("Do not commit third-party raw HTML", notes)
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+                os.chdir(old_cwd)
+
     def test_snapshot_url_file_writes_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
