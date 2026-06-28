@@ -504,6 +504,22 @@ def _policy_snippets(plain_text: str) -> dict[str, list[str]]:
     return snippets
 
 
+def _has_specific_return_promise(snippets: list[str]) -> bool:
+    promise_patterns = [
+        r"\b\d+\s*-\s*\d+\s*(?:day|days)\b",
+        r"\b\d+\s*-\s*(?:day|days|week|weeks)\s+(?:returns?|refund|exchange)",
+        r"\b\d+\s*(?:day|days|week|weeks)\s+(?:returns?|refund|exchange)",
+        r"\b(?:returns?|refund|exchange)[^.]{0,80}\b\d+\s*(?:day|days|week|weeks)\b",
+        r"\b(?:unused|unworn|original packaging|final sale|non[- ]?returnable|return window)\b",
+        r"\b(?:accepted|eligible|free returns?|return label|refund method|store credit|exchange only)\b",
+    ]
+    return any(
+        re.search(pattern, snippet, flags=re.IGNORECASE)
+        for snippet in snippets
+        for pattern in promise_patterns
+    )
+
+
 def _subscription_signals(plain_text: str, selling_plan_groups: list[Any]) -> dict[str, Any]:
     purchase_intent = _first_match(
         plain_text,
@@ -764,8 +780,10 @@ def _check_agent_answerability(plain_text: str, commerce: dict[str, Any]) -> tup
 
 
 def _check_return_policy_schema(commerce: dict[str, Any]) -> tuple[bool, str | None, bool]:
-    applicable = bool(commerce["return_snippets"])
+    applicable = _has_specific_return_promise(commerce["return_snippets"])
     if not applicable:
+        if commerce["return_snippets"]:
+            return True, "Only generic return links or labels detected; no specific return-policy promise found.", False
         return True, "No visible return-policy promise detected in this snapshot.", False
     if commerce.get("has_return_policy_schema"):
         return True, "hasMerchantReturnPolicy metadata present.", True

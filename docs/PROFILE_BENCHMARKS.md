@@ -11,6 +11,7 @@ AgentShelf includes profile-specific benchmark fixtures so extraction behavior s
 | `headless_profile_state_page.html` | `headless` | Headless app state such as `__NEXT_DATA__` exposes product variants even when data is not visible as plain text. |
 | `profile_rule_gap_product.html` | `shopify` | Production-style subscription bundle gaps become actionable agent tasks for subscription terms, bundle contents, regional shipping, and return policy schema. |
 | `newsletter_subscribe_single_sku_page.html` | `generic` | Real-dogfood-derived newsletter subscribe copy is not treated as a purchase subscription unless selling-plan or transactional subscription intent is present. |
+| `return_policy_link_only_page.html` | `generic` | Footer links to return/refund policy pages do not trigger return-policy schema tasks unless a concrete return promise is visible. |
 
 ## Contract
 

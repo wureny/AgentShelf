@@ -789,6 +789,7 @@ AgentShelf checks whether a shopping agent can make a reliable purchase recommen
 - profile-specific Shopify, WooCommerce, and headless storefront extraction contracts
 - subscription bundles with missing cancellation, component, return-schema, or regional delivery details
 - real-dogfood-derived newsletter subscribe copy that should not be treated as a purchase subscription
+- return-policy footer links that should not be treated as specific return promises
 - visible price or stock contradicting JSON-LD
 - JS-rendered placeholder HTML that static scanners may overtrust
 - pages with schema but no policy or fit answers

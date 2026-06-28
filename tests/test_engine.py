@@ -227,6 +227,26 @@ window.ShopifyAnalytics.meta = {
         self.assertTrue(check["passed"])
         self.assertTrue(bundle["commerce_signals"]["has_return_policy_schema"])
 
+    def test_return_policy_link_only_does_not_require_return_policy_schema(self) -> None:
+        html = """<html><head><title>Link Only Returns</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Product","name":"Link Only Returns","offers":{"@type":"Offer","priceCurrency":"USD","price":"54.00","availability":"https://schema.org/InStock","seller":{"@type":"Organization","name":"Demo"}}}
+</script></head><body>
+<h1>Link Only Returns</h1>
+<p>$54.00. In stock. Ships in 2 business days.</p>
+<p>Specifications: stoneware, 12 oz.</p>
+<p>FAQ: dishwasher safe. Reviews 4.9/5.</p>
+<footer><a href="/policies/refund-policy">Returns and exchanges</a></footer>
+</body></html>"""
+        bundle = scan_readiness(parse_input(html))
+        check = next(item for item in bundle["checks"] if item["id"] == "return_policy_schema")
+        contract = build_agent_contract(bundle)
+        task_ids = {item["id"] for item in contract["agent_tasks"]}
+
+        self.assertFalse(check["applicable"])
+        self.assertTrue(check["passed"])
+        self.assertNotIn("add_return_policy_schema", task_ids)
+
     def test_profile_specific_rule_pack_surfaces_agent_tasks(self) -> None:
         html = """<html><head><title>Subscribe Kit</title>
 <script type="application/ld+json">

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.28.0
+- Tightened return-policy schema applicability so generic footer links such as "Returns and exchanges" do not trigger `add_return_policy_schema`.
+- Preserved return-policy schema tasks for explicit promises such as `30-day returns`, unused-condition requirements, refund methods, labels, or store credit.
+- Added a synthetic benchmark fixture for return-policy-link-only pages to prevent noisy merchant-page remediation tasks.
+
 ## 0.27.0
 - Tightened subscription-intent detection so newsletter or restock-alert copy does not trigger subscription purchase-term failures.
 - Added a synthetic benchmark fixture derived from real-page dogfooding for single-SKU product pages with newsletter subscribe copy.
