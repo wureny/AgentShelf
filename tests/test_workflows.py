@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 
@@ -118,3 +119,12 @@ class WorkflowArtifactTests(unittest.TestCase):
         self.assertIn("acceptance_check", contract)
         self.assertIn("$agentshelf-geo", metadata)
         self.assertIn("allow_implicit_invocation: true", metadata)
+
+    def test_geo_contract_schemas_are_published(self) -> None:
+        audit_schema = json.loads((ROOT / "schemas/agentshelf.geo_audit.v0.schema.json").read_text(encoding="utf-8"))
+        task_schema = json.loads((ROOT / "schemas/agentshelf.geo_task.v0.schema.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(audit_schema["properties"]["rawMetadata"]["properties"]["contract"]["const"], "agentshelf.geo_audit.v0")
+        self.assertIn("categoryScores", audit_schema["required"])
+        self.assertEqual(task_schema["properties"]["contract"]["const"], "agentshelf.geo_task.v0")
+        self.assertIn("acceptance_check", task_schema["properties"]["task"]["required"])

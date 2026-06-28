@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.23.0
+- Added `agentshelf validate-contract` for validating AgentShelf GEO JSON and JSONL artifacts before coding agents act on them.
+- Published JSON Schema files for `agentshelf.geo_audit.v0` and `agentshelf.geo_task.v0` under `schemas/`.
+- Updated the GEO skill workflow so Codex-style agents can audit, validate contracts, emit tasks, edit, and verify without relying on prose-only reports.
+
 ## 0.22.0
 - Added `agentshelf geo-audit` as a deterministic GEO Skill v0 for AI-readable commerce.
 - Added `agentshelf geo-tasks` to turn GEO JSON reports into a stable JSONL implementation queue for coding agents.

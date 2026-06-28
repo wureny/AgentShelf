@@ -107,6 +107,13 @@ agentshelf geo-tasks reports/moon-kiln-geo-report.json \
   --output reports/moon-kiln-geo-tasks.jsonl
 ```
 
+Validate agent-facing contracts before implementation:
+
+```bash
+agentshelf validate-contract reports/moon-kiln-geo-report.json
+agentshelf validate-contract reports/moon-kiln-geo-tasks.jsonl --contract agentshelf.geo_task.v0
+```
+
 Fetch a raw HTML snapshot for later audit:
 
 ```bash
@@ -225,6 +232,7 @@ agentshelf agent-audit <file-or-url> [options]
 agentshelf agent-tasks <file-or-dir-or-glob> [options]
 agentshelf geo-audit <file-or-url> [--brand <name>] [--category <category>] [--vertical commerce|creator_commerce|artist_store|local_service|generic] [--format markdown|json|both]
 agentshelf geo-tasks <geo-report.json> [--format jsonl|json]
+agentshelf validate-contract <artifact.json-or-jsonl> [--contract auto|agentshelf.geo_audit.v0|agentshelf.geo_task.v0|agentshelf.geo_tasks.v0]
 agentshelf compare <raw.html> <rendered.html> [options]
 agentshelf diff <baseline-results.jsonl> <current-results.jsonl> [options]
 agentshelf audit-run <file-or-dir-or-glob> [options]
@@ -256,6 +264,8 @@ Options:
 `geo-audit` emits a broader GEO report for AI-readable commerce. Use it when the question is not only "does this product page expose price/schema/policy?" but "what page, prompt, entity, trust, and patch work would make this merchant easier for generative engines and AI shopping agents to understand and cite?" URL mode attempts lightweight `robots.txt`, `sitemap.xml`, and `llms.txt` checks; local-file mode keeps the report runnable without network access. `--format both --out reports/name` writes `reports/name.md` and `reports/name.json`.
 
 `geo-tasks` turns `geo-audit --format json` output into JSONL work items for coding agents. Each row includes `files_or_page_area`, `reason`, `suggested_copy`, optional `suggested_schema`, `acceptance_check`, and `verification_command`.
+
+`validate-contract` validates AgentShelf JSON and JSONL artifacts before a coding agent acts on them. It currently covers `agentshelf.geo_audit.v0`, `agentshelf.geo_task.v0`, and the `agentshelf.geo_tasks.v0` JSON wrapper using the published schemas in `schemas/` plus dependency-free structural checks.
 
 `snapshot` fetches raw HTML with the standard library by default. Use `--rendered` for a Playwright-backed single-page capture when product data is injected by JavaScript. Rendered mode is optional so the base CLI stays lightweight.
 
@@ -581,6 +591,9 @@ agentshelf geo-audit examples/artist_store_product.html \
 agentshelf geo-tasks reports/moon-kiln-geo-report.json \
   --output reports/moon-kiln-geo-tasks.jsonl
 
+agentshelf validate-contract reports/moon-kiln-geo-report.json
+agentshelf validate-contract reports/moon-kiln-geo-tasks.jsonl --contract agentshelf.geo_task.v0
+
 # Codex reads reports/moon-kiln-geo-tasks.jsonl, edits the relevant page/template/schema,
 # then reruns geo-audit and scan as verification gates.
 ```
@@ -595,6 +608,11 @@ The JSON report uses the `agentshelf.geo_audit.v0` contract and includes:
 - `promptPanel`: 100-150 deterministic prompts grouped across brand, category, gift, comparison, alternative, customization, trust, shipping, price/value, material/craft, buyer persona, and GTM intent buckets.
 - `patchSuggestions`: opening answer blocks, FAQ blocks, Product schema skeletons, Organization schema skeletons, image alt text guidance, collection briefs, gift guide briefs, commission process pages, and artist factsheets.
 - `geo-tasks`: JSONL implementation queue derived from patch suggestions and high-severity issues.
+
+Published contract schemas:
+
+- [schemas/agentshelf.geo_audit.v0.schema.json](schemas/agentshelf.geo_audit.v0.schema.json)
+- [schemas/agentshelf.geo_task.v0.schema.json](schemas/agentshelf.geo_task.v0.schema.json)
 
 `artist_store` and `creator_commerce` verticals add templates for one-of-one goods, handmade gifts, personalized objects, artist-made products, Chinese calligraphy, custom teacups, commission processes, and artist/studio entity factsheets. These are templates, not hard-coded business assumptions; pass `--category`, `--persona`, `--use-case`, and `--key-product` to steer the output.
 
@@ -737,6 +755,8 @@ agentshelf agent-audit examples/weak_product_page.html --contract v1
 agentshelf agent-tasks examples --batch
 agentshelf geo-audit examples/artist_store_product.html --brand "Moon Kiln Studio" --category "custom handmade teacups" --vertical artist_store --format json --output /tmp/agentshelf-geo-report.json
 agentshelf geo-tasks /tmp/agentshelf-geo-report.json --output /tmp/agentshelf-geo-tasks.jsonl
+agentshelf validate-contract /tmp/agentshelf-geo-report.json
+agentshelf validate-contract /tmp/agentshelf-geo-tasks.jsonl --contract agentshelf.geo_task.v0
 agentshelf compare examples/js_product_raw.html examples/js_product_rendered.html --format json
 agentshelf discover --sitemap https://example.com/sitemap.xml --limit 10
 agentshelf render-fixtures examples/storefront-products.json --platform all --output-dir snapshots --manifest snapshots/manifest.json
@@ -768,6 +788,8 @@ python3 -m pip install -e ".[render]"  # optional rendered snapshots
 - [Headless catalog export example](examples/headless-catalog.json)
 - [Calibration labels example](examples/calibration-labels.json)
 - [Draft calibration labels example](examples/draft-calibration-labels.json)
+- [GEO audit schema](schemas/agentshelf.geo_audit.v0.schema.json)
+- [GEO task schema](schemas/agentshelf.geo_task.v0.schema.json)
 - [Sample report](outputs/sample_report.md)
 
 ## License

@@ -24,7 +24,7 @@ from agentshelf.geo import GeoSkillConfig, build_geo_audit, render_geo_json, ren
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.22 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.23 (+https://github.com/wureny/AgentShelf)"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -32,6 +32,11 @@ RENDER_EXTRA_MESSAGE = (
     "Install it with `python3 -m pip install 'agentshelf[render]'` and then run "
     "`python3 -m playwright install chromium`."
 )
+CONTRACT_SCHEMA_FILES = {
+    "agentshelf.geo_audit.v0": "schemas/agentshelf.geo_audit.v0.schema.json",
+    "agentshelf.geo_task.v0": "schemas/agentshelf.geo_task.v0.schema.json",
+    "agentshelf.geo_tasks.v0": "schemas/agentshelf.geo_task.v0.schema.json",
+}
 
 
 def _resolve_inputs(target: str, batch: bool) -> list[Path]:
@@ -341,6 +346,228 @@ def _write_text_atomic(path: Path, text: str) -> None:
     tmp_path = path.with_name(f".{path.name}.tmp")
     tmp_path.write_text(text, encoding="utf-8")
     tmp_path.replace(path)
+
+
+def _validate_contract_file(path: Path, requested_contract: str = "auto") -> dict:
+    text = path.read_text(encoding="utf-8")
+    errors: list[str] = []
+    detected = "unknown"
+    item_count = 0
+
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        payload = None
+
+    if payload is not None:
+        if not isinstance(payload, dict):
+            errors.append("$: expected a JSON object or JSONL task rows.")
+        else:
+            detected = _detect_contract(payload)
+            if requested_contract != "auto" and detected != requested_contract:
+                errors.append(f"$.contract: expected {requested_contract}, detected {detected}.")
+            if detected == "agentshelf.geo_audit.v0":
+                errors.extend(_validate_geo_audit_payload(payload))
+                item_count = 1
+            elif detected == "agentshelf.geo_task.v0":
+                errors.extend(_validate_geo_task_row(payload, "$"))
+                item_count = 1
+            elif detected == "agentshelf.geo_tasks.v0":
+                errors.extend(_validate_geo_tasks_payload(payload))
+                item_count = len(payload.get("tasks") or []) if isinstance(payload.get("tasks"), list) else 0
+            else:
+                errors.append("$.contract: unsupported or missing AgentShelf contract.")
+    else:
+        rows = []
+        for index, line in enumerate(text.splitlines(), start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                row = json.loads(stripped)
+            except json.JSONDecodeError as exc:
+                errors.append(f"line {index}: invalid JSON: {exc.msg}.")
+                continue
+            rows.append((index, row))
+
+        if not rows:
+            errors.append("$: empty contract file.")
+        detected = "agentshelf.geo_task.v0" if rows else "unknown"
+        if requested_contract not in {"auto", "agentshelf.geo_task.v0"}:
+            errors.append(f"$.contract: JSONL input only supports agentshelf.geo_task.v0 rows, not {requested_contract}.")
+        for index, row in rows:
+            if not isinstance(row, dict):
+                errors.append(f"line {index}: expected a JSON object.")
+                continue
+            row_contract = _detect_contract(row)
+            if row_contract != "agentshelf.geo_task.v0":
+                errors.append(f"line {index}: expected agentshelf.geo_task.v0, detected {row_contract}.")
+                continue
+            errors.extend(_validate_geo_task_row(row, f"line {index}"))
+        item_count = len(rows)
+
+    schema_files = sorted(
+        {
+            CONTRACT_SCHEMA_FILES[contract]
+            for contract in (detected, requested_contract)
+            if contract in CONTRACT_SCHEMA_FILES
+        }
+    )
+    return {
+        "contract": detected,
+        "path": str(path),
+        "valid": not errors,
+        "item_count": item_count,
+        "errors": errors,
+        "schemas": schema_files,
+    }
+
+
+def _detect_contract(payload: dict) -> str:
+    if payload.get("contract") in CONTRACT_SCHEMA_FILES:
+        return str(payload["contract"])
+    metadata = payload.get("rawMetadata")
+    if isinstance(metadata, dict) and metadata.get("contract") in CONTRACT_SCHEMA_FILES:
+        return str(metadata["contract"])
+    return "unknown"
+
+
+def _validate_geo_audit_payload(payload: dict) -> list[str]:
+    errors: list[str] = []
+    required = [
+        "targetUrl",
+        "generatedAt",
+        "storeProfile",
+        "pages",
+        "overallScore",
+        "categoryScores",
+        "issues",
+        "opportunities",
+        "promptPanel",
+        "patchSuggestions",
+        "reportMarkdown",
+        "rawMetadata",
+    ]
+    errors.extend(_required_keys(payload, required, "$"))
+    metadata = payload.get("rawMetadata")
+    if not isinstance(metadata, dict):
+        errors.append("$.rawMetadata: expected object.")
+    elif metadata.get("contract") != "agentshelf.geo_audit.v0":
+        errors.append("$.rawMetadata.contract: expected agentshelf.geo_audit.v0.")
+    if not isinstance(payload.get("overallScore"), int) or not 0 <= payload.get("overallScore", -1) <= 100:
+        errors.append("$.overallScore: expected integer between 0 and 100.")
+    categories = payload.get("categoryScores")
+    if not isinstance(categories, dict):
+        errors.append("$.categoryScores: expected object.")
+    else:
+        for category in (
+            "crawlability",
+            "indexability",
+            "structured_data",
+            "content_extractability",
+            "entity_consistency",
+            "commerce_attributes",
+            "trust",
+            "ai_intent_coverage",
+            "external_authority",
+            "gtm",
+        ):
+            value = categories.get(category)
+            if not isinstance(value, int) or not 0 <= value <= 100:
+                errors.append(f"$.categoryScores.{category}: expected integer between 0 and 100.")
+    pages = payload.get("pages")
+    if not isinstance(pages, list) or not pages:
+        errors.append("$.pages: expected non-empty list.")
+    issues = payload.get("issues")
+    if not isinstance(issues, list):
+        errors.append("$.issues: expected list.")
+    else:
+        for index, issue in enumerate(issues):
+            if not isinstance(issue, dict):
+                errors.append(f"$.issues[{index}]: expected object.")
+                continue
+            errors.extend(
+                _required_keys(
+                    issue,
+                    ["id", "severity", "category", "title", "description", "whyItMatters", "recommendation", "confidence"],
+                    f"$.issues[{index}]",
+                )
+            )
+    for key in ("opportunities", "promptPanel", "patchSuggestions"):
+        if not isinstance(payload.get(key), list):
+            errors.append(f"$.{key}: expected list.")
+    return errors
+
+
+def _validate_geo_tasks_payload(payload: dict) -> list[str]:
+    errors = _required_keys(payload, ["contract", "source", "task_count", "tasks"], "$")
+    if payload.get("contract") != "agentshelf.geo_tasks.v0":
+        errors.append("$.contract: expected agentshelf.geo_tasks.v0.")
+    tasks = payload.get("tasks")
+    if not isinstance(tasks, list):
+        errors.append("$.tasks: expected list.")
+        return errors
+    if payload.get("task_count") != len(tasks):
+        errors.append("$.task_count: expected to equal len(tasks).")
+    for index, row in enumerate(tasks):
+        if not isinstance(row, dict):
+            errors.append(f"$.tasks[{index}]: expected object.")
+            continue
+        errors.extend(_validate_geo_task_row(row, f"$.tasks[{index}]"))
+    return errors
+
+
+def _validate_geo_task_row(row: dict, prefix: str) -> list[str]:
+    errors = _required_keys(row, ["contract", "source", "page_url", "task"], prefix)
+    if row.get("contract") != "agentshelf.geo_task.v0":
+        errors.append(f"{prefix}.contract: expected agentshelf.geo_task.v0.")
+    task = row.get("task")
+    if not isinstance(task, dict):
+        errors.append(f"{prefix}.task: expected object.")
+        return errors
+    errors.extend(
+        _required_keys(
+            task,
+            ["id", "title", "priority", "type", "reason", "files_or_page_area", "acceptance_check", "verification_command"],
+            f"{prefix}.task",
+        )
+    )
+    if task.get("priority") not in {"critical", "high", "medium", "low"}:
+        errors.append(f"{prefix}.task.priority: expected critical, high, medium, or low.")
+    if task.get("type") not in {"patch", "issue"}:
+        errors.append(f"{prefix}.task.type: expected patch or issue.")
+    if task.get("type") == "patch" and not task.get("patch_type"):
+        errors.append(f"{prefix}.task.patch_type: required when task.type is patch.")
+    if task.get("type") == "issue" and not task.get("category"):
+        errors.append(f"{prefix}.task.category: required when task.type is issue.")
+    for key in ("reason", "files_or_page_area", "acceptance_check", "verification_command"):
+        if not isinstance(task.get(key), str) or not task.get(key, "").strip():
+            errors.append(f"{prefix}.task.{key}: expected non-empty string.")
+    return errors
+
+
+def _required_keys(payload: dict, keys: list[str], prefix: str) -> list[str]:
+    return [f"{prefix}.{key}: missing required field." for key in keys if key not in payload]
+
+
+def _render_contract_validation(payload: dict, output_format: str) -> str:
+    if output_format == "json":
+        return json.dumps(payload, indent=2) + "\n"
+    status = "valid" if payload["valid"] else "invalid"
+    lines = [
+        "# AgentShelf Contract Validation",
+        "",
+        f"- Status: {status}",
+        f"- Contract: {payload['contract']}",
+        f"- Path: {payload['path']}",
+        f"- Items: {payload['item_count']}",
+    ]
+    if payload["schemas"]:
+        lines.append(f"- Schemas: {', '.join(payload['schemas'])}")
+    if payload["errors"]:
+        lines.extend(["", "## Errors"])
+        lines.extend(f"- {error}" for error in payload["errors"])
+    return "\n".join(lines) + "\n"
 
 
 def _slugify(value: str, fallback: str = "product") -> str:
@@ -2714,6 +2941,17 @@ def build_parser() -> argparse.ArgumentParser:
     geo_tasks.add_argument("--format", choices=("jsonl", "json"), default="jsonl", help="Task output format.")
     geo_tasks.add_argument("--output", type=Path, help="Optional task output path.")
 
+    validate_contract = subcommands.add_parser("validate-contract", help="Validate AgentShelf JSON or JSONL contract artifacts.")
+    validate_contract.add_argument("path", type=Path, help="AgentShelf JSON or JSONL artifact to validate.")
+    validate_contract.add_argument(
+        "--contract",
+        choices=("auto", "agentshelf.geo_audit.v0", "agentshelf.geo_task.v0", "agentshelf.geo_tasks.v0"),
+        default="auto",
+        help="Expected contract. Defaults to auto-detect.",
+    )
+    validate_contract.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Validation output format.")
+    validate_contract.add_argument("--output", type=Path, help="Optional validation report path.")
+
     compare = subcommands.add_parser("compare", help="Compare raw and rendered snapshots for unlocked agent-readiness signals.")
     compare.add_argument("raw", type=Path, help="Raw HTML snapshot path.")
     compare.add_argument("rendered", type=Path, help="Rendered HTML snapshot path.")
@@ -2944,6 +3182,10 @@ def main() -> int:
                 raise ValueError("Expected a JSON report from `agentshelf geo-audit --format json`.")
             rendered = render_geo_tasks_json(report) if args.format == "json" else render_geo_tasks_jsonl(report)
             exit_code = 0
+        elif args.command == "validate-contract":
+            payload = _validate_contract_file(args.path, requested_contract=args.contract)
+            rendered = _render_contract_validation(payload, args.format)
+            exit_code = 0 if payload["valid"] else 1
         elif args.command == "compare":
             raw_bundle = _load_scan_as(args.raw, "raw", adapter_profile=args.profile)
             rendered_bundle = _load_scan_as(args.rendered, "rendered", adapter_profile=args.profile)

@@ -27,6 +27,8 @@ agentshelf geo-audit <page-or-url> \
   --vertical commerce \
   --format json \
   --output agentshelf-geo-report.json
+
+agentshelf validate-contract agentshelf-geo-report.json
 ```
 
 Use `--vertical artist_store` for handmade, creator-commerce, commission, custom gift, artist-made, or one-of-one product contexts.
@@ -35,6 +37,7 @@ Use `--vertical artist_store` for handmade, creator-commerce, commission, custom
 
 ```bash
 agentshelf geo-tasks agentshelf-geo-report.json --output agentshelf-geo-tasks.jsonl
+agentshelf validate-contract agentshelf-geo-tasks.jsonl --contract agentshelf.geo_task.v0
 ```
 
 4. Read `agentshelf-geo-tasks.jsonl` and implement high-priority tasks first.
@@ -46,7 +49,9 @@ agentshelf geo-tasks agentshelf-geo-report.json --output agentshelf-geo-tasks.js
 
 ```bash
 agentshelf geo-audit <page-or-url> --format json --output agentshelf-geo-report-after.json
+agentshelf validate-contract agentshelf-geo-report-after.json
 agentshelf geo-tasks agentshelf-geo-report-after.json --output agentshelf-geo-tasks-after.jsonl
+agentshelf validate-contract agentshelf-geo-tasks-after.jsonl --contract agentshelf.geo_task.v0
 agentshelf scan <page-or-snapshot> --format markdown --min-score 70
 ```
 
@@ -56,6 +61,7 @@ If the target has multiple generated pages, use `agentshelf scan <dir-or-glob> -
 
 - Use `geo-audit` for broad GEO work: crawlability, entity consistency, AI intent coverage, prompt panel, GTM assets, and patch suggestions.
 - Use `geo-tasks` when Codex needs a concrete work queue from the GEO report.
+- Use `validate-contract` before implementation when a task depends on stable JSON or JSONL output.
 - Use `scan` for product-page readiness gates: price, availability, shipping, returns, specs, reviews, Product schema, FAQ, variants, policy, and agent actionability.
 - Use `agent-tasks` for product-page remediation tasks across snapshots or fixtures.
 - Use `render-fixtures` when product data exists but HTML snapshots need to be generated before auditing.

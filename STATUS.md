@@ -70,10 +70,12 @@ Production-ready open-source release completed; current focus is upgrading Agent
 - Added URL-mode GEO metadata checks for robots.txt, sitemap.xml, and llms.txt without introducing arbitrary crawling or external platform APIs.
 - Added `agentshelf geo-tasks` to convert GEO JSON reports into JSONL implementation tasks for Codex-style coding agents.
 - Added repo-local `skills/agentshelf-geo` with the audit-task-edit-verify workflow, task contract reference, and OpenAI agent metadata.
+- Added `schemas/agentshelf.geo_audit.v0.schema.json` and `schemas/agentshelf.geo_task.v0.schema.json` for published agent-facing contract references.
+- Added `agentshelf validate-contract` so coding agents and CI can validate GEO JSON/JSONL artifacts before implementation.
 - Added `examples/artist_store_product.html` as an artist-store/creator-commerce fixture for handmade/custom gift use cases.
 - Added `tests/test_geo.py` covering the GEO JSON contract, Markdown sections, prompt panel coverage, crawler blocker detection, Product schema patch suggestions, and `--format both` output.
 - Added workflow regression coverage for the bundled `agentshelf-geo` skill and `agentshelf.geo_task.v0` contract.
-- Updated README, architecture docs, changelog, and package metadata for version `0.22.0`.
+- Updated README, architecture docs, changelog, and package metadata for version `0.23.0`.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -131,11 +133,17 @@ Production-ready open-source release completed; current focus is upgrading Agent
 - `/opt/homebrew/bin/python3.11 -m unittest tests.test_geo tests.test_workflows`
 - `/opt/homebrew/bin/python3.11 -m unittest discover -s tests`
 - `/opt/homebrew/bin/python3.11 -m py_compile src/agentshelf/geo.py src/agentshelf/cli.py`
+- `/opt/homebrew/bin/python3.11 -m py_compile src/agentshelf/cli.py src/agentshelf/geo.py src/agentshelf/engine.py`
 - `ruby -e 'require "yaml"; YAML.load_file("skills/agentshelf-geo/SKILL.md"); YAML.load_file("skills/agentshelf-geo/agents/openai.yaml"); puts "skill-yaml-ok"'`
+- `ruby -rjson -e 'JSON.parse(File.read("schemas/agentshelf.geo_audit.v0.schema.json")); JSON.parse(File.read("schemas/agentshelf.geo_task.v0.schema.json")); puts "schema-json-ok"'`
 - `.venv/bin/python -m pip install -e . --no-build-isolation`
 - `.venv/bin/agentshelf geo-audit examples/artist_store_product.html --brand "Moon Kiln Studio" --category "custom handmade teacups" --vertical artist_store --format json --output /private/tmp/agentshelf-geo-report.json`
+- `.venv/bin/agentshelf validate-contract /private/tmp/agentshelf-geo-report.json --format json`
 - `.venv/bin/agentshelf geo-tasks /private/tmp/agentshelf-geo-report.json --output /private/tmp/agentshelf-geo-tasks.jsonl`
 - `.venv/bin/agentshelf geo-tasks /private/tmp/agentshelf-geo-report.json --format json`
+- `.venv/bin/agentshelf geo-tasks /private/tmp/agentshelf-geo-report.json --format json --output /private/tmp/agentshelf-geo-tasks-wrapper.json`
+- `.venv/bin/agentshelf validate-contract /private/tmp/agentshelf-geo-tasks.jsonl --contract agentshelf.geo_task.v0`
+- `.venv/bin/agentshelf validate-contract /private/tmp/agentshelf-geo-tasks-wrapper.json --contract agentshelf.geo_tasks.v0 --format json`
 - `.venv/bin/agentshelf scan examples/sample_product_page.html --format markdown --min-score 85`
 
 ## Next Best Task

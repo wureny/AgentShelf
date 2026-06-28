@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/wureny/AgentShelf/schemas/agentshelf.geo_audit.v0.schema.json",
+  "title": "AgentShelf GEO Audit v0",
+  "type": "object",
+  "required": [
+    "targetUrl",
+    "generatedAt",
+    "storeProfile",
+    "pages",
+    "overallScore",
+    "categoryScores",
+    "issues",
+    "opportunities",
+    "promptPanel",
+    "patchSuggestions",
+    "reportMarkdown",
+    "rawMetadata"
+  ],
+  "properties": {
+    "targetUrl": {"type": "string"},
+    "generatedAt": {"type": "string"},
+    "overallScore": {"type": "integer", "minimum": 0, "maximum": 100},
+    "categoryScores": {
+      "type": "object",
+      "required": [
+        "crawlability",
+        "indexability",
+        "structured_data",
+        "content_extractability",
+        "entity_consistency",
+        "commerce_attributes",
+        "trust",
+        "ai_intent_coverage",
+        "external_authority",
+        "gtm"
+      ],
+      "additionalProperties": {"type": "integer", "minimum": 0, "maximum": 100}
+    },
+    "storeProfile": {
+      "type": "object",
+      "required": [
+        "brandName",
+        "domain",
+        "category",
+        "vertical",
+        "targetMarkets",
+        "targetLanguages",
+        "keyProducts",
+        "buyerPersonas",
+        "useCases",
+        "competitors",
+        "positioning",
+        "uniqueClaims"
+      ]
+    },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "url",
+          "pageType",
+          "title",
+          "headings",
+          "textContent",
+          "wordCount",
+          "links",
+          "images",
+          "schemaTypes",
+          "productData",
+          "faqData",
+          "extractedClaims",
+          "crawlStatus"
+        ]
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "severity",
+          "category",
+          "title",
+          "description",
+          "whyItMatters",
+          "recommendation",
+          "confidence"
+        ]
+      }
+    },
+    "opportunities": {"type": "array"},
+    "promptPanel": {"type": "array"},
+    "patchSuggestions": {"type": "array"},
+    "reportMarkdown": {"type": "string"},
+    "rawMetadata": {
+      "type": "object",
+      "required": ["contract", "input"],
+      "properties": {
+        "contract": {"const": "agentshelf.geo_audit.v0"}
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/wureny/AgentShelf/schemas/agentshelf.geo_task.v0.schema.json",
+  "title": "AgentShelf GEO Task v0",
+  "type": "object",
+  "required": ["contract", "source", "page_url", "task"],
+  "properties": {
+    "contract": {"const": "agentshelf.geo_task.v0"},
+    "source": {"type": "string"},
+    "page_url": {"type": "string"},
+    "task": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "priority",
+        "type",
+        "reason",
+        "files_or_page_area",
+        "acceptance_check",
+        "verification_command"
+      ],
+      "properties": {
+        "id": {"type": "string"},
+        "title": {"type": "string"},
+        "priority": {"enum": ["critical", "high", "medium", "low"]},
+        "type": {"enum": ["patch", "issue"]},
+        "patch_type": {"type": "string"},
+        "category": {"type": "string"},
+        "reason": {"type": "string"},
+        "files_or_page_area": {"type": "string"},
+        "suggested_copy": {"type": ["string", "null"]},
+        "suggested_schema": {"type": ["object", "null"]},
+        "implementation_notes": {"type": ["string", "null"]},
+        "acceptance_check": {"type": "string"},
+        "verification_command": {"type": "string"}
+      }
+    }
+  }
+}

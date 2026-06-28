@@ -194,6 +194,70 @@ class GeoSkillTests(unittest.TestCase):
             self.assertEqual(payload["contract"], "agentshelf.geo_tasks.v0")
             self.assertGreater(payload["task_count"], 0)
 
+    def test_validate_contract_accepts_geo_audit_and_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            report = root / "geo-report.json"
+            tasks = root / "geo-tasks.jsonl"
+            audit = _run_cli(
+                "geo-audit",
+                "examples/artist_store_product.html",
+                "--brand",
+                "Moon Kiln Studio",
+                "--category",
+                "custom handmade teacups",
+                "--vertical",
+                "artist_store",
+                "--format",
+                "json",
+                "--output",
+                str(report),
+            )
+            self.assertEqual(audit.returncode, 0, audit.stderr)
+            task_result = _run_cli("geo-tasks", str(report), "--output", str(tasks))
+            self.assertEqual(task_result.returncode, 0, task_result.stderr)
+
+            audit_validation = _run_cli("validate-contract", str(report), "--format", "json")
+            task_validation = _run_cli("validate-contract", str(tasks), "--contract", "agentshelf.geo_task.v0")
+
+            self.assertEqual(audit_validation.returncode, 0, audit_validation.stderr)
+            audit_payload = json.loads(audit_validation.stdout)
+            self.assertTrue(audit_payload["valid"])
+            self.assertEqual(audit_payload["contract"], "agentshelf.geo_audit.v0")
+            self.assertIn("schemas/agentshelf.geo_audit.v0.schema.json", audit_payload["schemas"])
+            self.assertEqual(task_validation.returncode, 0, task_validation.stderr)
+            self.assertIn("Status: valid", task_validation.stdout)
+
+    def test_validate_contract_rejects_invalid_geo_task(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad = Path(tmpdir) / "bad-task.jsonl"
+            bad.write_text(
+                json.dumps(
+                    {
+                        "contract": "agentshelf.geo_task.v0",
+                        "source": "demo.html",
+                        "page_url": "demo.html",
+                        "task": {
+                            "id": "bad_task",
+                            "title": "Bad task",
+                            "priority": "urgent",
+                            "type": "patch",
+                            "reason": "",
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = _run_cli("validate-contract", str(bad), "--format", "json")
+
+            self.assertEqual(result.returncode, 1)
+            payload = json.loads(result.stdout)
+            self.assertFalse(payload["valid"])
+            self.assertTrue(any("priority" in error for error in payload["errors"]))
+            self.assertTrue(any("files_or_page_area" in error for error in payload["errors"]))
+
 
 if __name__ == "__main__":
     unittest.main()
