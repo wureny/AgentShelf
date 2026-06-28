@@ -52,6 +52,8 @@ The demo snapshot only proves the wiring. Before enforcing score gates, replace 
 
 Do not point AgentShelf at checkout flows, private customer pages, or raw third-party HTML that should not be committed.
 
+For concrete Shopify/Liquid and headless/Next.js snapshot generation examples, see [Platform Adoption](PLATFORM_ADOPTION.md).
+
 ## 4. Let Codex Implement The Tasks
 
 Ask Codex to use `$agentshelf-geo`, then follow this loop:

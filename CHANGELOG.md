@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.34.0
+- Added platform adoption guidance for Shopify/Liquid and headless/Next.js storefronts that use generated snapshots instead of live crawling.
+- Added regression coverage proving `init-merchant-repo`, `render-fixtures`, and `adoption-check` work together on a Shopify export inside a merchant-style repository.
+- Extended release readiness checks to keep the platform adoption guide present before public tags are created.
+
 ## 0.33.0
 - Added `agentshelf adoption-check` to validate initialized merchant repositories after `init-merchant-repo`.
 - The adoption check verifies config, GitHub workflow, exported Codex skill, onboarding docs, snapshot scan score, and GEO task generation in one local command.

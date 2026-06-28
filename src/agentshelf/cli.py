@@ -25,7 +25,7 @@ from agentshelf.geo import GeoSkillConfig, build_geo_audit, render_geo_json, ren
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.33 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.34 (+https://github.com/wureny/AgentShelf)"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -59,6 +59,7 @@ RELEASE_REQUIRED_FILES = (
     "action.yml",
     "docs/workflows/agentshelf-pr-gate.yml",
     "docs/MERCHANT_ADOPTION.md",
+    "docs/PLATFORM_ADOPTION.md",
     "skills/agentshelf-geo/SKILL.md",
     "skills/agentshelf-geo/references/agent-loop-example.md",
     "src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml",
@@ -469,6 +470,7 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
     pr_gate = read("docs/workflows/agentshelf-pr-gate.yml")
     skill = read("skills/agentshelf-geo/SKILL.md")
     merchant_adoption = read("docs/MERCHANT_ADOPTION.md")
+    platform_adoption = read("docs/PLATFORM_ADOPTION.md")
     merchant_workflow = read("src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml")
 
     version = _extract_project_version(pyproject_text)
@@ -512,6 +514,7 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
         "agentshelf export-skill",
         "docs/AGENT_IMPLEMENTATION_LOOP.md",
         "docs/MERCHANT_ADOPTION.md",
+        "docs/PLATFORM_ADOPTION.md",
         "Do not fabricate",
     )
     for snippet in required_readme:
@@ -532,6 +535,11 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
     for snippet in required_adoption:
         if snippet not in merchant_adoption:
             issues.append(f"docs/MERCHANT_ADOPTION.md missing snippet: {snippet}")
+
+    required_platform_adoption = ("Shopify Or Liquid", "Headless Or Next.js", "agentshelf render-fixtures", "agentshelf adoption-check")
+    for snippet in required_platform_adoption:
+        if snippet not in platform_adoption:
+            issues.append(f"docs/PLATFORM_ADOPTION.md missing snippet: {snippet}")
 
     required_template = ("agentshelf geo-run", "agentshelf agent-tasks", "github.event.inputs.product_page", "\\$agentshelf-geo")
     for snippet in required_template:

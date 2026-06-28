@@ -340,7 +340,7 @@ Options:
 
 `init-merchant-repo` initializes a storefront repository with the pieces needed for practical adoption: `.github/workflows/agentshelf-geo.yml`, `.agentshelf.json`, `snapshots/agentshelf-demo-product.html`, `docs/agentshelf-onboarding.md`, and the exported `agentshelf-geo` skill. It refuses to overwrite conflicting files unless `--force` is provided.
 
-`adoption-check` verifies that a merchant repository is actually ready for AgentShelf use after initialization. It checks the local config, GitHub workflow, exported Codex skill, onboarding docs, selected snapshot, product-readiness scan, and GEO task generation in one command. See [docs/MERCHANT_ADOPTION.md](docs/MERCHANT_ADOPTION.md).
+`adoption-check` verifies that a merchant repository is actually ready for AgentShelf use after initialization. It checks the local config, GitHub workflow, exported Codex skill, onboarding docs, selected snapshot, product-readiness scan, and GEO task generation in one command. See [docs/MERCHANT_ADOPTION.md](docs/MERCHANT_ADOPTION.md) and [docs/PLATFORM_ADOPTION.md](docs/PLATFORM_ADOPTION.md).
 
 `release-check` validates release readiness before a public tag: version consistency, changelog coverage, README production posture, GitHub Action metadata, pinned workflow examples, release notes, skill assets, and merchant onboarding templates.
 
@@ -513,7 +513,7 @@ Recommended first rollout:
 1. Start with `format: markdown` and `min-score: "70"` so humans can inspect failures.
 2. Upload `agentshelf-report.md` as an artifact on every run.
 3. Add `agentshelf agent-tasks` or the full artifact workflow when you want Codex-style agents to fix pages automatically.
-4. Pin a release tag such as `wureny/AgentShelf@v0.33.0` once the release exists. Use `@main` only while testing this repository.
+4. Pin a release tag such as `wureny/AgentShelf@v0.34.0` once the release exists. Use `@main` only while testing this repository.
 
 ```yaml
 name: AgentShelf
@@ -532,7 +532,7 @@ jobs:
           python-version: "3.11"
 
       - name: Audit product-page snapshots
-        uses: wureny/AgentShelf@v0.33.0
+        uses: wureny/AgentShelf@v0.34.0
         with:
           path: "snapshots/**/*.html"
           min-score: "70"
@@ -577,7 +577,7 @@ Use SARIF when you want GitHub code scanning annotations:
 
 ```yaml
 - name: Audit product-page snapshots
-  uses: wureny/AgentShelf@v0.33.0
+  uses: wureny/AgentShelf@v0.34.0
   with:
     path: "snapshots/**/*.html"
     min-score: "85"
@@ -916,6 +916,7 @@ python3 -m pip install -e ".[render]"  # optional rendered snapshots
 - [Shopify product export example](examples/shopify-products.json)
 - [WooCommerce CSV export example](examples/woocommerce-products.csv)
 - [Headless catalog export example](examples/headless-catalog.json)
+- [Platform adoption guide](docs/PLATFORM_ADOPTION.md)
 - [Calibration labels example](examples/calibration-labels.json)
 - [Draft calibration labels example](examples/draft-calibration-labels.json)
 - [GEO audit schema](schemas/agentshelf.geo_audit.v0.schema.json)

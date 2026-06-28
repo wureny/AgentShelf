@@ -41,6 +41,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - `benchmarks/fixtures/`: curated agent-readiness benchmark inputs
 - `benchmarks/expected/`: expected benchmark bands, blockers, and agent tasks
 - `docs/PROFILE_BENCHMARKS.md`: profile-specific benchmark contract for Shopify, WooCommerce, and headless fixtures
+- `docs/PLATFORM_ADOPTION.md`: Shopify/Liquid and headless/Next.js adoption path using generated snapshots and `adoption-check`
 
 ## Design Choices
 - Standard-library raw snapshot mode keeps the base demo runnable without browser installs.

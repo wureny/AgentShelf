@@ -19,7 +19,7 @@ jobs:
           python-version: "3.11"
 
       - name: Audit product-page snapshots
-        uses: wureny/AgentShelf@v0.33.0
+        uses: wureny/AgentShelf@v0.34.0
         with:
           path: "snapshots/**/*.html"
           min-score: "70"
