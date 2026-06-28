@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.33.0
+- Added `agentshelf adoption-check` to validate initialized merchant repositories after `init-merchant-repo`.
+- The adoption check verifies config, GitHub workflow, exported Codex skill, onboarding docs, snapshot scan score, and GEO task generation in one local command.
+- Added merchant adoption documentation so operators and Codex-style agents can confirm the AgentShelf workflow is actually installed before enforcing CI gates.
+
 ## 0.32.0
 - Added `agentshelf release-notes` to generate conservative Markdown or JSON release drafts from the matching `CHANGELOG.md` section before creating public GitHub tags.
 - Extended `release-check` to require release-note generation coverage so maintainers review production posture, install guidance, and non-claims before publishing.

@@ -25,7 +25,7 @@ from agentshelf.geo import GeoSkillConfig, build_geo_audit, render_geo_json, ren
 SUPPORTED_SUFFIXES = {".html", ".htm", ".txt"}
 BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
-USER_AGENT = "AgentShelf/0.32 (+https://github.com/wureny/AgentShelf)"
+USER_AGENT = "AgentShelf/0.33 (+https://github.com/wureny/AgentShelf)"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -58,6 +58,7 @@ RELEASE_REQUIRED_FILES = (
     "README.md",
     "action.yml",
     "docs/workflows/agentshelf-pr-gate.yml",
+    "docs/MERCHANT_ADOPTION.md",
     "skills/agentshelf-geo/SKILL.md",
     "skills/agentshelf-geo/references/agent-loop-example.md",
     "src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml",
@@ -243,6 +244,201 @@ def _render_merchant_repo_init(payload: dict, output_format: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _read_text_if_exists(path: Path) -> str:
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+def _build_adoption_check(
+    repo: Path,
+    *,
+    snapshot: str,
+    brand: str,
+    category: str,
+    vertical: str,
+    min_score: int | None = None,
+    skip_skill: bool = False,
+) -> dict:
+    root = repo.resolve()
+    issues: list[str] = []
+    warnings: list[str] = []
+    if not root.exists() or not root.is_dir():
+        raise ValueError(f"Merchant repository root does not exist: {repo}")
+
+    config_path = root / ".agentshelf.json"
+    workflow_path = root / ".github/workflows/agentshelf-geo.yml"
+    skill_path = root / ".codex/skills/agentshelf-geo/SKILL.md"
+    onboarding_path = root / "docs/agentshelf-onboarding.md"
+    snapshot_path = root / snapshot
+
+    surfaces = {
+        "config": {"path": str(config_path), "exists": config_path.exists()},
+        "workflow": {"path": str(workflow_path), "exists": workflow_path.exists()},
+        "skill": {"path": str(skill_path), "exists": skill_path.exists(), "skipped": skip_skill},
+        "onboarding": {"path": str(onboarding_path), "exists": onboarding_path.exists()},
+        "snapshot": {"path": str(snapshot_path), "exists": snapshot_path.exists()},
+    }
+
+    if not config_path.exists():
+        issues.append("Missing .agentshelf.json. Run `agentshelf init-merchant-repo` or add a scan config.")
+        config = {}
+    else:
+        config = _load_config(config_path)
+    if not workflow_path.exists():
+        issues.append("Missing .github/workflows/agentshelf-geo.yml. The merchant repo has no AgentShelf PR gate workflow.")
+    else:
+        workflow_text = _read_text_if_exists(workflow_path)
+        for snippet in ("agentshelf geo-run", "agentshelf scan", "agentshelf agent-tasks", "GITHUB_STEP_SUMMARY"):
+            if snippet not in workflow_text:
+                issues.append(f"Workflow missing expected AgentShelf command or summary snippet: {snippet}")
+    if not skip_skill:
+        if not skill_path.exists():
+            issues.append("Missing .codex/skills/agentshelf-geo/SKILL.md. Codex will not know the AgentShelf remediation loop.")
+        else:
+            skill_text = _read_text_if_exists(skill_path)
+            for snippet in ("name: agentshelf-geo", "agentshelf geo-run", "Do not fabricate reviews"):
+                if snippet not in skill_text:
+                    issues.append(f"Exported AgentShelf skill missing expected snippet: {snippet}")
+    if not onboarding_path.exists():
+        warnings.append("Missing docs/agentshelf-onboarding.md. Humans may not know how to replace demo snapshots or run Codex remediation.")
+    if not snapshot_path.exists():
+        issues.append(f"Missing snapshot input: {snapshot}")
+
+    scan_summary = None
+    geo_summary = None
+    if snapshot_path.exists():
+        active_profile = str(config.get("profile") or "auto")
+        if active_profile not in ADAPTER_PROFILES:
+            issues.append(f".agentshelf.json profile must be one of: {', '.join(ADAPTER_PROFILES)}.")
+            active_profile = "auto"
+        threshold = _coerce_score(min_score if min_score is not None else config.get("min_score"))
+        fail_on = config.get("fail_on")
+        if fail_on is not None and fail_on not in {"weak", "not_ready"}:
+            issues.append(".agentshelf.json fail_on must be weak or not_ready.")
+            fail_on = None
+        scan_bundle = _load_scan(snapshot_path, adapter_profile=active_profile)
+        scan_summary = {
+            "path": str(snapshot_path),
+            "score": scan_bundle["score"],
+            "band": scan_bundle["band"],
+            "profile": scan_bundle.get("commerce_signals", {}).get("profile", {}),
+            "top_fixes": scan_bundle.get("top_fixes", [])[:3],
+            "threshold": threshold,
+            "fail_on": fail_on,
+        }
+        if _fails_threshold(scan_bundle, threshold, fail_on):
+            issues.append(
+                f"Snapshot gate failed: score {scan_bundle['score']} band {scan_bundle['band']} "
+                f"does not satisfy min_score={threshold} fail_on={fail_on}."
+            )
+        html_text = snapshot_path.read_text(encoding="utf-8")
+        geo_result = build_geo_audit(
+            GeoSkillConfig(
+                targetUrl=str(snapshot_path),
+                brandName=brand,
+                category=category,
+                vertical=vertical,
+                outputFormat="json",
+            ),
+            html_text,
+            robots_text=None,
+            robots_status="not_checked",
+            sitemap_status="not_checked",
+            llms_status="not_checked",
+            raw_metadata={"source_type": "file", "fetch_warnings": []},
+        )
+        geo_report = json.loads(render_geo_json(geo_result))
+        task_rows = [json.loads(line) for line in render_geo_tasks_jsonl(geo_report).splitlines() if line.strip()]
+        geo_summary = {
+            "overall_score": geo_report["overallScore"],
+            "high_impact_issue_count": sum(1 for issue in geo_report.get("issues", []) if issue.get("severity") in {"critical", "high"}),
+            "task_count": len(task_rows),
+            "top_task_ids": [row["task"]["id"] for row in task_rows[:5]],
+        }
+
+    next_steps = []
+    if issues:
+        next_steps.append("Fix adoption issues, then re-run `agentshelf adoption-check <repo>` before enforcing CI gates.")
+    else:
+        next_steps.append("Replace the demo snapshot with generated storefront HTML before tightening production thresholds.")
+        next_steps.append("Ask Codex to use `$agentshelf-geo`, implement high-priority tasks, then re-run `agentshelf adoption-check`.")
+        next_steps.append("Enable the GitHub workflow once the local adoption check stays green on merchant-owned snapshots.")
+
+    return {
+        "contract": "agentshelf.adoption_check.v0",
+        "repo": str(root),
+        "snapshot": snapshot,
+        "brand": brand,
+        "category": category,
+        "vertical": vertical,
+        "valid": not issues,
+        "issues": issues,
+        "warnings": warnings,
+        "surfaces": surfaces,
+        "scan": scan_summary,
+        "geo": geo_summary,
+        "next_steps": next_steps,
+    }
+
+
+def _render_adoption_check(payload: dict, output_format: str) -> str:
+    if output_format == "json":
+        return json.dumps(payload, indent=2) + "\n"
+    status = "ready" if payload["valid"] else "not ready"
+    lines = [
+        "# AgentShelf Adoption Check",
+        "",
+        f"- Status: {status}",
+        f"- Repo: {payload['repo']}",
+        f"- Snapshot: {payload['snapshot']}",
+        f"- Brand: {payload['brand']}",
+        f"- Category: {payload['category']}",
+        f"- Vertical: {payload['vertical']}",
+        "",
+        "## Installed Surfaces",
+    ]
+    for name, surface in payload["surfaces"].items():
+        if surface.get("skipped"):
+            state = "skipped"
+        else:
+            state = "found" if surface["exists"] else "missing"
+        lines.append(f"- {name}: {state} (`{surface['path']}`)")
+    if payload["scan"]:
+        lines.extend(
+            [
+                "",
+                "## Snapshot Scan",
+                f"- Score: {payload['scan']['score']}",
+                f"- Band: {payload['scan']['band']}",
+                f"- Threshold: {payload['scan']['threshold']}",
+                f"- Fail on: {payload['scan']['fail_on']}",
+            ]
+        )
+        if payload["scan"]["top_fixes"]:
+            lines.append("- Top fixes:")
+            lines.extend(f"  - {_fix_text(fix)}" for fix in payload["scan"]["top_fixes"])
+    if payload["geo"]:
+        lines.extend(
+            [
+                "",
+                "## GEO Task Readiness",
+                f"- Overall GEO score: {payload['geo']['overall_score']}",
+                f"- High-impact issues: {payload['geo']['high_impact_issue_count']}",
+                f"- Generated tasks: {payload['geo']['task_count']}",
+            ]
+        )
+        if payload["geo"]["top_task_ids"]:
+            lines.append(f"- Top task IDs: {', '.join(payload['geo']['top_task_ids'])}")
+    if payload["issues"]:
+        lines.extend(["", "## Issues"])
+        lines.extend(f"- {issue}" for issue in payload["issues"])
+    if payload["warnings"]:
+        lines.extend(["", "## Warnings"])
+        lines.extend(f"- {warning}" for warning in payload["warnings"])
+    lines.extend(["", "## Next Steps"])
+    lines.extend(f"- {step}" for step in payload["next_steps"])
+    return "\n".join(lines) + "\n"
+
+
 def _extract_project_version(pyproject_text: str) -> str | None:
     match = re.search(r'(?m)^version\s*=\s*"([^"]+)"', pyproject_text)
     return match.group(1) if match else None
@@ -272,6 +468,7 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
     action = read("action.yml")
     pr_gate = read("docs/workflows/agentshelf-pr-gate.yml")
     skill = read("skills/agentshelf-geo/SKILL.md")
+    merchant_adoption = read("docs/MERCHANT_ADOPTION.md")
     merchant_workflow = read("src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml")
 
     version = _extract_project_version(pyproject_text)
@@ -295,6 +492,7 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
             required_release_notes = (
                 "Production posture",
                 "agentshelf init-merchant-repo",
+                "agentshelf adoption-check",
                 "agentshelf release-check",
                 "Before publishing",
             )
@@ -310,8 +508,10 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
     required_readme = (
         "Production Posture",
         "agentshelf init-merchant-repo",
+        "agentshelf adoption-check",
         "agentshelf export-skill",
         "docs/AGENT_IMPLEMENTATION_LOOP.md",
+        "docs/MERCHANT_ADOPTION.md",
         "Do not fabricate",
     )
     for snippet in required_readme:
@@ -327,6 +527,11 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
     for snippet in required_skill:
         if snippet not in skill:
             issues.append(f"agentshelf-geo skill missing snippet: {snippet}")
+
+    required_adoption = ("agentshelf init-merchant-repo", "agentshelf adoption-check", "$agentshelf-geo", "Production Boundary")
+    for snippet in required_adoption:
+        if snippet not in merchant_adoption:
+            issues.append(f"docs/MERCHANT_ADOPTION.md missing snippet: {snippet}")
 
     required_template = ("agentshelf geo-run", "agentshelf agent-tasks", "github.event.inputs.product_page", "\\$agentshelf-geo")
     for snippet in required_template:
@@ -419,6 +624,7 @@ def _build_release_notes(root: Path, *, version: str | None = None) -> dict:
         "## Install and adopt",
         "- For local development: `python3 -m pip install -e . --no-build-isolation`.",
         "- For merchant repositories: `agentshelf init-merchant-repo --brand \"<brand>\" --category \"<category>\" --vertical commerce`.",
+        "- After initialization: `agentshelf adoption-check . --brand \"<brand>\" --category \"<category>\" --vertical commerce`.",
         "- For Codex-style agents: `agentshelf export-skill --output-dir .codex/skills`, then invoke `$agentshelf-geo` against product-page snapshots or storefront fixtures.",
         f"- For GitHub Actions after the tag exists: `uses: wureny/AgentShelf@v{selected_version}`.",
         "",
@@ -3724,6 +3930,29 @@ def build_parser() -> argparse.ArgumentParser:
     init_merchant_repo.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
     init_merchant_repo.add_argument("--output", type=Path, help="Optional output path.")
 
+    adoption_check = subcommands.add_parser(
+        "adoption-check",
+        help="Validate an initialized merchant repository and run a local AgentShelf GEO smoke check.",
+    )
+    adoption_check.add_argument("repo", type=Path, help="Merchant repository root to check.")
+    adoption_check.add_argument(
+        "--snapshot",
+        default="snapshots/agentshelf-demo-product.html",
+        help="Snapshot path relative to the merchant repository.",
+    )
+    adoption_check.add_argument("--brand", default="Example Studio", help="Merchant, brand, artist, or store name for GEO smoke checks.")
+    adoption_check.add_argument("--category", default="commerce products", help="Commerce category for GEO smoke checks.")
+    adoption_check.add_argument(
+        "--vertical",
+        choices=("commerce", "creator_commerce", "artist_store", "local_service", "generic"),
+        default="commerce",
+        help="GEO vertical profile for the smoke check.",
+    )
+    adoption_check.add_argument("--min-score", type=int, help="Optional score gate for the snapshot smoke check.")
+    adoption_check.add_argument("--skip-skill", action="store_true", help="Do not require .codex/skills/agentshelf-geo.")
+    adoption_check.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format.")
+    adoption_check.add_argument("--output", type=Path, help="Optional output path.")
+
     release_check = subcommands.add_parser("release-check", help="Check source tree readiness before creating a public GitHub release tag.")
     release_check.add_argument("--root", type=Path, default=Path("."), help="AgentShelf source checkout root. Defaults to the current directory.")
     release_check.add_argument("--expected-version", help="Optional version that pyproject.toml must match.")
@@ -4093,6 +4322,18 @@ def main() -> int:
                 force=args.force,
             )
             rendered = _render_merchant_repo_init(payload, args.format)
+            exit_code = 0 if payload["valid"] else 1
+        elif args.command == "adoption-check":
+            payload = _build_adoption_check(
+                args.repo,
+                snapshot=args.snapshot,
+                brand=args.brand,
+                category=args.category,
+                vertical=args.vertical,
+                min_score=args.min_score,
+                skip_skill=args.skip_skill,
+            )
+            rendered = _render_adoption_check(payload, args.format)
             exit_code = 0 if payload["valid"] else 1
         elif args.command == "release-check":
             payload = _release_check(args.root, expected_version=args.expected_version)

@@ -87,10 +87,12 @@ Production-ready open-source release completed; current focus is upgrading Agent
 - Added tests proving initialized merchant repos can scan the demo snapshot and carry the exported `agentshelf-geo` skill.
 - Added `agentshelf release-check` for pre-tag validation of version consistency, release-facing docs, Action metadata, generated release notes, skill assets, and onboarding templates.
 - Added `agentshelf release-notes` for conservative Markdown/JSON GitHub release drafts that include changelog items, installation/adoption guidance, verification commands, production posture, and explicit non-claims.
+- Added `agentshelf adoption-check` so initialized merchant repositories can verify config, workflow, exported Codex skill, onboarding docs, snapshot scan score, and GEO task generation before enforcing CI gates.
+- Added `docs/MERCHANT_ADOPTION.md` to document the merchant repo adoption flow from initialization through Codex remediation and production boundaries.
 - Added `examples/artist_store_product.html` as an artist-store/creator-commerce fixture for handmade/custom gift use cases.
 - Added `tests/test_geo.py` covering the GEO JSON contract, Markdown sections, prompt panel coverage, crawler blocker detection, Product schema patch suggestions, and `--format both` output.
 - Added workflow regression coverage for the bundled `agentshelf-geo` skill and `agentshelf.geo_task.v0` contract.
-- Updated README, architecture docs, release docs, changelog, tests, and package metadata for version `0.32.0`.
+- Updated README, architecture docs, release docs, changelog, tests, and package metadata for version `0.33.0`.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`
@@ -166,11 +168,12 @@ Production-ready open-source release completed; current focus is upgrading Agent
 - `.venv/bin/agentshelf export-skill --output-dir /private/tmp/agentshelf-skills --format json`
 - `.venv/bin/agentshelf dogfood <public-product-url> --brand <brand> --category <category> --output-dir /private/tmp/agentshelf-dogfood --format json`
 - `.venv/bin/agentshelf scan examples/sample_product_page.html --format markdown --min-score 85`
-- `/opt/homebrew/bin/python3.11 -m agentshelf.cli release-notes --version 0.32.0 --output /private/tmp/agentshelf-v0.32.0-release.md`
-- `/opt/homebrew/bin/python3.11 -m agentshelf.cli release-check --expected-version 0.32.0`
+- `/opt/homebrew/bin/python3.11 -m agentshelf.cli release-notes --version 0.33.0 --output /private/tmp/agentshelf-v0.33.0-release.md`
+- `/opt/homebrew/bin/python3.11 -m agentshelf.cli release-check --expected-version 0.33.0`
+- `/opt/homebrew/bin/python3.11 -m agentshelf.cli adoption-check /private/tmp/agentshelf-merchant-adoption --brand "Moon Kiln Studio" --category "custom handmade teacups" --vertical artist_store --format json`
 
 ## Next Best Task
-Dogfood `agentshelf geo-run` against the first real artist-store page snapshot, then tighten the issue taxonomy and patch templates around the gaps found in that report without committing raw third-party HTML.
+Dogfood `agentshelf adoption-check` against a small Shopify or Next.js fixture repository that uses generated product snapshots, then add platform-specific adoption notes for the highest-friction path.
 
 ## Risks
 - Rendered snapshot mode requires users to install Playwright and Chromium; the base CLI remains dependency-free.

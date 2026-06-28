@@ -46,7 +46,7 @@ class WorkflowArtifactTests(unittest.TestCase):
         workflow = (ROOT / "docs/workflows/agentshelf-pr-gate.yml").read_text(encoding="utf-8")
 
         required_snippets = [
-            "uses: wureny/AgentShelf@v0.32.0",
+            "uses: wureny/AgentShelf@v0.33.0",
             "actions/setup-python@v5",
             "python-version: \"3.11\"",
             "path: \"snapshots/**/*.html\"",
@@ -247,11 +247,65 @@ class WorkflowArtifactTests(unittest.TestCase):
             self.assertIn("agentshelf agent-tasks", workflow)
             self.assertIn("\\$agentshelf-geo", workflow)
             self.assertIn("Moon Kiln Studio", onboarding)
+            self.assertIn("agentshelf adoption-check .", onboarding)
 
             scan = _run_cli("scan", str(snapshot), "--format", "json", "--min-score", "70")
             self.assertEqual(scan.returncode, 0, scan.stderr)
             scan_payload = json.loads(scan.stdout)
             self.assertGreaterEqual(scan_payload["score"], 70)
+
+    def test_adoption_check_validates_initialized_merchant_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            init = _run_cli(
+                "init-merchant-repo",
+                "--output-dir",
+                tmpdir,
+                "--brand",
+                "Moon Kiln Studio",
+                "--category",
+                "custom handmade teacups",
+                "--vertical",
+                "artist_store",
+                "--format",
+                "json",
+            )
+            self.assertEqual(init.returncode, 0, init.stderr)
+
+            result = _run_cli(
+                "adoption-check",
+                tmpdir,
+                "--brand",
+                "Moon Kiln Studio",
+                "--category",
+                "custom handmade teacups",
+                "--vertical",
+                "artist_store",
+                "--format",
+                "json",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["contract"], "agentshelf.adoption_check.v0")
+            self.assertTrue(payload["valid"])
+            self.assertTrue(payload["surfaces"]["config"]["exists"])
+            self.assertTrue(payload["surfaces"]["workflow"]["exists"])
+            self.assertTrue(payload["surfaces"]["skill"]["exists"])
+            self.assertGreaterEqual(payload["scan"]["score"], 70)
+            self.assertIn(payload["scan"]["band"], {"workable", "strong"})
+            self.assertGreaterEqual(payload["geo"]["task_count"], 0)
+
+    def test_adoption_check_requires_codex_skill_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            init = _run_cli("init-merchant-repo", "--output-dir", tmpdir, "--no-skill", "--format", "json")
+            self.assertEqual(init.returncode, 0, init.stderr)
+
+            result = _run_cli("adoption-check", tmpdir, "--format", "json")
+
+            self.assertEqual(result.returncode, 1)
+            payload = json.loads(result.stdout)
+            self.assertFalse(payload["valid"])
+            self.assertTrue(any(".codex/skills/agentshelf-geo/SKILL.md" in issue for issue in payload["issues"]))
 
     def test_init_merchant_repo_detects_conflicts_without_force(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -266,14 +320,15 @@ class WorkflowArtifactTests(unittest.TestCase):
             self.assertEqual((root / ".agentshelf.json").read_text(encoding="utf-8"), '{"custom": true}\n')
 
     def test_release_check_validates_release_surfaces(self) -> None:
-        result = _run_cli("release-check", "--expected-version", "0.32.0", "--format", "json")
+        result = _run_cli("release-check", "--expected-version", "0.33.0", "--format", "json")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["contract"], "agentshelf.release_check.v0")
         self.assertTrue(payload["valid"])
-        self.assertEqual(payload["version"], "0.32.0")
+        self.assertEqual(payload["version"], "0.33.0")
         self.assertIn("README.md", payload["checked_files"])
+        self.assertIn("docs/MERCHANT_ADOPTION.md", payload["checked_files"])
         self.assertIn("src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml", payload["checked_files"])
 
     def test_release_check_fails_on_wrong_expected_version(self) -> None:
@@ -285,29 +340,29 @@ class WorkflowArtifactTests(unittest.TestCase):
         self.assertTrue(any("Expected version 9.99.0" in issue for issue in payload["issues"]))
 
     def test_release_notes_generates_reviewable_markdown(self) -> None:
-        result = _run_cli("release-notes", "--version", "0.32.0")
+        result = _run_cli("release-notes", "--version", "0.33.0")
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("# AgentShelf v0.32.0", result.stdout)
+        self.assertIn("# AgentShelf v0.33.0", result.stdout)
         self.assertIn("## What changed", result.stdout)
-        self.assertIn("agentshelf release-notes", result.stdout)
+        self.assertIn("agentshelf adoption-check", result.stdout)
         self.assertIn("agentshelf init-merchant-repo", result.stdout)
-        self.assertIn("agentshelf release-check --expected-version 0.32.0", result.stdout)
+        self.assertIn("agentshelf release-check --expected-version 0.33.0", result.stdout)
         self.assertIn("Production posture", result.stdout)
         self.assertIn("Not a hosted crawler", result.stdout)
         self.assertIn("Before publishing", result.stdout)
 
     def test_release_notes_json_contract_is_stable(self) -> None:
-        result = _run_cli("release-notes", "--version", "0.32.0", "--format", "json")
+        result = _run_cli("release-notes", "--version", "0.33.0", "--format", "json")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["contract"], "agentshelf.release_notes.v0")
-        self.assertEqual(payload["version"], "0.32.0")
-        self.assertEqual(payload["title"], "AgentShelf v0.32.0")
+        self.assertEqual(payload["version"], "0.33.0")
+        self.assertEqual(payload["title"], "AgentShelf v0.33.0")
         self.assertTrue(payload["valid"])
-        self.assertTrue(any("release-notes" in item for item in payload["changelog_items"]))
-        self.assertIn("wureny/AgentShelf@v0.32.0", payload["markdown"])
+        self.assertTrue(any("adoption-check" in item for item in payload["changelog_items"]))
+        self.assertIn("wureny/AgentShelf@v0.33.0", payload["markdown"])
 
     def test_release_notes_fails_on_wrong_version(self) -> None:
         result = _run_cli("release-notes", "--version", "9.99.0", "--format", "json")

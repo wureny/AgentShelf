@@ -22,6 +22,11 @@ agentshelf geo-run snapshots/agentshelf-demo-product.html \
   --format json
 
 agentshelf scan snapshots/agentshelf-demo-product.html --config .agentshelf.json
+
+agentshelf adoption-check . \
+  --brand "{{BRAND}}" \
+  --category "{{CATEGORY}}" \
+  --vertical {{VERTICAL}}
 ```
 
 ## Replace The Demo Snapshot

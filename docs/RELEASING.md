@@ -5,8 +5,8 @@ Use this checklist before creating a public GitHub release or Marketplace-facing
 ## Pre-Tag Checks
 
 ```bash
-agentshelf release-check --expected-version 0.32.0
-agentshelf release-notes --version 0.32.0 --output /tmp/agentshelf-v0.32.0-release.md
+agentshelf release-check --expected-version 0.33.0
+agentshelf release-notes --version 0.33.0 --output /tmp/agentshelf-v0.33.0-release.md
 PYTHONPATH=src python3 -m unittest discover -s tests
 python3 -m pip install -e . --no-build-isolation
 python3 -m pip wheel . --no-deps --no-build-isolation -w /tmp/agentshelf-wheelhouse
@@ -21,11 +21,11 @@ python3 -m pip wheel . --no-deps --no-build-isolation -w /tmp/agentshelf-wheelho
 Only create the tag after the checks pass and the release notes are reviewed:
 
 ```bash
-git tag v0.32.0
-git push origin v0.32.0
+git tag v0.33.0
+git push origin v0.33.0
 ```
 
-Then draft a GitHub release for `v0.32.0` using the generated release notes.
+Then draft a GitHub release for `v0.33.0` using the generated release notes.
 
 ## Marketplace Posture
 
@@ -37,6 +37,6 @@ Publish the GitHub Action to Marketplace only after the tag exists and CI passes
 
 ## After Release
 
-- Confirm the copyable Action example uses `wureny/AgentShelf@v0.32.0`.
+- Confirm the copyable Action example uses `wureny/AgentShelf@v0.33.0`.
 - Confirm `agentshelf init-merchant-repo` works from the released source.
 - If the merchant template still installs from `@main`, update it in the next patch release after the tag is available.
