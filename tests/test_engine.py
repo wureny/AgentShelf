@@ -267,6 +267,24 @@ window.ShopifyAnalytics.meta = {
         self.assertNotIn("bundle_components", blocking_ids)
         self.assertNotIn("regional_shipping_promises", blocking_ids)
 
+    def test_newsletter_subscribe_copy_does_not_trigger_subscription_terms(self) -> None:
+        html = """<html><head><title>Studio Mug</title></head><body>
+<h1>Studio Mug</h1>
+<p>$42.00 USD. In stock. Ships in 3 business days. Returns accepted within 14 days.</p>
+<p>Material: stoneware. Capacity: 10 oz.</p>
+<p>FAQ: Is it dishwasher safe? Yes.</p>
+<p>Subscribe to our newsletter for studio updates and restock alerts.</p>
+</body></html>"""
+        bundle = scan_readiness(parse_input(html))
+        checks = {item["id"]: item for item in bundle["checks"]}
+        contract = build_agent_contract(bundle)
+        blocking_ids = {item["id"] for item in contract["blocking_issues"]}
+        task_ids = {item["id"] for item in contract["agent_tasks"]}
+
+        self.assertFalse(checks["subscription_terms"]["applicable"])
+        self.assertNotIn("subscription_terms", blocking_ids)
+        self.assertNotIn("complete_subscription_terms", task_ids)
+
 
 class BenchmarkTests(unittest.TestCase):
     def test_benchmark_expectations_are_stable(self) -> None:

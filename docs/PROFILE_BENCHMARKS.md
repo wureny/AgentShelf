@@ -10,6 +10,7 @@ AgentShelf includes profile-specific benchmark fixtures so extraction behavior s
 | `woocommerce_profile_variable_page.html` | `woocommerce` | WooCommerce `data-product_variations` arrays expose variant price, stock, and option attributes. |
 | `headless_profile_state_page.html` | `headless` | Headless app state such as `__NEXT_DATA__` exposes product variants even when data is not visible as plain text. |
 | `profile_rule_gap_product.html` | `shopify` | Production-style subscription bundle gaps become actionable agent tasks for subscription terms, bundle contents, regional shipping, and return policy schema. |
+| `newsletter_subscribe_single_sku_page.html` | `generic` | Real-dogfood-derived newsletter subscribe copy is not treated as a purchase subscription unless selling-plan or transactional subscription intent is present. |
 
 ## Contract
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.27.0
+- Tightened subscription-intent detection so newsletter or restock-alert copy does not trigger subscription purchase-term failures.
+- Added a synthetic benchmark fixture derived from real-page dogfooding for single-SKU product pages with newsletter subscribe copy.
+- Locked the expected benchmark output so `complete_subscription_terms` does not reappear unless a page has actual selling-plan or purchase-subscription intent.
+
 ## 0.26.0
 - Added `agentshelf dogfood` for safe real-URL dogfooding without persisting third-party raw HTML by default.
 - `dogfood` writes GEO reports, GEO tasks, contract validation, product-readiness scan reports, dogfood notes, and a machine-readable summary.

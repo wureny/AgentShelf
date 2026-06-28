@@ -505,9 +505,19 @@ def _policy_snippets(plain_text: str) -> dict[str, list[str]]:
 
 
 def _subscription_signals(plain_text: str, selling_plan_groups: list[Any]) -> dict[str, Any]:
-    intent = bool(selling_plan_groups) or bool(
-        re.search(r"\b(?:subscribe|subscription|auto-?deliver|recurring|replenishment)\b", plain_text, flags=re.IGNORECASE)
+    purchase_intent = _first_match(
+        plain_text,
+        [
+            r"subscribe\s+and\s+save",
+            r"subscription\s+(?:price|plan|option|offer|box|product)",
+            r"auto-?deliver(?:y)?",
+            r"recurring\s+(?:order|delivery|shipment|purchase)",
+            r"replenishment\s+(?:plan|order|delivery)",
+            r"(?:weekly|monthly|quarterly)\s+(?:delivery|subscription|shipments?)",
+            r"ships?\s+every\s+(?:week|month|\d+\s+(?:days|weeks|months))",
+        ],
     )
+    intent = bool(selling_plan_groups) or purchase_intent is not None
     cadence = _first_match(
         plain_text,
         [
@@ -530,7 +540,7 @@ def _subscription_signals(plain_text: str, selling_plan_groups: list[Any]) -> di
         "has_cadence": cadence is not None,
         "has_cancellation": cancellation is not None,
         "has_price_or_discount": price_or_discount is not None or bool(selling_plan_groups),
-        "evidence": [item for item in [cadence, cancellation, price_or_discount] if item],
+        "evidence": [item for item in [purchase_intent, cadence, cancellation, price_or_discount] if item],
     }
 
 

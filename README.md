@@ -788,6 +788,7 @@ AgentShelf checks whether a shopping agent can make a reliable purchase recommen
 - embedded storefront JSON where price, stock, subscriptions, or metafields are not visible as plain copy
 - profile-specific Shopify, WooCommerce, and headless storefront extraction contracts
 - subscription bundles with missing cancellation, component, return-schema, or regional delivery details
+- real-dogfood-derived newsletter subscribe copy that should not be treated as a purchase subscription
 - visible price or stock contradicting JSON-LD
 - JS-rendered placeholder HTML that static scanners may overtrust
 - pages with schema but no policy or fit answers

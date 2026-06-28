@@ -77,10 +77,11 @@ Production-ready open-source release completed; current focus is upgrading Agent
 - Bundled the `agentshelf-geo` skill assets inside the Python package and added drift tests against the repo-local skill copy.
 - Added `agentshelf dogfood` for safe real-URL dogfooding that writes derived GEO, task, validation, scan, notes, and summary artifacts without persisting third-party raw HTML.
 - Added `docs/DOGFOODING.md` to document the no-raw-third-party-HTML policy and the path from real-page findings to synthetic fixtures or calibration labels.
+- Tightened subscription-intent detection and added `newsletter_subscribe_single_sku_page.html` to prevent newsletter/restock copy from triggering purchase-subscription remediation tasks.
 - Added `examples/artist_store_product.html` as an artist-store/creator-commerce fixture for handmade/custom gift use cases.
 - Added `tests/test_geo.py` covering the GEO JSON contract, Markdown sections, prompt panel coverage, crawler blocker detection, Product schema patch suggestions, and `--format both` output.
 - Added workflow regression coverage for the bundled `agentshelf-geo` skill and `agentshelf.geo_task.v0` contract.
-- Updated README, architecture docs, changelog, and package metadata for version `0.26.0`.
+- Updated README, architecture docs, changelog, and package metadata for version `0.27.0`.
 
 ## Verification
 - `PYTHONPATH=src python3 -m unittest discover -s tests`

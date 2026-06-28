@@ -1,0 +1,12 @@
+{
+  "band": "strong",
+  "blocking_issues": [],
+  "top_tasks": [
+    "add_return_policy_schema"
+  ],
+  "commerce_signals": {
+    "variant_count": 0,
+    "selling_plan_group_count": 0,
+    "has_return_policy_schema": false
+  }
+}
