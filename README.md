@@ -347,7 +347,7 @@ Options:
 
 `release-check` validates release readiness before a public tag: version consistency, changelog coverage, README production posture, GitHub Action metadata, pinned workflow examples, release notes, public-audit status, skill assets, and merchant onboarding templates.
 
-`release-notes` generates a conservative GitHub release draft from the matching `CHANGELOG.md` section. It includes install/adoption commands, recommended verification, production posture, and explicit non-claims so maintainers do not accidentally publish Marketplace-style copy that overstates external-agent ranking lift. See [docs/RELEASING.md](docs/RELEASING.md).
+`release-notes` generates a conservative GitHub release draft from the matching `CHANGELOG.md` section. It includes install/adoption commands, recommended verification, production posture, and explicit non-claims so maintainers do not accidentally publish Marketplace-style copy that overstates external-agent ranking lift. Commit reviewed drafts under `docs/releases/`; `release-check` verifies the current version draft matches the generator. See [docs/RELEASING.md](docs/RELEASING.md).
 
 `snapshot` fetches raw HTML with the standard library by default. Use `--rendered` for a Playwright-backed single-page capture when product data is injected by JavaScript. Rendered mode is optional so the base CLI stays lightweight.
 

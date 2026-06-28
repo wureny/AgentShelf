@@ -7,7 +7,7 @@ Use this checklist before creating a public GitHub release or Marketplace-facing
 ```bash
 agentshelf public-audit .
 agentshelf release-check --expected-version 0.36.0
-agentshelf release-notes --version 0.36.0 --output /tmp/agentshelf-v0.36.0-release.md
+agentshelf release-notes --version 0.36.0 --output docs/releases/v0.36.0.md
 PYTHONPATH=src python3 -m unittest discover -s tests
 python3 -m pip install -e . --no-build-isolation
 python3 -m pip wheel . --no-deps --no-build-isolation -w /tmp/agentshelf-wheelhouse
@@ -15,9 +15,9 @@ python3 -m pip wheel . --no-deps --no-build-isolation -w /tmp/agentshelf-wheelho
 
 `public-audit` verifies that public-facing files contain the adoption path, skill workflow, conservative non-claims, and no private local paths or unfinished markers.
 
-`release-check` verifies the source tree has consistent package metadata, changelog coverage, release-facing README copy, Action metadata, pinned workflow examples, generated release-note coverage, public-audit status, bundled skill assets, and merchant onboarding templates.
+`release-check` verifies the source tree has consistent package metadata, changelog coverage, release-facing README copy, Action metadata, pinned workflow examples, generated release-note coverage, committed release draft parity, public-audit status, bundled skill assets, and merchant onboarding templates.
 
-`release-notes` generates a reviewable GitHub release draft from the matching `CHANGELOG.md` section. Review it before tagging; it intentionally keeps production posture conservative and avoids claims about external shopping-agent ranking lift.
+`release-notes` generates a reviewable GitHub release draft from the matching `CHANGELOG.md` section. Commit it under `docs/releases/` before tagging so the release copy is reviewed by CI. It intentionally keeps production posture conservative and avoids claims about external shopping-agent ranking lift.
 
 ## Tag And Release
 

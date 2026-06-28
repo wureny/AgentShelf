@@ -511,6 +511,7 @@ class WorkflowArtifactTests(unittest.TestCase):
                 "docs/ARCHITECTURE.md",
                 "docs/RELEASING.md",
                 "docs/PUBLIC_RELEASE_AUDIT.md",
+                "docs/releases/v0.36.0.md",
                 "docs/MERCHANT_ADOPTION.md",
                 "docs/PLATFORM_ADOPTION.md",
                 "docs/AGENT_IMPLEMENTATION_LOOP.md",
@@ -553,6 +554,7 @@ class WorkflowArtifactTests(unittest.TestCase):
         self.assertIn("docs/MERCHANT_ADOPTION.md", payload["checked_files"])
         self.assertIn("docs/PLATFORM_ADOPTION.md", payload["checked_files"])
         self.assertIn("docs/PUBLIC_RELEASE_AUDIT.md", payload["checked_files"])
+        self.assertIn("docs/releases/v0.36.0.md", payload["checked_files"])
         self.assertIn("src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml", payload["checked_files"])
 
     def test_release_check_fails_on_wrong_expected_version(self) -> None:
@@ -563,6 +565,37 @@ class WorkflowArtifactTests(unittest.TestCase):
         self.assertFalse(payload["valid"])
         self.assertTrue(any("Expected version 9.99.0" in issue for issue in payload["issues"]))
 
+    def test_release_check_fails_when_committed_release_draft_drifts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            for relative in (
+                "pyproject.toml",
+                "src/agentshelf/__init__.py",
+                "src/agentshelf/cli.py",
+                "CHANGELOG.md",
+                "README.md",
+                "action.yml",
+                "docs/workflows/agentshelf-pr-gate.yml",
+                "docs/PUBLIC_RELEASE_AUDIT.md",
+                "docs/releases/v0.36.0.md",
+                "docs/MERCHANT_ADOPTION.md",
+                "docs/PLATFORM_ADOPTION.md",
+                "skills/agentshelf-geo/SKILL.md",
+                "skills/agentshelf-geo/references/agent-loop-example.md",
+                "src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml",
+            ):
+                target = source / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text((ROOT / relative).read_text(encoding="utf-8"), encoding="utf-8")
+            (source / "docs/releases/v0.36.0.md").write_text("# Drifted release notes\n", encoding="utf-8")
+
+            result = _run_cli("release-check", "--root", tmpdir, "--expected-version", "0.36.0", "--format", "json")
+
+            self.assertEqual(result.returncode, 1)
+            payload = json.loads(result.stdout)
+            self.assertFalse(payload["valid"])
+            self.assertTrue(any("docs/releases/v0.36.0.md does not match generated release notes" in issue for issue in payload["issues"]))
+
     def test_release_notes_generates_reviewable_markdown(self) -> None:
         result = _run_cli("release-notes", "--version", "0.36.0")
 
@@ -570,6 +603,7 @@ class WorkflowArtifactTests(unittest.TestCase):
         self.assertIn("# AgentShelf v0.36.0", result.stdout)
         self.assertIn("## What changed", result.stdout)
         self.assertIn("public-audit", result.stdout)
+        self.assertIn("docs/releases/v0.36.0.md", result.stdout)
         self.assertIn("agentshelf init-merchant-repo", result.stdout)
         self.assertIn("agentshelf adoption-check", result.stdout)
         self.assertIn("agentshelf public-audit .", result.stdout)

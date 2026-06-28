@@ -4,6 +4,7 @@
 - Added `agentshelf public-audit` to validate public open-source release hygiene before tags, release drafts, or Marketplace-facing copy.
 - Added `docs/PUBLIC_RELEASE_AUDIT.md` with maintainer checks for public adoption paths, conservative non-claims, private path leaks, tracked generated-file hygiene, release notes, and Marketplace readiness.
 - Added `init-merchant-repo --install-ref` so generated merchant workflows can pin AgentShelf to a reviewed release tag instead of always installing from `main`.
+- Added `docs/releases/v0.36.0.md` as a versioned release draft and made `release-check` verify it matches generated release notes.
 - Cleaned `STATUS.md` into a public-facing release posture summary instead of an internal automation log.
 - Extended `release-check` so public-audit failures block release readiness.
 

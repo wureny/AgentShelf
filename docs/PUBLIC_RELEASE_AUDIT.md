@@ -13,7 +13,7 @@ AgentShelf should be easy for three audiences to adopt without private context:
 ```bash
 agentshelf public-audit .
 agentshelf release-check --expected-version 0.36.0
-agentshelf release-notes --version 0.36.0 --output /tmp/agentshelf-v0.36.0-release.md
+agentshelf release-notes --version 0.36.0 --output docs/releases/v0.36.0.md
 PYTHONPATH=src python3 -m unittest discover -s tests
 python3 -m pip install -e . --no-build-isolation
 python3 -m pip wheel . --no-deps --no-build-isolation -w /tmp/agentshelf-wheelhouse
@@ -24,6 +24,8 @@ python3 -m pip wheel . --no-deps --no-build-isolation -w /tmp/agentshelf-wheelho
 `release-check` validates version consistency, changelog coverage, pinned Action examples, generated release notes, Action metadata, bundled skill assets, and merchant onboarding templates.
 
 `release-notes` generates review copy only. It does not publish a tag, release, or Marketplace listing.
+
+The committed `docs/releases/v0.36.0.md` file must match the generated release notes before `release-check` passes.
 
 ## What Must Be True
 

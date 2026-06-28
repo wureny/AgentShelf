@@ -82,6 +82,7 @@ PUBLIC_AUDIT_REQUIRED_FILES = (
     "docs/ARCHITECTURE.md",
     "docs/RELEASING.md",
     "docs/PUBLIC_RELEASE_AUDIT.md",
+    "docs/releases/v0.36.0.md",
     "docs/MERCHANT_ADOPTION.md",
     "docs/PLATFORM_ADOPTION.md",
     "docs/AGENT_IMPLEMENTATION_LOOP.md",
@@ -730,6 +731,7 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
     issues: list[str] = []
     warnings: list[str] = []
     root = root.resolve()
+    checked_files = list(RELEASE_REQUIRED_FILES)
 
     def read(relative: str) -> str:
         path = root / relative
@@ -784,6 +786,15 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
             for snippet in required_release_notes:
                 if snippet not in release_notes["markdown"]:
                     issues.append(f"Generated release notes missing snippet: {snippet}")
+            release_draft_relative = f"docs/releases/v{version}.md"
+            checked_files.append(release_draft_relative)
+            release_draft_path = root / release_draft_relative
+            if not release_draft_path.exists():
+                issues.append(f"Missing release draft file: {release_draft_relative}")
+            else:
+                release_draft = release_draft_path.read_text(encoding="utf-8")
+                if release_draft != release_notes["markdown"]:
+                    issues.append(f"{release_draft_relative} does not match generated release notes.")
         public_audit = _build_public_audit(root)
         if not public_audit["valid"]:
             issues.append(f"Public audit failed with {len(public_audit['issues'])} issue(s). Run `agentshelf public-audit --format markdown`.")
@@ -853,7 +864,7 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
         "valid": not issues,
         "issues": issues,
         "warnings": warnings,
-        "checked_files": list(RELEASE_REQUIRED_FILES),
+        "checked_files": checked_files,
         "next_steps": [
             "Run the full local test suite before tagging.",
             "Create and push the release tag only after reviewing release notes.",
