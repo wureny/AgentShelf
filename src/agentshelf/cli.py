@@ -77,6 +77,11 @@ PUBLIC_AUDIT_REQUIRED_FILES = (
     "STATUS.md",
     "pyproject.toml",
     "action.yml",
+    ".github/pull_request_template.md",
+    ".github/ISSUE_TEMPLATE/bug_report.yml",
+    ".github/ISSUE_TEMPLATE/merchant_adoption.yml",
+    ".github/ISSUE_TEMPLATE/feature_request.yml",
+    ".github/ISSUE_TEMPLATE/config.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/agentshelf-artifacts.yml",
     "docs/ARCHITECTURE.md",
@@ -575,6 +580,30 @@ def _public_audit_check_snippets(texts: dict[str, str], issues: list[dict]) -> N
             "Current Release Posture",
             "Verified Workflows",
             "Next Best Task",
+        ),
+        ".github/pull_request_template.md": (
+            "Verification",
+            "AgentShelf boundaries",
+            "I did not fabricate",
+            "release-facing docs",
+        ),
+        ".github/ISSUE_TEMPLATE/bug_report.yml": (
+            "AgentShelf version or commit",
+            "Command or workflow step",
+            "Minimal fixture or sanitized excerpt",
+            "I removed secrets",
+        ),
+        ".github/ISSUE_TEMPLATE/merchant_adoption.yml": (
+            "Merchant adoption help",
+            "adoption-check",
+            "not a hosted crawler",
+            "I will not use AgentShelf tasks to fabricate",
+        ),
+        ".github/ISSUE_TEMPLATE/feature_request.yml": (
+            "Feature request",
+            "merchant, consultant, or coding-agent workflow",
+            "unverified claims",
+            "merchant-confirmed facts",
         ),
     }
     for relative, snippets in required_snippets.items():

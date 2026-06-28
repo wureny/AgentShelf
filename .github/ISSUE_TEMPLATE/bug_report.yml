@@ -1,0 +1,68 @@
+name: Bug report
+description: Report a reproducible AgentShelf CLI, GitHub Action, or scoring issue.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include enough detail to reproduce the issue without private merchant data.
+  - type: input
+    id: version
+    attributes:
+      label: AgentShelf version or commit
+      description: Run `agentshelf --version` if available, or paste the git ref / install ref.
+      placeholder: "v0.36.0 or commit SHA"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - CLI scan / agent-audit / agent-tasks
+        - GEO workflow / geo-run / geo-tasks
+        - GitHub Action
+        - Merchant repo initializer / adoption-check
+        - Snapshot / rendered capture
+        - Fixture rendering / import validation
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command or workflow step
+      description: Paste the exact command or the relevant workflow step. Remove secrets and private customer data.
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should AgentShelf have done?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Paste the error, unexpected score, warning, or artifact excerpt.
+    validations:
+      required: true
+  - type: textarea
+    id: fixture
+    attributes:
+      label: Minimal fixture or sanitized excerpt
+      description: Provide a small HTML/catalog excerpt if possible. Do not include raw third-party HTML you cannot share.
+      render: html
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Safety and data boundaries
+      options:
+        - label: I removed secrets, tokens, customer personal data, and private merchant data.
+          required: true
+        - label: I did not include raw third-party HTML that I am not allowed to share.
+          required: true

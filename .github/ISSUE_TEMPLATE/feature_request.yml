@@ -1,0 +1,47 @@
+name: Feature request
+description: Propose a new AgentShelf rule, platform adapter, CLI workflow, or documentation improvement.
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What merchant, consultant, or coding-agent workflow is blocked?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest useful change.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Scoring rule / evidence extraction
+        - GEO audit / task contract
+        - Storefront adapter
+        - GitHub Action / CI artifact workflow
+        - Merchant onboarding / skill export
+        - Documentation / examples
+    validations:
+      required: true
+  - type: textarea
+    id: fixture
+    attributes:
+      label: Example fixture or expected artifact
+      description: If this is a rule or adapter request, describe a sanitized fixture and expected output.
+      render: markdown
+  - type: checkboxes
+    id: claims
+    attributes:
+      label: Claims and evidence
+      options:
+        - label: This request does not depend on unverified claims of improved external-agent ranking or conversion lift.
+          required: true
+        - label: Any proposed copy/schema should use merchant-confirmed facts only.
+          required: true

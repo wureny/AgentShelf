@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/wureny/AgentShelf/security/policy
+    about: Please report security issues through the security policy instead of public issues.
+  - name: Release checklist
+    url: https://github.com/wureny/AgentShelf/blob/main/docs/PUBLIC_RELEASE_AUDIT.md
+    about: Read the public release audit before asking about tags or Marketplace publication.

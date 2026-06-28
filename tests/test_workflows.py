@@ -42,6 +42,26 @@ class WorkflowArtifactTests(unittest.TestCase):
             with self.subTest(snippet=snippet):
                 self.assertIn(snippet, action)
 
+    def test_issue_and_pr_templates_capture_oss_support_boundaries(self) -> None:
+        bug = (ROOT / ".github/ISSUE_TEMPLATE/bug_report.yml").read_text(encoding="utf-8")
+        adoption = (ROOT / ".github/ISSUE_TEMPLATE/merchant_adoption.yml").read_text(encoding="utf-8")
+        feature = (ROOT / ".github/ISSUE_TEMPLATE/feature_request.yml").read_text(encoding="utf-8")
+        config = (ROOT / ".github/ISSUE_TEMPLATE/config.yml").read_text(encoding="utf-8")
+        pr_template = (ROOT / ".github/pull_request_template.md").read_text(encoding="utf-8")
+
+        required = {
+            "bug": ("AgentShelf version or commit", "Command or workflow step", "Minimal fixture or sanitized excerpt", "I removed secrets"),
+            "adoption": ("Merchant adoption help", "adoption-check", "not a hosted crawler", "I will not use AgentShelf tasks to fabricate"),
+            "feature": ("Feature request", "coding-agent workflow", "unverified claims", "merchant-confirmed facts"),
+            "config": ("blank_issues_enabled: false", "Security vulnerability", "Release checklist"),
+            "pr": ("Verification", "AgentShelf boundaries", "I did not fabricate", "docs/releases/"),
+        }
+        texts = {"bug": bug, "adoption": adoption, "feature": feature, "config": config, "pr": pr_template}
+        for name, snippets in required.items():
+            for snippet in snippets:
+                with self.subTest(template=name, snippet=snippet):
+                    self.assertIn(snippet, texts[name])
+
     def test_copyable_pr_gate_workflow_uses_pinned_action_and_artifact_upload(self) -> None:
         workflow = (ROOT / "docs/workflows/agentshelf-pr-gate.yml").read_text(encoding="utf-8")
 
@@ -506,6 +526,11 @@ class WorkflowArtifactTests(unittest.TestCase):
                 "STATUS.md",
                 "pyproject.toml",
                 "action.yml",
+                ".github/pull_request_template.md",
+                ".github/ISSUE_TEMPLATE/bug_report.yml",
+                ".github/ISSUE_TEMPLATE/merchant_adoption.yml",
+                ".github/ISSUE_TEMPLATE/feature_request.yml",
+                ".github/ISSUE_TEMPLATE/config.yml",
                 ".github/workflows/ci.yml",
                 ".github/workflows/agentshelf-artifacts.yml",
                 "docs/ARCHITECTURE.md",

@@ -1,0 +1,52 @@
+name: Merchant adoption help
+description: Get help adopting AgentShelf in a Shopify, headless, WooCommerce, or DTC repository.
+title: "[Adoption]: "
+labels: ["merchant-adoption", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for practical setup questions around `init-merchant-repo`, `adoption-check`, generated snapshots, and Codex remediation loops.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Storefront platform
+      options:
+        - Shopify / Liquid
+        - Headless / Next.js / React
+        - WooCommerce
+        - Static / custom storefront
+        - Unknown / evaluating
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Adoption goal
+      description: What are you trying to make AgentShelf do in this repository?
+      placeholder: "Generate snapshots in CI, run geo-run, export the Codex skill, gate PRs, etc."
+    validations:
+      required: true
+  - type: textarea
+    id: current_setup
+    attributes:
+      label: Current setup
+      description: Include relevant commands, workflow snippets, snapshot path, and whether `.codex/skills/agentshelf-geo` is committed.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: AgentShelf output
+      description: Paste `adoption-check`, `geo-run`, or `scan` output. Remove secrets and private data.
+      render: text
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Scope boundaries
+      options:
+        - label: I understand AgentShelf is local-input first and is not a hosted crawler, Shopify app, or checkout automation system.
+          required: true
+        - label: I will not use AgentShelf tasks to fabricate reviews, ratings, stock, shipping promises, return promises, press, or external authority.
+          required: true
