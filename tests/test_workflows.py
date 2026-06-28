@@ -448,7 +448,9 @@ class WorkflowArtifactTests(unittest.TestCase):
         self.assertIn("docs/PUBLIC_RELEASE_AUDIT.md", payload["checked_files"])
         self.assertIn("skills/agentshelf-geo/SKILL.md", payload["checked_files"])
         self.assertEqual(payload["summary"]["issues"], 0)
+        self.assertEqual(payload["summary"]["warnings"], 1)
         self.assertTrue(any(warning["id"] == "temporary_main_install" for warning in payload["warnings"]))
+        self.assertFalse(any(warning["id"] == "generated_file_present" for warning in payload["warnings"]))
 
     def test_public_audit_fails_on_private_context_leak(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

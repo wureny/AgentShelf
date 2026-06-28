@@ -343,7 +343,7 @@ Options:
 
 `adoption-check` verifies that a merchant repository is actually ready for AgentShelf use after initialization. It checks the local config, GitHub workflow, exported Codex skill, onboarding docs, selected snapshot, product-readiness scan, and GEO task generation in one command. See [docs/MERCHANT_ADOPTION.md](docs/MERCHANT_ADOPTION.md) and [docs/PLATFORM_ADOPTION.md](docs/PLATFORM_ADOPTION.md).
 
-`public-audit` checks the source checkout for public open-source release hygiene: required adoption docs, Codex skill guidance, conservative non-claims, private local path leaks, unfinished work markers, and generated-file hygiene. Run it before release tags or Marketplace-facing copy. See [docs/PUBLIC_RELEASE_AUDIT.md](docs/PUBLIC_RELEASE_AUDIT.md).
+`public-audit` checks the source checkout for public open-source release hygiene: required adoption docs, Codex skill guidance, conservative non-claims, private local path leaks, unfinished work markers, and tracked generated-file hygiene. Run it before release tags or Marketplace-facing copy. See [docs/PUBLIC_RELEASE_AUDIT.md](docs/PUBLIC_RELEASE_AUDIT.md).
 
 `release-check` validates release readiness before a public tag: version consistency, changelog coverage, README production posture, GitHub Action metadata, pinned workflow examples, release notes, public-audit status, skill assets, and merchant onboarding templates.
 

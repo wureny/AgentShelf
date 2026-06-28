@@ -19,7 +19,7 @@ python3 -m pip install -e . --no-build-isolation
 python3 -m pip wheel . --no-deps --no-build-isolation -w /tmp/agentshelf-wheelhouse
 ```
 
-`public-audit` checks release-facing files for required public adoption paths, Codex skill guidance, conservative non-claims, and private local path leaks such as developer home directories or automation workspace names.
+`public-audit` checks release-facing files for required public adoption paths, Codex skill guidance, conservative non-claims, private local path leaks such as developer home directories or automation workspace names, and tracked generated files.
 
 `release-check` validates version consistency, changelog coverage, pinned Action examples, generated release notes, Action metadata, bundled skill assets, and merchant onboarding templates.
 

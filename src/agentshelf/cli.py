@@ -595,25 +595,6 @@ def _public_audit_scan_private_context(texts: dict[str, str], issues: list[dict]
                 break
 
 
-def _public_audit_scan_generated_files(root: Path, warnings: list[dict]) -> None:
-    generated_paths = (
-        "src/agentshelf.egg-info",
-        "tests/__pycache__",
-        "src/agentshelf/__pycache__",
-        ".venv",
-    )
-    for relative in generated_paths:
-        path = root / relative
-        if path.exists():
-            warnings.append(
-                _public_audit_issue(
-                    "generated_file_present",
-                    f"Generated local path exists and should remain untracked: {relative}",
-                    path=relative,
-                )
-            )
-
-
 def _public_audit_scan_git_tracked_generated(root: Path, warnings: list[dict]) -> None:
     git_dir = root / ".git"
     if not git_dir.exists():
@@ -658,7 +639,6 @@ def _build_public_audit(root: Path) -> dict:
 
     _public_audit_check_snippets(texts, issues)
     _public_audit_scan_private_context(texts, issues)
-    _public_audit_scan_generated_files(root, warnings)
     _public_audit_scan_git_tracked_generated(root, warnings)
 
     merchant_workflow = texts.get("src/agentshelf/templates/merchant-repo/workflows/agentshelf-geo.yml", "")
@@ -792,7 +772,7 @@ def _release_check(root: Path, *, expected_version: str | None = None) -> dict:
         if not public_audit["valid"]:
             issues.append(f"Public audit failed with {len(public_audit['issues'])} issue(s). Run `agentshelf public-audit --format markdown`.")
         for warning in public_audit["warnings"]:
-            if warning["id"] not in {"generated_file_present", "temporary_main_install"}:
+            if warning["id"] != "temporary_main_install":
                 warnings.append(warning["message"])
         pinned_action = f"wureny/AgentShelf@v{version}"
         if pinned_action not in readme:
