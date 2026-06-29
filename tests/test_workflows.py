@@ -513,6 +513,22 @@ class WorkflowArtifactTests(unittest.TestCase):
         self.assertFalse(any(warning["id"] == "temporary_main_install" for warning in payload["warnings"]))
         self.assertFalse(any(warning["id"] == "generated_file_present" for warning in payload["warnings"]))
 
+    def test_adoption_check_validates_agentshelf_source_checkout(self) -> None:
+        result = _run_cli("adoption-check", ".", "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["contract"], "agentshelf.adoption_check.v0")
+        self.assertEqual(payload["mode"], "agentshelf_source_checkout")
+        self.assertTrue(payload["valid"])
+        self.assertTrue(payload["source_readiness"]["public_audit_valid"])
+        self.assertTrue(payload["source_readiness"]["release_check_valid"])
+        fixture = payload["source_readiness"]["artist_store_fixture"]
+        self.assertGreater(fixture["after_score"], fixture["before_score"])
+        self.assertLess(fixture["after_issue_count"], fixture["before_issue_count"])
+        self.assertTrue(payload["surfaces"]["codex_skill"]["exists"])
+        self.assertTrue(payload["surfaces"]["artist_store_before"]["exists"])
+
     def test_public_audit_fails_on_private_context_leak(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

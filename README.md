@@ -31,16 +31,22 @@ agentshelf geo-run \
   --output-dir reports/artist-store
 
 # 4. Generate implementation-ready tasks for Codex or a developer.
-agentshelf geo-tasks reports/artist-store/store-report.json \
+agentshelf geo-tasks reports/artist-store/report.json \
   --output reports/artist-store/geo-tasks.jsonl
 
 # 5. Validate contracts before and after implementation.
-agentshelf validate-contract reports/artist-store/store-report.json \
+agentshelf validate-contract reports/artist-store/report.json \
   --contract agentshelf.store_geo_audit.v0
 agentshelf validate-contract reports/artist-store/geo-tasks.jsonl \
   --contract agentshelf.geo_task.v0
 
-# 6. Check adoption and release hygiene.
+# 6. Run the deterministic before/after dogfood fixture for Codex-style agents.
+agentshelf dogfood \
+  --fixture artist-store-comparison \
+  --vertical artist_store \
+  --output-dir reports/artist-store-fixture
+
+# 7. Check adoption and release hygiene.
 agentshelf adoption-check .
 agentshelf public-audit
 agentshelf release-check --expected-version 0.36.0
@@ -367,9 +373,9 @@ Options:
 
 `geo-tasks` turns `geo-audit --format json` output into JSONL work items for coding agents. Each row includes `files_or_page_area`, `reason`, `suggested_copy`, optional `suggested_schema`, `acceptance_check`, and `verification_command`.
 
-`geo-run` runs the agent workflow end to end. It writes `geo-report.json`, `geo-report.md`, `geo-tasks.jsonl`, validation JSON, `summary.json`, and, for local HTML targets, `scan-report.md`. Use it for dogfooding, CI artifacts, or a Codex task handoff where the agent should not manually chain multiple commands.
+`geo-run` runs the agent workflow end to end. It writes `geo-report.json`, `geo-report.md`, `geo-tasks.jsonl`, validation JSON, `summary.json`, and, for local HTML targets, `scan-report.md`. Store-level runs also write `store-report.*` plus agent-friendly aliases `report.json`, `report.md`, and `report.html`. Use it for dogfooding, CI artifacts, or a Codex task handoff where the agent should not manually chain multiple commands.
 
-`dogfood` is the safe real-URL variant. It fetches a public page in memory, writes GEO artifacts, contract validation, scan reports, `dogfood-notes.md`, and `summary.json`, but does not persist third-party raw HTML. Use it before turning real-page findings into anonymized fixtures or calibration labels.
+`dogfood` has two safe modes. `agentshelf dogfood <url>` fetches a public page in memory, writes GEO artifacts, contract validation, scan reports, `dogfood-notes.md`, and `summary.json`, but does not persist third-party raw HTML. `agentshelf dogfood --fixture artist-store-comparison` runs the bundled synthetic before/after artist-store benchmark and writes `comparison.json`, before/after `report.*`, `geo-tasks.jsonl`, and dogfood notes. Use URL dogfood before turning real-page findings into anonymized fixtures; use fixture dogfood as the deterministic Codex regression loop.
 
 `validate-contract` validates AgentShelf JSON and JSONL artifacts before a coding agent acts on them. It currently covers `agentshelf.geo_audit.v0`, `agentshelf.geo_task.v0`, and the `agentshelf.geo_tasks.v0` JSON wrapper using the published schemas in `schemas/` plus dependency-free structural checks.
 
@@ -379,7 +385,7 @@ Options:
 
 `init-merchant-repo` initializes a storefront repository with the pieces needed for practical adoption: `.github/workflows/agentshelf-geo.yml`, `.agentshelf.json`, `snapshots/agentshelf-demo-product.html`, `docs/agentshelf-onboarding.md`, and the exported `agentshelf-geo` skill. It refuses to overwrite conflicting files unless `--force` is provided. Use `--install-ref v0.36.0` after a public release tag exists; the default remains `main` for unreleased source testing.
 
-`adoption-check` verifies that a merchant repository is actually ready for AgentShelf use after initialization. It checks the local config, GitHub workflow, exported Codex skill, onboarding docs, selected snapshot, product-readiness scan, and GEO task generation in one command. See [docs/MERCHANT_ADOPTION.md](docs/MERCHANT_ADOPTION.md) and [docs/PLATFORM_ADOPTION.md](docs/PLATFORM_ADOPTION.md).
+`adoption-check` verifies that a merchant repository is actually ready for AgentShelf use after initialization. It checks the local config, GitHub workflow, exported Codex skill, onboarding docs, selected snapshot, product-readiness scan, and GEO task generation in one command. When run against the AgentShelf source checkout, it switches to source-readiness mode and verifies public-audit, release-check, docs, packaged Codex skill assets, and the artist-store before/after fixture. See [docs/MERCHANT_ADOPTION.md](docs/MERCHANT_ADOPTION.md) and [docs/PLATFORM_ADOPTION.md](docs/PLATFORM_ADOPTION.md).
 
 `public-audit` checks the source checkout for public open-source release hygiene: required adoption docs, Codex skill guidance, conservative non-claims, private local path leaks, unfinished work markers, and tracked generated-file hygiene. Run it before release tags or Marketplace-facing copy. See [docs/PUBLIC_RELEASE_AUDIT.md](docs/PUBLIC_RELEASE_AUDIT.md).
 

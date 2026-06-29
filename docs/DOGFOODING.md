@@ -30,6 +30,19 @@ agentshelf dogfood https://example.com/products/custom-teacup \
 
 It does not write the fetched raw HTML. The summary includes `raw_html_persisted: false`.
 
+## Deterministic Fixture Dogfood
+
+Use this workflow when you want a repeatable Codex-style agent loop without fetching any third-party page:
+
+```bash
+agentshelf dogfood \
+  --fixture artist-store-comparison \
+  --vertical artist_store \
+  --output-dir reports/artist-store-fixture
+```
+
+This writes a synthetic before/after comparison plus `report.json`, `report.md`, `report.html`, and `geo-tasks.jsonl` for both fixture states. Use it to verify that AgentShelf can produce actionable coding-agent tasks and that the after fixture improves deterministic local readiness. It is not evidence of live AI provider visibility or ranking lift.
+
 ## What Can Be Committed
 
 Safe to commit:

@@ -29,6 +29,11 @@ BAND_ORDER = {"not_ready": 0, "weak": 1, "workable": 2, "strong": 3}
 DEFAULT_CONFIG = ".agentshelf.json"
 USER_AGENT = "AgentShelf/0.36 (+https://github.com/wureny/AgentShelf)"
 DEFAULT_INSTALL_REF = "main"
+ARTIST_STORE_FIXTURES = {
+    "artist-store-before": ("examples/fixtures/artist-store-before", "before"),
+    "artist-store-after": ("examples/fixtures/artist-store-after", "after"),
+}
+ARTIST_STORE_PROFILE = "examples/profiles/artist-store.example.json"
 FIXTURE_PLATFORMS = ("shopify", "woocommerce", "headless")
 FIXTURE_INPUT_FORMATS = ("auto", "agentshelf", "shopify", "woocommerce", "headless")
 RENDER_EXTRA_MESSAGE = (
@@ -334,6 +339,132 @@ def _read_text_if_exists(path: Path) -> str:
     return path.read_text(encoding="utf-8") if path.exists() else ""
 
 
+def _is_agentshelf_source_checkout(root: Path) -> bool:
+    return (root / "pyproject.toml").is_file() and (root / "src/agentshelf/cli.py").is_file()
+
+
+def _build_source_checkout_adoption_check(
+    root: Path,
+    *,
+    brand: str,
+    category: str,
+    vertical: str,
+) -> dict:
+    issues: list[str] = []
+    warnings: list[str] = []
+    surfaces = {
+        "readme": {"path": str(root / "README.md"), "exists": (root / "README.md").is_file()},
+        "geo_skill_doc": {"path": str(root / "docs/geo-skill.md"), "exists": (root / "docs/geo-skill.md").is_file()},
+        "store_audit_doc": {"path": str(root / "docs/store-level-audit.md"), "exists": (root / "docs/store-level-audit.md").is_file()},
+        "dogfood_doc": {"path": str(root / "docs/dogfood-artist-store.md"), "exists": (root / "docs/dogfood-artist-store.md").is_file()},
+        "codex_skill": {"path": str(root / "skills/agentshelf-geo/SKILL.md"), "exists": (root / "skills/agentshelf-geo/SKILL.md").is_file()},
+        "artist_store_before": {
+            "path": str(root / "examples/fixtures/artist-store-before"),
+            "exists": (root / "examples/fixtures/artist-store-before").is_dir(),
+        },
+        "artist_store_after": {
+            "path": str(root / "examples/fixtures/artist-store-after"),
+            "exists": (root / "examples/fixtures/artist-store-after").is_dir(),
+        },
+        "artist_store_profile": {
+            "path": str(root / ARTIST_STORE_PROFILE),
+            "exists": (root / ARTIST_STORE_PROFILE).is_file(),
+        },
+    }
+    for name, surface in surfaces.items():
+        if not surface["exists"]:
+            issues.append(f"Missing AgentShelf source readiness surface: {name} ({surface['path']}).")
+
+    readme = _read_text_if_exists(root / "README.md")
+    for snippet in (
+        "Canonical Workflow",
+        "agentshelf geo-run",
+        "agentshelf geo-tasks",
+        "agentshelf adoption-check",
+        "does not measure live ChatGPT",
+    ):
+        if snippet not in readme:
+            issues.append(f"README missing source-readiness snippet: {snippet}")
+
+    public_audit = _build_public_audit(root)
+    if not public_audit["valid"]:
+        issues.append("public-audit is not valid; run `agentshelf public-audit --format json` for details.")
+    if public_audit["warnings"]:
+        warnings.append("public-audit has warnings; review before public release or Marketplace publication.")
+
+    pyproject_text = _read_text_if_exists(root / "pyproject.toml")
+    release_check = _release_check(root, expected_version=_extract_project_version(pyproject_text))
+    if not release_check["valid"]:
+        issues.append("release-check is not valid; run `agentshelf release-check --format json` for details.")
+    if release_check["warnings"]:
+        warnings.append("release-check has warnings; review before tagging a release.")
+
+    fixture_summary = None
+    if surfaces["artist_store_before"]["exists"] and surfaces["artist_store_after"]["exists"] and surfaces["artist_store_profile"]["exists"]:
+        profile = load_store_profile(root / ARTIST_STORE_PROFILE)
+        config = GeoSkillConfig(
+            targetUrl="examples/fixtures/artist-store-before",
+            brandName=brand,
+            category=category,
+            vertical=vertical,
+            outputFormat="json",
+        )
+        before_report = build_store_geo_audit(root / "examples/fixtures/artist-store-before", config, profile=profile, include_html=False)
+        after_report = build_store_geo_audit(
+            root / "examples/fixtures/artist-store-after",
+            GeoSkillConfig(**{**config.__dict__, "targetUrl": "examples/fixtures/artist-store-after"}),
+            profile=profile,
+            include_html=False,
+        )
+        fixture_summary = {
+            "before_score": before_report["storeScore"],
+            "after_score": after_report["storeScore"],
+            "score_delta": after_report["storeScore"] - before_report["storeScore"],
+            "before_issue_count": len(before_report["issues"]),
+            "after_issue_count": len(after_report["issues"]),
+            "issue_delta": len(after_report["issues"]) - len(before_report["issues"]),
+            "before_task_count": len(before_report.get("taskRows") or []),
+            "after_task_count": len(after_report.get("taskRows") or []),
+        }
+        if fixture_summary["score_delta"] <= 0:
+            issues.append("Artist-store after fixture should score higher than the before fixture.")
+        if fixture_summary["issue_delta"] >= 0:
+            issues.append("Artist-store after fixture should have fewer issues than the before fixture.")
+
+    valid = not issues
+    next_steps = (
+        [
+            "Run `agentshelf dogfood --fixture artist-store-comparison --output-dir reports/artist-store-fixture` to inspect the deterministic agent loop.",
+            "Use `$agentshelf-geo` with `geo-tasks.jsonl` in a merchant-owned repo, then re-run merchant `adoption-check`.",
+        ]
+        if valid
+        else ["Fix source readiness issues, then re-run `agentshelf adoption-check . --format json`."]
+    )
+    return {
+        "contract": "agentshelf.adoption_check.v0",
+        "repo": str(root),
+        "mode": "agentshelf_source_checkout",
+        "snapshot": "examples/fixtures/artist-store-before",
+        "brand": brand,
+        "category": category,
+        "vertical": vertical,
+        "valid": valid,
+        "issues": issues,
+        "warnings": warnings,
+        "surfaces": surfaces,
+        "scan": None,
+        "geo": None,
+        "source_readiness": {
+            "public_audit_valid": public_audit["valid"],
+            "public_audit_warnings": len(public_audit["warnings"]),
+            "release_check_valid": release_check["valid"],
+            "release_check_warnings": len(release_check["warnings"]),
+            "artist_store_fixture": fixture_summary,
+        },
+        "next_steps": next_steps,
+    }
+
+
 def _build_adoption_check(
     repo: Path,
     *,
@@ -349,6 +480,8 @@ def _build_adoption_check(
     warnings: list[str] = []
     if not root.exists() or not root.is_dir():
         raise ValueError(f"Merchant repository root does not exist: {repo}")
+    if _is_agentshelf_source_checkout(root):
+        return _build_source_checkout_adoption_check(root, brand=brand, category=category, vertical=vertical)
 
     config_path = root / ".agentshelf.json"
     workflow_path = root / ".github/workflows/agentshelf-geo.yml"
@@ -474,6 +607,7 @@ def _render_adoption_check(payload: dict, output_format: str) -> str:
         "# AgentShelf Adoption Check",
         "",
         f"- Status: {status}",
+        f"- Mode: {payload.get('mode', 'merchant_repo')}",
         f"- Repo: {payload['repo']}",
         f"- Snapshot: {payload['snapshot']}",
         f"- Brand: {payload['brand']}",
@@ -514,6 +648,28 @@ def _render_adoption_check(payload: dict, output_format: str) -> str:
         )
         if payload["geo"]["top_task_ids"]:
             lines.append(f"- Top task IDs: {', '.join(payload['geo']['top_task_ids'])}")
+    if payload.get("source_readiness"):
+        source = payload["source_readiness"]
+        lines.extend(
+            [
+                "",
+                "## Source Checkout Readiness",
+                f"- Public audit valid: {source['public_audit_valid']}",
+                f"- Public audit warnings: {source['public_audit_warnings']}",
+                f"- Release check valid: {source['release_check_valid']}",
+                f"- Release check warnings: {source['release_check_warnings']}",
+            ]
+        )
+        fixture = source.get("artist_store_fixture")
+        if fixture:
+            lines.extend(
+                [
+                    f"- Artist-store before score: {fixture['before_score']}",
+                    f"- Artist-store after score: {fixture['after_score']}",
+                    f"- Artist-store score delta: {fixture['score_delta']:+}",
+                    f"- Artist-store issue delta: {fixture['issue_delta']:+}",
+                ]
+            )
     if payload["issues"]:
         lines.extend(["", "## Issues"])
         lines.extend(f"- {issue}" for issue in payload["issues"])
@@ -1489,6 +1645,39 @@ def _write_text_atomic(path: Path, text: str) -> None:
     tmp_path.replace(path)
 
 
+def _source_checkout_root() -> Path:
+    candidates = [Path.cwd(), Path(__file__).resolve().parents[2]]
+    for candidate in candidates:
+        if (candidate / "examples/fixtures/artist-store-before").is_dir() and (candidate / ARTIST_STORE_PROFILE).is_file():
+            return candidate.resolve()
+    return Path.cwd().resolve()
+
+
+def _artist_store_fixture_path(fixture: str) -> tuple[Path, str]:
+    root = _source_checkout_root()
+    if fixture not in ARTIST_STORE_FIXTURES:
+        raise ValueError(f"Unsupported fixture: {fixture}")
+    relative, label = ARTIST_STORE_FIXTURES[fixture]
+    path = root / relative
+    if not path.is_dir():
+        raise ValueError(
+            f"Fixture {fixture} was not found at {path}. "
+            "Fixture dogfood is available from a source checkout that includes examples/fixtures."
+        )
+    return path, label
+
+
+def _artist_store_profile_path() -> Path:
+    root = _source_checkout_root()
+    path = root / ARTIST_STORE_PROFILE
+    if not path.is_file():
+        raise ValueError(
+            f"Artist-store profile was not found at {path}. "
+            "Fixture dogfood is available from a source checkout that includes examples/profiles."
+        )
+    return path
+
+
 def _validate_contract_file(path: Path, requested_contract: str = "auto") -> dict:
     text = path.read_text(encoding="utf-8")
     errors: list[str] = []
@@ -1887,6 +2076,196 @@ def _render_store_geo_run_summary(payload: dict) -> str:
     lines.extend(f"- {item}" for item in payload["limitations"])
     lines.extend(["", "## Next Actions"])
     lines.extend(f"- {action}" for action in payload["next_actions"])
+    return "\n".join(lines) + "\n"
+
+
+def _write_store_geo_artifacts(output_dir: Path, store_report: dict) -> dict:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    report_path = output_dir / "store-report.json"
+    report_md_path = output_dir / "store-report.md"
+    report_html_path = output_dir / "store-report.html"
+    report_alias_path = output_dir / "report.json"
+    report_md_alias_path = output_dir / "report.md"
+    report_html_alias_path = output_dir / "report.html"
+    tasks_path = output_dir / "geo-tasks.jsonl"
+
+    report_json = render_store_geo_json(store_report)
+    _write_text_atomic(report_path, report_json)
+    _write_text_atomic(report_alias_path, report_json)
+    _write_text_atomic(report_md_path, store_report["reportMarkdown"])
+    _write_text_atomic(report_md_alias_path, store_report["reportMarkdown"])
+    _write_text_atomic(report_html_path, store_report.get("reportHtml", ""))
+    _write_text_atomic(report_html_alias_path, store_report.get("reportHtml", ""))
+    _write_text_atomic(tasks_path, render_store_geo_tasks_jsonl(store_report))
+
+    report_validation = _validate_contract_file(report_path, requested_contract="agentshelf.store_geo_audit.v0")
+    task_validation = _validate_contract_file(tasks_path, requested_contract="agentshelf.geo_task.v0")
+    report_validation_path = output_dir / "store-report-validation.json"
+    task_validation_path = output_dir / "geo-tasks-validation.json"
+    _write_text_atomic(report_validation_path, json.dumps(report_validation, indent=2) + "\n")
+    _write_text_atomic(task_validation_path, json.dumps(task_validation, indent=2) + "\n")
+    return {
+        "report_path": report_path,
+        "report_md_path": report_md_path,
+        "report_html_path": report_html_path,
+        "report_alias_path": report_alias_path,
+        "report_md_alias_path": report_md_alias_path,
+        "report_html_alias_path": report_html_alias_path,
+        "tasks_path": tasks_path,
+        "report_validation_path": report_validation_path,
+        "task_validation_path": task_validation_path,
+        "report_validation": report_validation,
+        "task_validation": task_validation,
+    }
+
+
+def _build_store_geo_run_summary(target: str, output_dir: Path, store_report: dict, artifacts: dict) -> dict:
+    task_validation = artifacts["task_validation"]
+    report_validation = artifacts["report_validation"]
+    return {
+        "contract": "agentshelf.store_geo_run.v0",
+        "target": target,
+        "output_dir": str(output_dir),
+        "store_report": str(artifacts["report_path"]),
+        "store_report_markdown": str(artifacts["report_md_path"]),
+        "store_report_html": str(artifacts["report_html_path"]),
+        "report": str(artifacts["report_alias_path"]),
+        "report_markdown": str(artifacts["report_md_alias_path"]),
+        "report_html": str(artifacts["report_html_alias_path"]),
+        "geo_tasks": str(artifacts["tasks_path"]),
+        "store_report_validation": report_validation,
+        "geo_tasks_validation": task_validation,
+        "storeScore": store_report["storeScore"],
+        "page_count": len(store_report["pages"]),
+        "issue_count": len(store_report["issues"]),
+        "task_count": task_validation.get("item_count", 0),
+        "top_task_ids": [row["task"]["id"] for row in (store_report.get("taskRows") or [])[:5]],
+        "limitations": store_report["limitations"],
+        "next_actions": [
+            f"Open {artifacts['tasks_path']} and implement high-priority store-level GEO tasks first.",
+            "Do not fabricate AI visibility, reviews, ratings, press, stock, shipping, return, or external-authority claims.",
+            "Re-run `agentshelf geo-run --store-snapshot ...` after edits and compare storeScore and issue count.",
+        ],
+    }
+
+
+def _build_fixture_dogfood_summary(fixture: str, output_dir: Path, store_report: dict, artifacts: dict) -> dict:
+    summary = _build_store_geo_run_summary(fixture, output_dir, store_report, artifacts)
+    summary["contract"] = "agentshelf.fixture_dogfood.v0"
+    summary["fixture"] = fixture
+    summary["raw_html_persisted"] = False
+    summary["source_policy"] = "Local synthetic fixture. Safe to commit and use for deterministic coding-agent regression tests."
+    summary["dogfood_notes"] = str(output_dir / "dogfood-notes.md")
+    summary["next_actions"] = [
+        f"Use {artifacts['tasks_path']} as the Codex task queue and implement the highest-priority issue first.",
+        "Re-run the same fixture command after edits; storeScore should rise and issue_count should fall.",
+        "Treat this as deterministic GEO readiness evidence, not as proof of live AI provider visibility or ranking lift.",
+    ]
+    return summary
+
+
+def _render_fixture_dogfood_notes(summary: dict) -> str:
+    lines = [
+        "# AgentShelf Fixture Dogfood Notes",
+        "",
+        "## Source Policy",
+        f"- Fixture: {summary['fixture']}",
+        f"- Raw HTML persisted: {str(summary['raw_html_persisted']).lower()}",
+        f"- Policy: {summary['source_policy']}",
+        "",
+        "## Generated Artifacts",
+        f"- Store report: `{summary['store_report']}`",
+        f"- Store report alias: `{summary['report']}`",
+        f"- Markdown report: `{summary['report_markdown']}`",
+        f"- HTML report: `{summary['report_html']}`",
+        f"- GEO tasks: `{summary['geo_tasks']}`",
+        f"- Store report validation: valid={str(summary['store_report_validation']['valid']).lower()}",
+        f"- GEO tasks validation: valid={str(summary['geo_tasks_validation']['valid']).lower()}",
+        "",
+        "## Deterministic Findings",
+        f"- Store score: {summary['storeScore']}/100",
+        f"- Pages: {summary['page_count']}",
+        f"- Issues: {summary['issue_count']}",
+        f"- Tasks: {summary['task_count']}",
+        "",
+        "## Top Task IDs",
+    ]
+    if summary["top_task_ids"]:
+        lines.extend(f"- `{task_id}`" for task_id in summary["top_task_ids"])
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Agent Loop"])
+    lines.extend(f"- {action}" for action in summary["next_actions"])
+    lines.extend(["", "## Limitations"])
+    lines.extend(f"- {item}" for item in summary["limitations"])
+    return "\n".join(lines) + "\n"
+
+
+def _build_fixture_dogfood_comparison(before: dict, after: dict, output_dir: Path) -> dict:
+    return {
+        "contract": "agentshelf.fixture_dogfood_comparison.v0",
+        "fixture": "artist-store-comparison",
+        "output_dir": str(output_dir),
+        "before": {
+            "fixture": before["fixture"],
+            "storeScore": before["storeScore"],
+            "issue_count": before["issue_count"],
+            "task_count": before["task_count"],
+            "report": before["report"],
+            "geo_tasks": before["geo_tasks"],
+        },
+        "after": {
+            "fixture": after["fixture"],
+            "storeScore": after["storeScore"],
+            "issue_count": after["issue_count"],
+            "task_count": after["task_count"],
+            "report": after["report"],
+            "geo_tasks": after["geo_tasks"],
+        },
+        "score_delta": after["storeScore"] - before["storeScore"],
+        "issue_delta": after["issue_count"] - before["issue_count"],
+        "task_delta": after["task_count"] - before["task_count"],
+        "valid": before["store_report_validation"]["valid"]
+        and before["geo_tasks_validation"]["valid"]
+        and after["store_report_validation"]["valid"]
+        and after["geo_tasks_validation"]["valid"],
+        "limitations": [
+            "This comparison is a deterministic local fixture benchmark.",
+            "It does not measure live ChatGPT, Google AI, Perplexity, Claude, Gemini, or Bing visibility.",
+            "It does not claim ranking lift, conversion lift, citations, impressions, referrals, traffic, or revenue.",
+        ],
+        "next_actions": [
+            "Use the before fixture tasks to guide Codex remediation work.",
+            "Compare against the after fixture to understand the expected quality bar.",
+            "Add new synthetic fixtures when real dogfood finds a reproducible false positive or missing rule.",
+        ],
+    }
+
+
+def _render_fixture_dogfood_comparison(summary: dict) -> str:
+    lines = [
+        "# AgentShelf Artist-Store Fixture Comparison",
+        "",
+        "## Summary",
+        f"- Before score: {summary['before']['storeScore']}/100",
+        f"- After score: {summary['after']['storeScore']}/100",
+        f"- Score delta: {summary['score_delta']:+}",
+        f"- Before issues: {summary['before']['issue_count']}",
+        f"- After issues: {summary['after']['issue_count']}",
+        f"- Issue delta: {summary['issue_delta']:+}",
+        f"- Valid artifacts: {str(summary['valid']).lower()}",
+        "",
+        "## Artifacts",
+        f"- Before report: `{summary['before']['report']}`",
+        f"- Before tasks: `{summary['before']['geo_tasks']}`",
+        f"- After report: `{summary['after']['report']}`",
+        f"- After tasks: `{summary['after']['geo_tasks']}`",
+        "",
+        "## How Codex Should Use This",
+    ]
+    lines.extend(f"- {action}" for action in summary["next_actions"])
+    lines.extend(["", "## Limitations"])
+    lines.extend(f"- {item}" for item in summary["limitations"])
     return "\n".join(lines) + "\n"
 
 
@@ -4373,6 +4752,11 @@ def build_parser() -> argparse.ArgumentParser:
     dogfood = subcommands.add_parser("dogfood", help="Run a safe real-URL dogfood audit without persisting third-party raw HTML.")
     dogfood.add_argument("url", nargs="?", help="http(s) product or storefront URL to audit.")
     dogfood.add_argument("--url", dest="url_option", help="http(s) product or storefront URL to audit. Use instead of the positional URL.")
+    dogfood.add_argument(
+        "--fixture",
+        choices=("artist-store-before", "artist-store-after", "artist-store-comparison"),
+        help="Run a deterministic local dogfood fixture instead of fetching a URL.",
+    )
     dogfood.add_argument("--brand", dest="brand_name", help="Brand or artist name.")
     dogfood.add_argument("--store", dest="store_name", help="Store name if different from the brand.")
     dogfood.add_argument("--category", help="Commerce category, for example custom gifts or handmade teacups.")
@@ -4780,43 +5164,11 @@ def main() -> int:
                     _build_geo_config_from_args(str(args.store_snapshot), args),
                     profile=profile,
                 )
-                report_path = output_dir / "store-report.json"
-                report_md_path = output_dir / "store-report.md"
-                report_html_path = output_dir / "store-report.html"
-                tasks_path = output_dir / "geo-tasks.jsonl"
-                _write_text_atomic(report_path, render_store_geo_json(store_report))
-                _write_text_atomic(report_md_path, store_report["reportMarkdown"])
-                _write_text_atomic(report_html_path, store_report.get("reportHtml", ""))
-                _write_text_atomic(tasks_path, render_store_geo_tasks_jsonl(store_report))
-                report_validation = _validate_contract_file(report_path, requested_contract="agentshelf.store_geo_audit.v0")
-                task_validation = _validate_contract_file(tasks_path, requested_contract="agentshelf.geo_task.v0")
-                _write_text_atomic(output_dir / "store-report-validation.json", json.dumps(report_validation, indent=2) + "\n")
-                _write_text_atomic(output_dir / "geo-tasks-validation.json", json.dumps(task_validation, indent=2) + "\n")
-                summary = {
-                    "contract": "agentshelf.store_geo_run.v0",
-                    "target": str(args.store_snapshot),
-                    "output_dir": str(output_dir),
-                    "store_report": str(report_path),
-                    "store_report_markdown": str(report_md_path),
-                    "store_report_html": str(report_html_path),
-                    "geo_tasks": str(tasks_path),
-                    "store_report_validation": report_validation,
-                    "geo_tasks_validation": task_validation,
-                    "storeScore": store_report["storeScore"],
-                    "page_count": len(store_report["pages"]),
-                    "issue_count": len(store_report["issues"]),
-                    "task_count": task_validation.get("item_count", 0),
-                    "top_task_ids": [row["task"]["id"] for row in (store_report.get("taskRows") or [])[:5]],
-                    "limitations": store_report["limitations"],
-                    "next_actions": [
-                        f"Open {tasks_path} and implement high-priority store-level GEO tasks first.",
-                        "Do not fabricate AI visibility, reviews, ratings, press, stock, shipping, return, or external-authority claims.",
-                        "Re-run `agentshelf geo-run --store-snapshot ...` after edits and compare storeScore and issue count.",
-                    ],
-                }
+                artifacts = _write_store_geo_artifacts(output_dir, store_report)
+                summary = _build_store_geo_run_summary(str(args.store_snapshot), output_dir, store_report, artifacts)
                 _write_text_atomic(output_dir / "summary.json", json.dumps(summary, indent=2) + "\n")
                 rendered = json.dumps(summary, indent=2) + "\n" if args.format == "json" else _render_store_geo_run_summary(summary)
-                exit_code = 0 if report_validation["valid"] and task_validation["valid"] else 1
+                exit_code = 0 if artifacts["report_validation"]["valid"] and artifacts["task_validation"]["valid"] else 1
             else:
                 target = args.url or args.target
                 if not target:
@@ -4870,58 +5222,92 @@ def main() -> int:
                 exit_code = 0 if report_validation["valid"] and task_validation["valid"] else 1
         elif args.command == "dogfood":
             target = args.url_option or args.url
-            if not target:
-                raise ValueError("Provide a URL or --url.")
-            if args.url_option and args.url:
-                raise ValueError("Provide either positional URL or --url, not both.")
-            if not _is_url(target):
-                raise ValueError("`agentshelf dogfood` only accepts http(s) URLs. Use `geo-run` for local files.")
-            if args.max_pages < 1:
-                raise ValueError("--max-pages must be at least 1.")
-            output_dir = args.output_dir
-            output_dir.mkdir(parents=True, exist_ok=True)
-            html, fetch_metadata = _load_geo_target(target, timeout=args.timeout)
-            result = build_geo_audit(
-                _build_geo_config_from_args(target, args),
-                html,
-                robots_text=fetch_metadata["robots_text"],
-                robots_status=fetch_metadata["robots_status"],
-                sitemap_status=fetch_metadata["sitemap_status"],
-                llms_status=fetch_metadata["llms_status"],
-                raw_metadata={
-                    "source_type": fetch_metadata["source_type"],
-                    "fetch_warnings": fetch_metadata["fetch_warnings"],
-                    "raw_html_persisted": False,
-                },
-            )
-            report_json = render_geo_json(result)
-            report_path = output_dir / "geo-report.json"
-            report_md_path = output_dir / "geo-report.md"
-            tasks_path = output_dir / "geo-tasks.jsonl"
-            _write_text_atomic(report_path, report_json)
-            _write_text_atomic(report_md_path, result.reportMarkdown)
-            _write_text_atomic(tasks_path, render_geo_tasks_jsonl(json.loads(report_json)))
-            report_validation = _validate_contract_file(report_path, requested_contract="agentshelf.geo_audit.v0")
-            task_validation = _validate_contract_file(tasks_path, requested_contract="agentshelf.geo_task.v0")
-            _write_text_atomic(output_dir / "geo-report-validation.json", json.dumps(report_validation, indent=2) + "\n")
-            _write_text_atomic(output_dir / "geo-tasks-validation.json", json.dumps(task_validation, indent=2) + "\n")
-            parsed = parse_input(html, fallback_title=urlparse(target).netloc or "Fetched Product Page", source=target)
-            scan_bundle = scan_readiness(parsed, adapter_profile=args.profile)
-            _write_text_atomic(output_dir / "scan-report.md", render_markdown(scan_bundle))
-            _write_text_atomic(output_dir / "scan-report.json", json.dumps(scan_bundle, indent=2) + "\n")
-            summary = _build_dogfood_summary(
-                url=target,
-                output_dir=output_dir,
-                geo_report=json.loads(report_json),
-                task_validation=task_validation,
-                report_validation=report_validation,
-                scan_bundle=scan_bundle,
-                fetch_metadata=fetch_metadata,
-            )
-            _write_text_atomic(output_dir / "dogfood-notes.md", _render_dogfood_notes(summary))
-            _write_text_atomic(output_dir / "summary.json", json.dumps(summary, indent=2) + "\n")
-            rendered = _render_geo_run_summary(summary, args.format)
-            exit_code = 0 if report_validation["valid"] and task_validation["valid"] else 1
+            if args.fixture:
+                if target:
+                    raise ValueError("Provide either --fixture or a URL, not both.")
+                if args.max_pages < 1:
+                    raise ValueError("--max-pages must be at least 1.")
+                output_dir = args.output_dir
+                profile = load_store_profile(_artist_store_profile_path())
+
+                def run_fixture(fixture_name: str, fixture_output_dir: Path) -> dict:
+                    fixture_path, _label = _artist_store_fixture_path(fixture_name)
+                    store_report = build_store_geo_audit(
+                        fixture_path,
+                        _build_geo_config_from_args(str(fixture_path), args),
+                        profile=profile,
+                    )
+                    artifacts = _write_store_geo_artifacts(fixture_output_dir, store_report)
+                    fixture_summary = _build_fixture_dogfood_summary(fixture_name, fixture_output_dir, store_report, artifacts)
+                    _write_text_atomic(fixture_output_dir / "summary.json", json.dumps(fixture_summary, indent=2) + "\n")
+                    _write_text_atomic(fixture_output_dir / "dogfood-notes.md", _render_fixture_dogfood_notes(fixture_summary))
+                    return fixture_summary
+
+                if args.fixture == "artist-store-comparison":
+                    before_summary = run_fixture("artist-store-before", output_dir / "before")
+                    after_summary = run_fixture("artist-store-after", output_dir / "after")
+                    comparison = _build_fixture_dogfood_comparison(before_summary, after_summary, output_dir)
+                    _write_text_atomic(output_dir / "comparison.json", json.dumps(comparison, indent=2) + "\n")
+                    _write_text_atomic(output_dir / "dogfood-notes.md", _render_fixture_dogfood_comparison(comparison))
+                    rendered = json.dumps(comparison, indent=2) + "\n" if args.format == "json" else _render_fixture_dogfood_comparison(comparison)
+                    exit_code = 0 if comparison["valid"] else 1
+                else:
+                    summary = run_fixture(args.fixture, output_dir)
+                    rendered = json.dumps(summary, indent=2) + "\n" if args.format == "json" else _render_fixture_dogfood_notes(summary)
+                    exit_code = 0 if summary["store_report_validation"]["valid"] and summary["geo_tasks_validation"]["valid"] else 1
+            else:
+                if not target:
+                    raise ValueError("Provide a URL, --url, or --fixture.")
+                if args.url_option and args.url:
+                    raise ValueError("Provide either positional URL or --url, not both.")
+                if not _is_url(target):
+                    raise ValueError("`agentshelf dogfood` only accepts http(s) URLs. Use `geo-run` for local files.")
+                if args.max_pages < 1:
+                    raise ValueError("--max-pages must be at least 1.")
+                output_dir = args.output_dir
+                output_dir.mkdir(parents=True, exist_ok=True)
+                html, fetch_metadata = _load_geo_target(target, timeout=args.timeout)
+                result = build_geo_audit(
+                    _build_geo_config_from_args(target, args),
+                    html,
+                    robots_text=fetch_metadata["robots_text"],
+                    robots_status=fetch_metadata["robots_status"],
+                    sitemap_status=fetch_metadata["sitemap_status"],
+                    llms_status=fetch_metadata["llms_status"],
+                    raw_metadata={
+                        "source_type": fetch_metadata["source_type"],
+                        "fetch_warnings": fetch_metadata["fetch_warnings"],
+                        "raw_html_persisted": False,
+                    },
+                )
+                report_json = render_geo_json(result)
+                report_path = output_dir / "geo-report.json"
+                report_md_path = output_dir / "geo-report.md"
+                tasks_path = output_dir / "geo-tasks.jsonl"
+                _write_text_atomic(report_path, report_json)
+                _write_text_atomic(report_md_path, result.reportMarkdown)
+                _write_text_atomic(tasks_path, render_geo_tasks_jsonl(json.loads(report_json)))
+                report_validation = _validate_contract_file(report_path, requested_contract="agentshelf.geo_audit.v0")
+                task_validation = _validate_contract_file(tasks_path, requested_contract="agentshelf.geo_task.v0")
+                _write_text_atomic(output_dir / "geo-report-validation.json", json.dumps(report_validation, indent=2) + "\n")
+                _write_text_atomic(output_dir / "geo-tasks-validation.json", json.dumps(task_validation, indent=2) + "\n")
+                parsed = parse_input(html, fallback_title=urlparse(target).netloc or "Fetched Product Page", source=target)
+                scan_bundle = scan_readiness(parsed, adapter_profile=args.profile)
+                _write_text_atomic(output_dir / "scan-report.md", render_markdown(scan_bundle))
+                _write_text_atomic(output_dir / "scan-report.json", json.dumps(scan_bundle, indent=2) + "\n")
+                summary = _build_dogfood_summary(
+                    url=target,
+                    output_dir=output_dir,
+                    geo_report=json.loads(report_json),
+                    task_validation=task_validation,
+                    report_validation=report_validation,
+                    scan_bundle=scan_bundle,
+                    fetch_metadata=fetch_metadata,
+                )
+                _write_text_atomic(output_dir / "dogfood-notes.md", _render_dogfood_notes(summary))
+                _write_text_atomic(output_dir / "summary.json", json.dumps(summary, indent=2) + "\n")
+                rendered = _render_geo_run_summary(summary, args.format)
+                exit_code = 0 if report_validation["valid"] and task_validation["valid"] else 1
         elif args.command == "validate-contract":
             payload = _validate_contract_file(args.path, requested_contract=args.contract)
             rendered = _render_contract_validation(payload, args.format)

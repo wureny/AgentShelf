@@ -40,6 +40,23 @@ No real artist, real store, real private information, fake reviews, fake ratings
 ## Run The Dogfood Comparison
 
 ```bash
+agentshelf dogfood \
+  --fixture artist-store-comparison \
+  --vertical artist_store \
+  --output-dir reports/artist-store-fixture \
+  --format json
+```
+
+This writes:
+
+- `comparison.json`: before/after score, issue, and task deltas.
+- `dogfood-notes.md`: human-readable interpretation and limitations.
+- `before/report.json`, `before/report.md`, `before/report.html`, and `before/geo-tasks.jsonl`.
+- `after/report.json`, `after/report.md`, `after/report.html`, and `after/geo-tasks.jsonl`.
+
+The equivalent manual workflow is:
+
+```bash
 agentshelf geo-run \
   --store-snapshot examples/fixtures/artist-store-before \
   --store-profile examples/profiles/artist-store.example.json \

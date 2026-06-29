@@ -52,7 +52,7 @@ Use store-level audit when the question is whether the storefront as a whole ans
 ## Generate Geo Tasks
 
 ```bash
-agentshelf geo-tasks reports/artist-store/store-report.json \
+agentshelf geo-tasks reports/artist-store/report.json \
   --output reports/artist-store/geo-tasks.jsonl
 ```
 
@@ -61,7 +61,7 @@ Each task includes a concrete page or area, reason, implementation guidance, acc
 ## Validate Contracts
 
 ```bash
-agentshelf validate-contract reports/artist-store/store-report.json \
+agentshelf validate-contract reports/artist-store/report.json \
   --contract agentshelf.store_geo_audit.v0
 
 agentshelf validate-contract reports/artist-store/geo-tasks.jsonl \

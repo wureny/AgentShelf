@@ -22,10 +22,11 @@ The intended mature loop is:
 - `agentshelf scan`: human and CI product-page readiness gate.
 - `agentshelf geo-run`: one-command GEO artifact bundle for coding agents.
 - `agentshelf geo-run --store-snapshot`: store-level GEO audit bundle for local multi-page storefront snapshots.
+- `agentshelf dogfood --fixture artist-store-comparison`: deterministic local before/after dogfood loop for Codex-style agents.
 - `agentshelf geo-tasks`: JSONL implementation queue from a GEO report.
 - `agentshelf export-skill`: exports the bundled `agentshelf-geo` skill into merchant repos.
 - `agentshelf init-merchant-repo`: initializes a storefront repo with workflow, config, demo snapshot, onboarding docs, and skill.
-- `agentshelf adoption-check`: verifies an initialized merchant repo before enforcing CI.
+- `agentshelf adoption-check`: verifies an initialized merchant repo before enforcing CI, or the AgentShelf source checkout before release.
 - `agentshelf public-audit`: checks public release hygiene before tags or Marketplace copy.
 - `agentshelf release-check`: verifies versioned release surfaces before tagging.
 - `agentshelf release-notes`: generates conservative GitHub release draft copy.
@@ -38,7 +39,8 @@ The intended mature loop is:
 - Merchant repo initialization and adoption checks.
 - Shopify and headless generated-snapshot adoption regressions.
 - Release-readiness and public-audit checks.
-- Store-level artist-store before/after fixture proving deterministic local readiness improvement without external AI provider claims.
+- Store-level artist-store before/after fixture and `dogfood --fixture artist-store-comparison` proving deterministic local readiness improvement without external AI provider claims.
+- Source checkout `adoption-check .` validating public-audit, release-check, docs, skill assets, and fixture quality.
 
 ## Next Best Task
 

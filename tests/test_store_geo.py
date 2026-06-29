@@ -55,6 +55,9 @@ class StoreGeoTests(unittest.TestCase):
                 "store-report.json",
                 "store-report.md",
                 "store-report.html",
+                "report.json",
+                "report.md",
+                "report.html",
                 "store-report-validation.json",
                 "geo-tasks.jsonl",
                 "geo-tasks-validation.json",
@@ -63,7 +66,10 @@ class StoreGeoTests(unittest.TestCase):
                 self.assertTrue((output_dir / filename).exists(), filename)
 
             report = json.loads((output_dir / "store-report.json").read_text(encoding="utf-8"))
+            report_alias = json.loads((output_dir / "report.json").read_text(encoding="utf-8"))
             self.assertEqual(report["contract"], "agentshelf.store_geo_audit.v0")
+            self.assertEqual(report_alias["contract"], "agentshelf.store_geo_audit.v0")
+            self.assertEqual(summary["report"], str(output_dir / "report.json"))
             self.assertGreaterEqual(len(report["pages"]), 8)
             self.assertIn("products/custom-calligraphy-teacup.html", report["pageScores"])
             self.assertIn("crossPageIssues", report)
@@ -133,6 +139,40 @@ class StoreGeoTests(unittest.TestCase):
             rows = [json.loads(line) for line in tasks_path.read_text(encoding="utf-8").splitlines()]
             self.assertTrue(rows)
             self.assertTrue(all(row["contract"] == "agentshelf.geo_task.v0" for row in rows))
+
+    def test_dogfood_fixture_comparison_writes_agent_loop_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "fixture-dogfood"
+            result = _run_cli(
+                "dogfood",
+                "--fixture",
+                "artist-store-comparison",
+                "--vertical",
+                "artist_store",
+                "--output-dir",
+                str(output_dir),
+                "--format",
+                "json",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["contract"], "agentshelf.fixture_dogfood_comparison.v0")
+            self.assertTrue(payload["valid"])
+            self.assertGreater(payload["after"]["storeScore"], payload["before"]["storeScore"])
+            self.assertLess(payload["after"]["issue_count"], payload["before"]["issue_count"])
+            self.assertTrue((output_dir / "comparison.json").exists())
+            self.assertTrue((output_dir / "dogfood-notes.md").exists())
+            for side in ("before", "after"):
+                side_dir = output_dir / side
+                self.assertTrue((side_dir / "report.json").exists())
+                self.assertTrue((side_dir / "report.md").exists())
+                self.assertTrue((side_dir / "report.html").exists())
+                self.assertTrue((side_dir / "geo-tasks.jsonl").exists())
+                self.assertTrue((side_dir / "dogfood-notes.md").exists())
+            notes = (output_dir / "dogfood-notes.md").read_text(encoding="utf-8")
+            self.assertIn("does not measure live ChatGPT", notes)
+            self.assertIn("Codex remediation", notes)
 
     def test_public_audit_private_context_rules_are_broad_but_not_placeholder_hostile(self) -> None:
         issues: list[dict] = []

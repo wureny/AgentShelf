@@ -53,6 +53,7 @@ agentshelf geo-run \
 - `store-report.json`: machine-readable store-level report using `agentshelf.store_geo_audit.v0`.
 - `store-report.md`: merchant and GTM readable Markdown report.
 - `store-report.html`: standalone HTML report with summary, scores, issues, actions, and limitations.
+- `report.json`, `report.md`, `report.html`: agent-friendly aliases for the same store-level report artifacts.
 - `geo-tasks.jsonl`: Codex-ready implementation task queue.
 - `store-report-validation.json`: contract validation result for the JSON report.
 - `geo-tasks-validation.json`: contract validation result for the task queue.
@@ -62,7 +63,7 @@ agentshelf geo-run \
 
 1. Initialize or identify a merchant-owned snapshot bundle.
 2. Run `agentshelf geo-run --store-snapshot`.
-3. Review `store-report.md` with the merchant or GTM partner.
+3. Review `report.md` with the merchant or GTM partner.
 4. Give `geo-tasks.jsonl` to Codex or a developer.
 5. Implement tasks using only merchant-confirmed facts.
 6. Re-run `geo-run --store-snapshot` and compare store score, issue count, and task count.
