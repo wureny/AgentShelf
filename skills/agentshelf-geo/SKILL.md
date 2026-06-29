@@ -19,7 +19,19 @@ Use this skill to run AgentShelf as an agent-native audit and remediation loop f
    - Use `agentshelf dogfood <url>` for public third-party URLs when you need real-page evidence without saving raw HTML.
    - Use live URL `geo-run` only when the user explicitly wants URL fetch behavior and raw third-party HTML will not be committed.
 
-2. Run the full GEO workflow when you need an artifact bundle.
+2. Prefer store-level snapshots when the user wants a storefront or merchant-repo audit.
+
+```bash
+agentshelf geo-run \
+  --store-snapshot <snapshot-directory> \
+  --store-profile <optional-profile.json> \
+  --vertical commerce \
+  --output-dir agentshelf-store-geo-run
+```
+
+Use the generated `agentshelf-store-geo-run/summary.json`, `store-report.json`, `store-report.md`, `store-report.html`, `geo-tasks.jsonl`, and validation files as the implementation handoff.
+
+3. Run the single-page GEO workflow when you need an artifact bundle for one product, collection, policy, or content page.
 
 ```bash
 agentshelf geo-run <page-or-url> \
@@ -43,7 +55,7 @@ agentshelf dogfood <url> \
 
 Use `agentshelf-dogfood/dogfood-notes.md` and `summary.json` for calibration decisions. Do not commit third-party raw HTML.
 
-3. If you need separate files or custom wiring, run a manual GEO audit.
+4. If you need separate files or custom wiring, run a manual GEO audit.
 
 ```bash
 agentshelf geo-audit <page-or-url> \
@@ -58,19 +70,19 @@ agentshelf validate-contract agentshelf-geo-report.json
 
 Use `--vertical artist_store` for handmade, creator-commerce, commission, custom gift, artist-made, or one-of-one product contexts.
 
-4. Convert the report into agent tasks.
+5. Convert the report into agent tasks.
 
 ```bash
 agentshelf geo-tasks agentshelf-geo-report.json --output agentshelf-geo-tasks.jsonl
 agentshelf validate-contract agentshelf-geo-tasks.jsonl --contract agentshelf.geo_task.v0
 ```
 
-5. Read `agentshelf-geo-tasks.jsonl` and implement high-priority tasks first.
+6. Read `geo-tasks.jsonl` and implement high-priority tasks first.
    - Edit templates, components, static pages, generated fixtures, product data mappers, schema builders, CMS seed content, or docs as appropriate.
    - Do not fabricate reviews, ratings, press, social proof, shipping promises, prices, stock, or external authority.
    - Use placeholders only when the output is explicitly a draft or scaffold and clearly marks merchant-confirmed fields.
 
-6. Verify after edits.
+7. Verify after edits.
 
 ```bash
 agentshelf geo-audit <page-or-url> --format json --output agentshelf-geo-report-after.json
@@ -88,7 +100,8 @@ For a concrete local example of this loop, inspect `references/agent-loop-exampl
 
 - Use `geo-audit` for broad GEO work: crawlability, entity consistency, AI intent coverage, prompt panel, GTM assets, and patch suggestions.
 - Use `geo-tasks` when Codex needs a concrete work queue from the GEO report.
-- Use `geo-run` when the user wants the whole artifact bundle in one command.
+- Use `geo-run --store-snapshot` when the user wants a store-level audit across homepage, product, collection, about, FAQ, shipping, returns, and process pages.
+- Use `geo-run` with a page path when the user wants the whole single-page artifact bundle in one command.
 - Use `dogfood` for real public URLs when you want derived audit artifacts without persisting third-party raw HTML.
 - Use `validate-contract` before implementation when a task depends on stable JSON or JSONL output.
 - Use `scan` for product-page readiness gates: price, availability, shipping, returns, specs, reviews, Product schema, FAQ, variants, policy, and agent actionability.

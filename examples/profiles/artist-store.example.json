@@ -1,0 +1,31 @@
+{
+  "brandName": "Example Artist Studio",
+  "category": "one-of-one handmade art gifts",
+  "vertical": "artist_store",
+  "targetMarkets": ["US", "UK", "Canada"],
+  "targetLanguages": ["en"],
+  "keyProducts": [
+    "custom hand-painted teacups",
+    "personalized calligraphy gifts",
+    "artist-made small objects"
+  ],
+  "buyerPersonas": [
+    "tea lovers",
+    "people buying meaningful wedding gifts",
+    "collectors of handmade objects",
+    "overseas buyers interested in Chinese culture"
+  ],
+  "useCases": [
+    "personalized gift",
+    "wedding gift",
+    "anniversary gift",
+    "tea ritual object",
+    "collector object"
+  ],
+  "competitors": [
+    "Etsy personalized mugs",
+    "mass-produced printed mugs",
+    "generic handmade gift shops"
+  ],
+  "positioning": "A studio selling one-of-one artist-made objects and personalized calligraphy gifts for buyers who want something more meaningful than mass-produced gifts."
+}

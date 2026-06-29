@@ -23,22 +23,26 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 18. Use `geo-run` to produce a complete dogfood artifact bundle for coding agents: GEO report, validated task queue, local scan evidence, and summary.
 19. Export the bundled `agentshelf-geo` skill with `export-skill` when another repository should carry the same coding-agent workflow.
 20. Use `dogfood` for public real-page checks where derived artifacts are useful but third-party raw HTML should not be persisted.
-21. Run `public-audit` before release tags or Marketplace copy to catch missing adoption paths, private local context, and overstated production claims.
+21. Run store-level audits with `geo-run --store-snapshot` when the input is a local multi-page storefront snapshot bundle rather than one product page.
+22. Run `public-audit` before release tags or Marketplace copy to catch missing adoption paths, private local context, and overstated production claims.
 
 ## Components
 - `src/agentshelf/engine.py`: parser, heuristic scoring engine, JSON-LD extraction, and renderers
 - `src/agentshelf/geo.py`: GEO Skill domain models, page extraction, deterministic GEO rules, prompt panel generation, opportunity generation, patch suggestions, and report renderers
+- `src/agentshelf/store_geo.py`: store-level aggregation layer for local snapshot bundles, including page-type coverage, cross-page consistency, product attribute coverage, internal linking, trust/policy coverage, intent asset gaps, Markdown/HTML reports, and Codex-ready tasks
 - `src/agentshelf/cli.py`: argument parsing, batch input resolution, snapshot fetches, threshold exits, and file I/O
 - `skills/agentshelf-geo/`: repo-local Codex-style skill, JSONL task contract reference, and OpenAI agent metadata for audit-task-edit-verify workflows
 - `src/agentshelf/skills/agentshelf-geo/`: package-bundled copy of the same skill assets used by `skill-info` and `export-skill`
 - `src/agentshelf/templates/merchant-repo/`: package-bundled merchant repository initializer assets used by `init-merchant-repo`
-- `schemas/`: published JSON Schema files for agent-facing GEO audit and task contracts
+- `schemas/`: published JSON Schema files for agent-facing GEO audit, store-level GEO audit, and task contracts
 - `tests/test_engine.py`: regression coverage for parsing and rendering
 - `tests/test_cli.py`: CLI behavior and threshold coverage
 - `examples/sample_product_page.html`: smoke-test input
 - `examples/weak_product_page.html`: failing-page fixture
 - `examples/artist_store_product.html`: artist-store GEO before fixture for creator-commerce prompts and patches
 - `examples/codex_agent_loop_after.html`: implemented after fixture showing the first Codex-style remediation loop
+- `examples/fixtures/artist-store-before/` and `examples/fixtures/artist-store-after/`: fictional multi-page creator-commerce snapshot bundles for deterministic store-level dogfooding
+- `examples/profiles/artist-store.example.json`: fictional creator-commerce profile used by the store-level audit fixture
 - `benchmarks/fixtures/`: curated agent-readiness benchmark inputs
 - `benchmarks/expected/`: expected benchmark bands, blockers, and agent tasks
 - `docs/PROFILE_BENCHMARKS.md`: profile-specific benchmark contract for Shopify, WooCommerce, and headless fixtures
@@ -76,6 +80,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - `geo-audit` is implemented as a separate module so GEO reporting can evolve without destabilizing the existing score-gated scanner. It uses deterministic rules and templates only; live platform visibility monitoring, GSC/Bing integrations, and LLM-generated analysis remain future extension points.
 - `geo-tasks` turns `geo-audit` JSON into stable task rows for coding agents. This keeps the agent interface implementation-oriented instead of forcing agents to parse prose reports.
 - `geo-run` is a thin orchestration layer over `geo-audit`, `geo-tasks`, `validate-contract`, and local `scan`; it should not contain separate scoring logic.
+- `store_geo.py` deliberately reuses page-level `geo.py` output instead of duplicating page scoring. Store-level logic should stay focused on bundle coverage, cross-page consistency, internal links, merchant-readable reports, and agent task aggregation.
 - `dogfood` is the URL-safe orchestration layer for real-page calibration. It fetches HTML in memory, writes derived GEO and scan artifacts, and records `raw_html_persisted: false` in the summary.
 - `validate-contract` provides dependency-free contract checks for `agentshelf.geo_audit.v0`, `agentshelf.geo_task.v0`, and the `agentshelf.geo_tasks.v0` wrapper so agent workflows can fail fast when artifacts drift.
 - The bundled `agentshelf-geo` skill documents the intended loop: audit, emit tasks, edit storefront code/content/schema, then verify with `geo-run`, `geo-audit`, `geo-tasks`, and `scan`.
@@ -85,7 +90,7 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - `adoption-check` is the post-install health check for merchant repositories. It verifies the initialized surfaces and runs scan plus GEO task generation on a selected snapshot before teams enforce CI gates.
 - `release-check` keeps release-facing surfaces aligned before a tag is created: package version, changelog, README, Action metadata, pinned workflow examples, generated release notes, skill assets, and merchant templates.
 - `release-notes` turns the matching changelog section into a conservative GitHub release draft with install guidance, verification commands, production posture, and non-claims. It intentionally generates a review artifact instead of publishing a tag or Marketplace release.
-- `public-audit` checks the repository as an open-source product surface, not only as a package: required docs, coding-agent skill distribution, merchant adoption path, private path leaks, unfinished work markers, and conservative non-claims.
+- `public-audit` checks the repository as an open-source product surface, not only as a package: required docs, coding-agent skill distribution, merchant adoption path, private path leaks, generated-dir exclusions, public examples/fixtures/configs, unfinished work markers, and conservative non-claims.
 
 ## Extension Path
 - Add stricter JSON Schema validation if AgentShelf later accepts an optional `jsonschema` dependency or a build-time validation extra.

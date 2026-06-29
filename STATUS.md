@@ -12,7 +12,7 @@ AgentShelf is suitable for production dogfooding as a local CLI, GitHub Action, 
 The intended mature loop is:
 
 1. Generate or capture merchant-owned product-page snapshots.
-2. Run `agentshelf geo-run`, `agentshelf scan`, or the GitHub Action.
+2. Run `agentshelf geo-run`, `agentshelf geo-run --store-snapshot`, `agentshelf scan`, or the GitHub Action.
 3. Let a coding agent consume `geo-tasks.jsonl` or `agentshelf-tasks.jsonl`.
 4. Edit storefront templates, schema builders, product data mappers, or content.
 5. Re-run AgentShelf until blockers and score gates are resolved.
@@ -21,6 +21,7 @@ The intended mature loop is:
 
 - `agentshelf scan`: human and CI product-page readiness gate.
 - `agentshelf geo-run`: one-command GEO artifact bundle for coding agents.
+- `agentshelf geo-run --store-snapshot`: store-level GEO audit bundle for local multi-page storefront snapshots.
 - `agentshelf geo-tasks`: JSONL implementation queue from a GEO report.
 - `agentshelf export-skill`: exports the bundled `agentshelf-geo` skill into merchant repos.
 - `agentshelf init-merchant-repo`: initializes a storefront repo with workflow, config, demo snapshot, onboarding docs, and skill.
@@ -37,10 +38,11 @@ The intended mature loop is:
 - Merchant repo initialization and adoption checks.
 - Shopify and headless generated-snapshot adoption regressions.
 - Release-readiness and public-audit checks.
+- Store-level artist-store before/after fixture proving deterministic local readiness improvement without external AI provider claims.
 
 ## Next Best Task
 
-Create a reviewed GitHub tag only after the maintainer approves release notes for the current version, then use `agentshelf init-merchant-repo --install-ref <tag>` for pinned merchant workflows.
+Run store-level dogfood on one merchant-owned snapshot bundle, convert any false positives into synthetic fixtures, then create a reviewed GitHub tag after the maintainer approves release notes for the current version.
 
 ## Risks
 

@@ -6,6 +6,8 @@
 - Added `init-merchant-repo --install-ref` so generated merchant workflows can pin AgentShelf to a reviewed release tag instead of always installing from `main`.
 - Added `docs/releases/v0.36.0.md` as a versioned release draft and made `release-check` verify it matches generated release notes.
 - Added GitHub issue templates and a pull request template for bug reports, merchant adoption help, feature requests, verification commands, and AgentShelf safety boundaries.
+- Added store-level GEO audits for local snapshot bundles, including artist-store before/after fixtures, JSON/Markdown/HTML reports, and Codex-ready task queues.
+- Strengthened `public-audit` so it scans public docs, examples, fixtures, schemas, and config files for local path, private context, and secret-like leakage while skipping generated directories.
 - Cleaned `STATUS.md` into a public-facing release posture summary instead of an internal automation log.
 - Extended `release-check` so public-audit failures block release readiness.
 

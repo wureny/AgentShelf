@@ -21,6 +21,10 @@ python3 -m pip wheel . --no-deps --no-build-isolation -w /tmp/agentshelf-wheelho
 
 `public-audit` checks release-facing files for required public adoption paths, Codex skill guidance, conservative non-claims, private local path leaks such as developer home directories or automation workspace names, and tracked generated files.
 
+It scans public Markdown, JSON, YAML, TOML, TXT, and HTML files across docs, examples, fixtures, schemas, configs, issue templates, workflow templates, and packaged merchant templates. It skips generated directories such as `.git`, `.venv`, `.egg-info`, `dist`, `build`, `coverage`, `node_modules`, and Python cache folders.
+
+It detects local absolute paths, private workspace traces, developer user records, suspicious secret assignments, real-looking non-placeholder email addresses, and likely real phone numbers. Placeholder examples such as `example.com`, `API_KEY=placeholder`, and `555-0101` are allowed.
+
 `release-check` validates version consistency, changelog coverage, pinned Action examples, generated release notes, Action metadata, bundled skill assets, and merchant onboarding templates.
 
 `release-notes` generates review copy only. It does not publish a tag, release, or Marketplace listing.

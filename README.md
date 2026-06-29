@@ -2,7 +2,9 @@
 
 Open-source GEO and product page audits for AI-readable commerce.
 
-AgentShelf checks whether product pages expose the signals AI shopping agents need for discovery, ranking, and purchase recommendations: product title, price, availability, shipping, returns, specs, reviews, FAQ, and Product structured data.
+AgentShelf helps commerce pages become AI-readable storefronts by turning deterministic GEO findings into implementation-ready tasks for coding agents.
+
+AgentShelf checks whether product pages expose the signals AI shopping agents need for discovery, comparison, and safe purchase recommendations: product title, price, availability, shipping, returns, specs, reviews, FAQ, and Product structured data.
 
 It also reads storefront implementation signals that matter in real Shopify/DTC pages: embedded product JSON, variant arrays, selling plan groups, metafield-like keys, policy snippets, subscription terms, bundle contents, regional shipping promises, and return policy schema.
 
@@ -11,6 +13,42 @@ AgentShelf now includes a deterministic GEO Skill v0 for AI-readable commerce. `
 For Codex-style coding agents, AgentShelf ships an exportable skill at [`skills/agentshelf-geo/SKILL.md`](skills/agentshelf-geo/SKILL.md). The intended agent workflow is: run `geo-run`, read the validated artifact bundle, edit the storefront or fixture, then verify with `geo-run` and `scan`.
 
 See the executable before/after walkthrough in [`docs/AGENT_IMPLEMENTATION_LOOP.md`](docs/AGENT_IMPLEMENTATION_LOOP.md). It shows a weak artist-store product page, the high-priority `geo-tasks` a coding agent receives, and the verified after fixture that resolves Product/Offer schema blockers and reaches a strong scan.
+
+## Canonical Workflow
+
+```bash
+# 1. Initialize a merchant repo or fixture workspace.
+agentshelf init-merchant-repo
+
+# 2. Add merchant-owned page snapshots or rendered fixture HTML.
+# Include homepage, products, collections, about/artist, FAQ, shipping, returns, and process pages.
+
+# 3. Run a store-level deterministic GEO audit.
+agentshelf geo-run \
+  --store-snapshot examples/fixtures/artist-store-before \
+  --store-profile examples/profiles/artist-store.example.json \
+  --vertical artist_store \
+  --output-dir reports/artist-store
+
+# 4. Generate implementation-ready tasks for Codex or a developer.
+agentshelf geo-tasks reports/artist-store/store-report.json \
+  --output reports/artist-store/geo-tasks.jsonl
+
+# 5. Validate contracts before and after implementation.
+agentshelf validate-contract reports/artist-store/store-report.json \
+  --contract agentshelf.store_geo_audit.v0
+agentshelf validate-contract reports/artist-store/geo-tasks.jsonl \
+  --contract agentshelf.geo_task.v0
+
+# 6. Check adoption and release hygiene.
+agentshelf adoption-check .
+agentshelf public-audit
+agentshelf release-check --expected-version 0.36.0
+```
+
+AgentShelf is a deterministic audit + remediation workflow. It does not measure live ChatGPT, Google AI, Perplexity, Claude, Gemini, Bing, Search Console, or Bing Webmaster visibility, and it does not claim ranking, citation, traffic, or conversion lift.
+
+For focused docs, see [`docs/geo-skill.md`](docs/geo-skill.md), [`docs/store-level-audit.md`](docs/store-level-audit.md), and [`docs/dogfood-artist-store.md`](docs/dogfood-artist-store.md).
 
 To add AgentShelf to a merchant repository, run:
 
