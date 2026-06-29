@@ -165,7 +165,16 @@ class GeoSkillTests(unittest.TestCase):
             self.assertIn("files_or_page_area", first["task"])
             self.assertIn("acceptance_check", first["task"])
             self.assertIn("verification_command", first["task"])
+            self.assertIn("impact", first["task"])
+            self.assertIn("effort", first["task"])
+            self.assertIn("instructions", first["task"])
+            self.assertIn("acceptanceCriteria", first["task"])
+            self.assertIn("expectedReportDelta", first["task"])
+            self.assertIn("riskNotes", first["task"])
             self.assertIn("agentshelf geo-audit", first["task"]["verification_command"])
+            self.assertTrue(first["task"]["instructions"])
+            self.assertTrue(first["task"]["acceptanceCriteria"])
+            self.assertTrue(any("does not prove live AI provider visibility" in note for note in first["task"]["riskNotes"]))
             self.assertTrue(any(row["task"].get("patch_type") == "product_schema" for row in rows))
 
     def test_geo_tasks_cli_json_summary(self) -> None:

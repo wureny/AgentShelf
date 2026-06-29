@@ -30,6 +30,10 @@ def geo_tasks_from_report(report: dict) -> list[dict]:
     for patch in report.get("patchSuggestions") or []:
         patch_type = patch.get("patchType") or "page_patch"
         task_id = patch.get("id") or patch_type
+        page_area = _geo_task_area(patch_type)
+        acceptance_check = _geo_acceptance_check(patch_type)
+        verification_command = _geo_verification_command(source)
+        priority = patch.get("priority") or "medium"
         tasks.append(
             {
                 "contract": "agentshelf.geo_task.v0",
@@ -38,16 +42,28 @@ def geo_tasks_from_report(report: dict) -> list[dict]:
                 "task": {
                     "id": task_id,
                     "title": patch.get("title") or task_id.replace("_", " ").title(),
-                    "priority": patch.get("priority") or "medium",
+                    "priority": priority,
+                    "impact": _geo_task_impact(priority, None),
+                    "effort": _geo_task_effort(patch_type, None),
                     "type": "patch",
                     "patch_type": patch_type,
+                    "pageUrl": patch.get("pageUrl") or default_page,
+                    "pageArea": page_area,
+                    "issueIds": [],
+                    "opportunityIds": [task_id] if patch_type in {"collection_page_brief", "gift_guide_brief", "commission_process", "artist_entity_factsheet"} else [],
                     "reason": patch.get("rationale") or "Improve AI-readable commerce evidence.",
-                    "files_or_page_area": _geo_task_area(patch_type),
+                    "files_or_page_area": page_area,
+                    "filesOrPageArea": [page_area],
+                    "instructions": _geo_patch_instructions(patch_type, patch),
                     "suggested_copy": patch.get("suggestedCopy"),
                     "suggested_schema": patch.get("suggestedSchema"),
                     "implementation_notes": patch.get("implementationNotes"),
-                    "acceptance_check": _geo_acceptance_check(patch_type),
-                    "verification_command": _geo_verification_command(source),
+                    "acceptance_check": acceptance_check,
+                    "acceptanceCriteria": _geo_acceptance_criteria(acceptance_check, patch_type),
+                    "verification_command": verification_command,
+                    "verificationCommand": verification_command,
+                    "expectedReportDelta": _geo_expected_report_delta(patch_type, task_id),
+                    "riskNotes": _geo_risk_notes(patch_type, None),
                 },
             }
         )
@@ -59,6 +75,11 @@ def geo_tasks_from_report(report: dict) -> list[dict]:
         issue_id = issue.get("id") or "geo_issue"
         if issue_id in covered:
             continue
+        category = issue.get("category")
+        page_area = _geo_issue_area(issue_id, category)
+        acceptance_check = _geo_issue_acceptance_check(issue_id, category)
+        verification_command = _geo_verification_command(source)
+        priority = "high" if issue.get("severity") == "high" else "critical"
         tasks.append(
             {
                 "contract": "agentshelf.geo_task.v0",
@@ -67,20 +88,111 @@ def geo_tasks_from_report(report: dict) -> list[dict]:
                 "task": {
                     "id": issue_id,
                     "title": issue.get("title") or issue_id.replace("_", " ").title(),
-                    "priority": "high" if issue.get("severity") == "high" else "critical",
+                    "priority": priority,
+                    "impact": _geo_task_impact(priority, category),
+                    "effort": _geo_task_effort(None, category),
                     "type": "issue",
-                    "category": issue.get("category"),
+                    "category": category,
+                    "pageUrl": issue.get("pageUrl") or default_page,
+                    "pageArea": page_area,
+                    "issueIds": [issue_id],
+                    "opportunityIds": [],
                     "reason": issue.get("whyItMatters") or issue.get("description"),
-                    "files_or_page_area": _geo_issue_area(issue_id, issue.get("category")),
+                    "files_or_page_area": page_area,
+                    "filesOrPageArea": [page_area],
+                    "instructions": _geo_issue_instructions(issue),
                     "suggested_copy": None,
                     "suggested_schema": None,
                     "implementation_notes": issue.get("recommendation"),
-                    "acceptance_check": _geo_issue_acceptance_check(issue_id, issue.get("category")),
-                    "verification_command": _geo_verification_command(source),
+                    "acceptance_check": acceptance_check,
+                    "acceptanceCriteria": _geo_acceptance_criteria(acceptance_check, None),
+                    "verification_command": verification_command,
+                    "verificationCommand": verification_command,
+                    "expectedReportDelta": f"`{issue_id}` should be absent or downgraded in the next AgentShelf GEO report.",
+                    "riskNotes": _geo_risk_notes(None, category),
                 },
             }
         )
     return tasks
+
+
+def _geo_task_impact(priority: str | None, category: str | None) -> str:
+    if priority in {"critical", "high"} or category in {"structured_data", "commerce_attributes", "crawlability", "indexability"}:
+        return "high"
+    if category in {"trust", "entity_consistency", "ai_intent_coverage"}:
+        return "medium"
+    return "medium"
+
+
+def _geo_task_effort(patch_type: str | None, category: str | None) -> str:
+    if patch_type in {"opening_answer_block", "faq_block", "image_alt_text"}:
+        return "low"
+    if patch_type in {"product_schema", "organization_schema"} or category in {"structured_data", "commerce_attributes"}:
+        return "medium"
+    if patch_type in {"collection_page_brief", "gift_guide_brief", "commission_process", "artist_entity_factsheet"}:
+        return "medium"
+    if category in {"crawlability", "indexability"}:
+        return "medium"
+    return "medium"
+
+
+def _geo_patch_instructions(patch_type: str, patch: dict) -> list[str]:
+    base = [
+        patch.get("implementationNotes") or "Update the relevant storefront template, content block, schema builder, or CMS field.",
+        "Use only merchant-confirmed facts already present in source data or approved by the merchant.",
+    ]
+    if patch_type == "product_schema":
+        base.extend(
+            [
+                "Include Product and Offer fields only when name, description, image, price, currency, availability, and URL are confirmed.",
+                "Do not add aggregateRating, review, award, press, or popularity fields unless real source data exists.",
+            ]
+        )
+    elif patch_type == "faq_block":
+        base.append("If adding FAQPage JSON-LD, keep it exactly aligned with visible FAQ answers.")
+    elif patch_type == "image_alt_text":
+        base.append("Describe only visible image details; do not infer material, provenance, or customization that is not shown or confirmed.")
+    return base
+
+
+def _geo_issue_instructions(issue: dict) -> list[str]:
+    recommendation = issue.get("recommendation") or "Fix the underlying GEO issue using merchant-confirmed facts."
+    return [
+        recommendation,
+        "Keep the change local, deterministic, and verifiable with AgentShelf before claiming improvement.",
+        "Do not fabricate AI rankings, citations, visibility lift, reviews, ratings, stock, shipping, returns, or external authority.",
+    ]
+
+
+def _geo_acceptance_criteria(acceptance_check: str, patch_type: str | None) -> list[str]:
+    criteria = [acceptance_check]
+    if patch_type == "product_schema":
+        criteria.append("No fake aggregateRating, review, testimonial, award, press, or popularity fields are added.")
+    criteria.append("The same task does not reappear as a high-priority blocker after rerunning AgentShelf.")
+    return criteria
+
+
+def _geo_expected_report_delta(patch_type: str, task_id: str) -> str:
+    mapping = {
+        "opening_answer_block": "`thin_opening_answer` should be absent or downgraded.",
+        "faq_block": "FAQ readiness should improve and missing FAQ issues should be absent or downgraded.",
+        "product_schema": "Product/Offer structured-data issues should be absent or downgraded without fake reviews or ratings.",
+        "organization_schema": "Entity schema coverage should improve with verified Organization/WebSite fields.",
+        "image_alt_text": "Image alt-text issue count should decrease.",
+    }
+    return mapping.get(patch_type, f"`{task_id}` should be absent or downgraded in the next AgentShelf GEO report.")
+
+
+def _geo_risk_notes(patch_type: str | None, category: str | None) -> list[str]:
+    notes = [
+        "This task improves deterministic AI-readability evidence; it does not prove live AI provider visibility or ranking lift.",
+        "Do not add claims that cannot be verified from merchant-owned source data.",
+    ]
+    if patch_type == "product_schema" or category == "structured_data":
+        notes.append("Schema must mirror visible or merchant-confirmed facts; avoid fake ratings, reviews, and offers.")
+    if category == "trust":
+        notes.append("Trust proof must come from real policies, real contact paths, real portfolio proof, or real merchant evidence.")
+    return notes
 
 
 def _geo_task_area(patch_type: str) -> str:

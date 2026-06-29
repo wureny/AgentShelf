@@ -24,16 +24,28 @@
         "id": {"type": "string"},
         "title": {"type": "string"},
         "priority": {"enum": ["critical", "high", "medium", "low"]},
+        "impact": {"enum": ["high", "medium", "low"]},
+        "effort": {"enum": ["high", "medium", "low"]},
         "type": {"enum": ["patch", "issue"]},
         "patch_type": {"type": "string"},
         "category": {"type": "string"},
+        "pageUrl": {"type": "string"},
+        "pageArea": {"type": "string"},
+        "issueIds": {"type": "array", "items": {"type": "string"}},
+        "opportunityIds": {"type": "array", "items": {"type": "string"}},
         "reason": {"type": "string"},
         "files_or_page_area": {"type": "string"},
+        "filesOrPageArea": {"type": "array", "items": {"type": "string"}},
+        "instructions": {"type": "array", "items": {"type": "string"}},
         "suggested_copy": {"type": ["string", "null"]},
         "suggested_schema": {"type": ["object", "null"]},
         "implementation_notes": {"type": ["string", "null"]},
         "acceptance_check": {"type": "string"},
-        "verification_command": {"type": "string"}
+        "acceptanceCriteria": {"type": "array", "items": {"type": "string"}},
+        "verification_command": {"type": "string"},
+        "verificationCommand": {"type": "string"},
+        "expectedReportDelta": {"type": "string"},
+        "riskNotes": {"type": "array", "items": {"type": "string"}}
       }
     }
   }

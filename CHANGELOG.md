@@ -11,6 +11,7 @@
 - Added `report.json`, `report.md`, and `report.html` aliases for store-level runs so coding agents and humans can use stable, simple artifact names while `store-report.*` remains supported.
 - Extended `adoption-check .` for the AgentShelf source checkout so maintainers can verify public-audit, release-check, packaged skill assets, docs, and artist-store fixture quality in one command.
 - Split page-level GEO internals into type, report, task, and patch modules while keeping `agentshelf.geo` imports backward-compatible.
+- Expanded page-level GEO tasks with impact, effort, implementation instructions, acceptance criteria, expected report deltas, and risk notes while preserving existing v0 task fields.
 - Strengthened `public-audit` so it scans public docs, examples, fixtures, schemas, and config files for local path, private context, and secret-like leakage while skipping generated directories.
 - Cleaned `STATUS.md` into a public-facing release posture summary instead of an internal automation log.
 - Extended `release-check` so public-audit failures block release readiness.

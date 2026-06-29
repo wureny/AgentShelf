@@ -42,6 +42,7 @@ The intended mature loop is:
 - Store-level artist-store before/after fixture and `dogfood --fixture artist-store-comparison` proving deterministic local readiness improvement without external AI provider claims.
 - Source checkout `adoption-check .` validating public-audit, release-check, docs, skill assets, and fixture quality.
 - Page-level GEO internals split into type, report, task, and patch modules while preserving the `agentshelf.geo` public import surface.
+- Page-level `geo-tasks` now include impact, effort, implementation instructions, acceptance criteria, expected report deltas, and risk notes for coding agents.
 
 ## Next Best Task
 

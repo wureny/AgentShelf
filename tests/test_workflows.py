@@ -686,3 +686,5 @@ class WorkflowArtifactTests(unittest.TestCase):
         self.assertIn("categoryScores", audit_schema["required"])
         self.assertEqual(task_schema["properties"]["contract"]["const"], "agentshelf.geo_task.v0")
         self.assertIn("acceptance_check", task_schema["properties"]["task"]["required"])
+        for optional_agent_field in ("impact", "effort", "instructions", "acceptanceCriteria", "expectedReportDelta", "riskNotes"):
+            self.assertIn(optional_agent_field, task_schema["properties"]["task"]["properties"])
