@@ -28,7 +28,11 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 
 ## Components
 - `src/agentshelf/engine.py`: parser, heuristic scoring engine, JSON-LD extraction, and renderers
-- `src/agentshelf/geo.py`: GEO Skill domain models, page extraction, deterministic GEO rules, prompt panel generation, opportunity generation, patch suggestions, and report renderers
+- `src/agentshelf/geo.py`: page-level GEO audit orchestration, HTML extraction, deterministic checks, prompt panel generation, and opportunity generation; it re-exports the public GEO API for backward-compatible imports
+- `src/agentshelf/geo_types.py`: GEO dataclasses and shared scoring/category constants
+- `src/agentshelf/geo_reports.py`: JSON serialization and Markdown report rendering for page-level GEO audits
+- `src/agentshelf/geo_tasks.py`: JSON/JSONL task queue generation and task acceptance/verification copy for coding agents
+- `src/agentshelf/geo_patches.py`: patch suggestion generation, schema skeletons, answer-block copy, FAQ copy, and asset brief generation
 - `src/agentshelf/store_geo.py`: store-level aggregation layer for local snapshot bundles, including page-type coverage, cross-page consistency, product attribute coverage, internal linking, trust/policy coverage, intent asset gaps, Markdown/HTML reports, and Codex-ready tasks
 - `src/agentshelf/cli.py`: argument parsing, batch input resolution, snapshot fetches, threshold exits, and file I/O
 - `skills/agentshelf-geo/`: repo-local Codex-style skill, JSONL task contract reference, and OpenAI agent metadata for audit-task-edit-verify workflows
@@ -77,7 +81,8 @@ AgentShelf is a lightweight Python CLI with a composable audit workflow:
 - Import validation lives before rendering, so missing native-export fields become manifest warnings and optional CI failures instead of being hidden by generated fallback copy.
 - Import remediation tasks convert those validation warnings into JSONL work items with source export fields, acceptance checks, and priorities for coding agents.
 - `discover` consumes sitemap metadata rather than crawling arbitrary links, keeping audits predictable and polite.
-- `geo-audit` is implemented as a separate module so GEO reporting can evolve without destabilizing the existing score-gated scanner. It uses deterministic rules and templates only; live platform visibility monitoring, GSC/Bing integrations, and LLM-generated analysis remain future extension points.
+- Page-level GEO logic is split across types, reports, task generation, patch generation, and audit orchestration modules. `agentshelf.geo` remains the backward-compatible public import surface, so existing `from agentshelf.geo import ...` usage continues to work while internals stay easier to maintain.
+- `geo-audit` is implemented separately from the score-gated scanner so GEO reporting can evolve without destabilizing existing readiness checks. It uses deterministic rules and templates only; live platform visibility monitoring, GSC/Bing integrations, and LLM-generated analysis remain future extension points.
 - `geo-tasks` turns `geo-audit` JSON into stable task rows for coding agents. This keeps the agent interface implementation-oriented instead of forcing agents to parse prose reports.
 - `geo-run` is a thin orchestration layer over `geo-audit`, `geo-tasks`, `validate-contract`, and local `scan`; it should not contain separate scoring logic.
 - `store_geo.py` deliberately reuses page-level `geo.py` output instead of duplicating page scoring. Store-level logic should stay focused on bundle coverage, cross-page consistency, internal links, merchant-readable reports, and agent task aggregation.

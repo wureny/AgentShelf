@@ -41,6 +41,7 @@ The intended mature loop is:
 - Release-readiness and public-audit checks.
 - Store-level artist-store before/after fixture and `dogfood --fixture artist-store-comparison` proving deterministic local readiness improvement without external AI provider claims.
 - Source checkout `adoption-check .` validating public-audit, release-check, docs, skill assets, and fixture quality.
+- Page-level GEO internals split into type, report, task, and patch modules while preserving the `agentshelf.geo` public import surface.
 
 ## Next Best Task
 

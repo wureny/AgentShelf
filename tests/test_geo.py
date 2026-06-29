@@ -350,6 +350,28 @@ class GeoSkillTests(unittest.TestCase):
             self.assertEqual(after_scan["band"], "strong")
             self.assertEqual(after_scan["contradictions"], [])
 
+    def test_geo_refactor_keeps_public_imports_compatible(self) -> None:
+        from agentshelf.geo import (
+            GeoAuditResult as PublicGeoAuditResult,
+            GeoPatchSuggestion as PublicGeoPatchSuggestion,
+            GeoPrompt as PublicGeoPrompt,
+            GeoSkillConfig as PublicGeoSkillConfig,
+            geo_result_to_dict as public_geo_result_to_dict,
+            geo_tasks_from_report as public_geo_tasks_from_report,
+            render_geo_markdown as public_render_geo_markdown,
+        )
+        from agentshelf.geo_reports import geo_result_to_dict as module_geo_result_to_dict
+        from agentshelf.geo_tasks import geo_tasks_from_report as module_geo_tasks_from_report
+        from agentshelf.geo_types import GeoSkillConfig as ModuleGeoSkillConfig
+
+        self.assertIs(PublicGeoSkillConfig, ModuleGeoSkillConfig)
+        self.assertIs(public_geo_result_to_dict, module_geo_result_to_dict)
+        self.assertIs(public_geo_tasks_from_report, module_geo_tasks_from_report)
+        self.assertTrue(callable(public_render_geo_markdown))
+        self.assertEqual(PublicGeoPrompt.__name__, "GeoPrompt")
+        self.assertEqual(PublicGeoPatchSuggestion.__name__, "GeoPatchSuggestion")
+        self.assertEqual(PublicGeoAuditResult.__name__, "GeoAuditResult")
+
 
 if __name__ == "__main__":
     unittest.main()
